@@ -21,3 +21,7 @@
     ├── index.html         # 메인 페이지 템플릿
     └── result.html        # 결과 페이지 템플릿
 ```
+실행을 위해 콘솔에서 명령어를 입력합니다.  
+```
+pip install Flask requests beautifulsoup4
+```
