@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>뉴스 진위 분석기</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+
+    <button id="menu-button" class="hamburger-btn">
+        <span></span>
+        <span></span>
+        <span></span>
+    </button>
+
+    <nav id="main-menu" class="main-nav">
+        <ul>
+            <li><a href="#">메뉴 1</a></li>
+            <li><a href="#">메뉴 2</a></li>
+            <li><a href="#">메뉴 3</a></li>
+        </ul>
+    </nav>
+
+    <header class="title">
+        <h1 id="title_main">뉴스 진위 분석</h1>
+        <hr id="title_line">
+    </header>
+
+    <main class="main">
+        <form method="POST" action="{{ url_for('process_url') }}" class="url-form">
+            <input type="url" id="URL_input" name="news_url" placeholder="분석할 네이버 뉴스 URL을 입력하세요..." required>
+            <button type="submit" id="Run">분석 시작</button>
+        </form>
+    </main>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+</body>
+</html>

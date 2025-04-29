@@ -1,0 +1,310 @@
+/* 전역 스타일 및 Body */
+body {
+  margin: 0;
+  background-color: #393E46;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; /* 기본 글꼴 */
+}
+
+/* 타이틀 섹션 (.title) */
+.title {
+  display: flex;
+  flex-direction: column; /* 세로 배치 */
+  justify-content: center;
+  align-items: center;
+  height: 180px;
+  background-color: #222831;
+  color: white;
+  position: relative;
+}
+
+.title > #title_main {
+  font-size: 60px;
+  font-weight: 400; /* normal */
+  margin: 0;
+}
+
+.title > #title_line {
+  border: none;
+  border-top: 3px double #DFD0B8;
+  height: 0;
+  margin: 0.5em 0; /* 상하 여백 */
+  width: 20%;
+}
+
+/* 메인 콘텐츠 섹션 (.main) */
+.main {
+  display: flex;
+  justify-content: center; /* 내부 .url-form을 중앙 정렬 */
+  align-items: center;
+  min-height: 70vh; /* 최소 높이 */
+  padding: 20px;
+  /* gap: 10px; -> .url-form 내부에서 gap 처리하므로 제거 가능 */
+}
+
+/* URL 입력 폼 (index.html) */
+.url-form {
+    display: flex; /* 가로 배치 */
+    width: 60%; /* 폼 너비 */
+    gap: 10px; /* 요소 간격 */
+    align-items: center; /* 내부 요소 세로 중앙 정렬 (선택 사항) */
+}
+
+/* URL 입력 필드 */
+.url-form > #URL_input {
+    flex-grow: 1; /* 남은 공간 차지 */
+    width: auto; /* 너비 자동 조절 */
+    /* 기존 .main > #URL_input 스타일 적용 */
+    box-sizing: border-box;
+    padding: 10px 12px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    font-size: 16px;
+}
+
+/* 실행 버튼 (#Run) */
+.url-form > #Run {
+    /* 기존 .main > #Run 스타일 적용 */
+    padding: 12px 24px;
+    cursor: pointer;
+    border: none;
+    text-decoration: none;
+    font-size: 16px;
+    font-weight: bold;
+    color: white;
+    background-color: #948979;
+    border-radius: 6px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1), 0 1px 3px rgba(0, 0, 0, 0.08);
+    transition: background-color 0.2s ease-out, transform 0.1s ease-out, box-shadow 0.1s ease-out;
+    /* 너비는 고정 크기를 원하면 지정, 아니면 내용에 맞게 */
+    /* width: 100px; */
+}
+
+/* === #Run 버튼 상태 스타일 === */
+.url-form > #Run:hover {
+  background-color: #241a19;
+}
+
+.url-form > #Run:active { /* 클릭 시 '퐁당' 효과 */
+  transform: translateY(2px);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15), 0 1px 1px rgba(0, 0, 0, 0.1);
+}
+
+.url-form > #Run:disabled { /* 비활성화 상태 */
+  background-color: #6c757d;
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
+
+/* === 제거된 규칙들 === */
+/* .main > #URL_input { ... } */
+/* .main > #Run { ... } */
+/* .main > #Run:hover { ... } */
+/* .main > #Run:active { ... } */
+/* .main > #Run:disabled { ... } */
+
+
+/* 햄버거 메뉴 버튼 (#menu-button) */
+#menu-button {
+  position: fixed; /* 화면 기준 고정 */
+  top: 20px;
+  right: 20px; /* 초기 위치 */
+  z-index: 1001; /* 메뉴보다 위에 */
+  width: 40px;
+  height: 30px;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  /* 위치 및 모양 변경 시 부드러운 전환 */
+  transition: all 0.3s cubic-bezier(0.645, 0.045, 0.355, 1), right 0.4s ease-in-out;
+}
+
+/* 햄버거 선 (span) 공통 */
+#menu-button span {
+  display: block;
+  position: absolute;
+  height: 3px;
+  width: 80%;
+  background: #DFD0B8; /* 선 색상 */
+  border-radius: 3px;
+  left: 50%;
+  transform: translateX(-50%); /* 가로 중앙 정렬 */
+  transition: all 0.3s cubic-bezier(0.645, 0.045, 0.355, 1); /* 모양 변경 시 전환 */
+}
+
+/* 각 선 위치 */
+#menu-button span:nth-child(1) { top: 5px; }
+#menu-button span:nth-child(2) { top: 50%; transform: translate(-50%, -50%); }
+#menu-button span:nth-child(3) { bottom: 5px; }
+
+/* 메뉴 열렸을 때 버튼 상태 (.active 클래스 추가 시) */
+#menu-button.active {
+  right: 270px; /* 왼쪽으로 이동 (메뉴 너비 + 기존 간격) */
+}
+
+#menu-button.active span:nth-child(1) { /* X 모양 상단 */
+  top: 50%;
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+#menu-button.active span:nth-child(2) { /* X 모양 중간 (숨김) */
+  opacity: 0;
+}
+
+#menu-button.active span:nth-child(3) { /* X 모양 하단 */
+  top: 50%;
+  transform: translate(-50%, -50%) rotate(-45deg);
+}
+
+/* 네비게이션 메뉴 (.main-nav) */
+.main-nav {
+  position: fixed;
+  top: 0;
+  right: -280px; /* 초기 숨김 위치 */
+  width: 250px;   /* 메뉴 너비 */
+  height: 100vh;
+  background-color: rgba(44, 62, 80, 0.95); /* 반투명 배경 */
+  padding: 80px 0 20px 0; /* 상단 여백, 하단/좌우 여백 */
+  box-shadow: -3px 0 8px rgba(0, 0, 0, 0.3); /* 왼쪽 그림자 */
+  transition: right 0.4s ease-in-out; /* 슬라이드 애니메이션 */
+  z-index: 1000; /* 버튼 아래 */
+  box-sizing: border-box;
+  overflow-y: auto; /* 스크롤 가능 */
+}
+
+/* 메뉴 열렸을 때 (.menu-open 클래스 추가 시) */
+.main-nav.menu-open {
+  right: 0; /* 화면에 표시 */
+}
+
+/* 메뉴 내부 리스트/링크 */
+.main-nav ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.main-nav a {
+  display: block;
+  padding: 15px 30px;
+  color: #ecf0f1;
+  text-decoration: none;
+  font-size: 18px;
+  transition: background-color 0.2s ease;
+}
+
+.main-nav a:hover {
+  background-color: rgba(236, 240, 241, 0.1);
+  color: white;
+}
+
+/* =================================
+   Result Page Styles (결과 페이지)
+   ================================= */
+
+.result-container {
+  padding: 30px 15%; /* 좌우 여백 */
+  color: #333;
+  background-color: #ffffff; /* 결과 페이지 배경 */
+  min-height: 70vh;
+}
+
+/* 점수 섹션 */
+.score-section {
+  text-align: center;
+  margin-bottom: 40px;
+  padding: 30px;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #dee2e6;
+}
+
+.score-section h2 {
+  margin-top: 0;
+  color: #495057;
+}
+
+.score-display {
+  font-size: 4em; /* 점수 크기 */
+  font-weight: bold;
+  color: #007bff; /* 점수 색상 */
+  margin: 10px 0;
+}
+
+.score-description {
+  font-size: 1.1em;
+  color: #6c757d;
+}
+
+/* 본문 섹션 */
+.content-section {
+  margin-bottom: 40px;
+  border-top: 1px solid #eee;
+  padding-top: 30px;
+}
+
+.content-section h2 {
+  color: #495057;
+  margin-bottom: 20px;
+}
+
+.article-body {
+  background-color: #f8f9fa;
+  padding: 20px;
+  border-radius: 5px;
+  line-height: 1.7; /* 줄 간격 */
+  border: 1px solid #eee;
+  max-height: 500px; /* 최대 높이 및 스크롤 */
+  overflow-y: auto;
+}
+
+/* 분석 섹션 */
+.analysis-section {
+  margin-bottom: 40px;
+  border-top: 1px solid #eee;
+  padding-top: 30px;
+}
+
+.analysis-section h2 {
+  color: #495057;
+  margin-bottom: 20px;
+}
+
+.analysis-details {
+  background-color: #e9ecef;
+  padding: 20px;
+  border-radius: 5px;
+  border: 1px solid #dee2e6;
+  line-height: 1.6;
+}
+
+.analysis-details ul {
+    padding-left: 20px;
+}
+
+.analysis-details li {
+    margin-bottom: 10px;
+}
+
+/* 돌아가기 버튼 */
+.back-button-container {
+    text-align: center;
+    margin-top: 30px;
+}
+
+.back-button {
+    display: inline-block;
+    padding: 10px 25px;
+    background-color: #6c757d;
+    color: white;
+    text-decoration: none;
+    border-radius: 5px;
+    font-size: 16px;
+    transition: background-color 0.2s ease;
+}
+
+.back-button:hover {
+    background-color: #5a6268;
+}
