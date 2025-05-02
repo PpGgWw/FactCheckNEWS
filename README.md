@@ -1,7 +1,11 @@
 # 가짜뉴스 판별 웹 애플리케이션 (진행중)  
 -------------  
-[![Video Label](http://img.youtube.com/vi/HpNjroxkML4/)]  
+
   
+
+https://github.com/user-attachments/assets/4709b85c-d1ed-435e-91ef-3dd08f853020
+
+
   
 ```
 ├── app.py                 # Flask 애플리케이션 메인 파일
