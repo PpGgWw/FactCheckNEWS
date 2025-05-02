@@ -1,6 +1,6 @@
 # 가짜뉴스 판별 웹 애플리케이션 (진행중)  
 -------------  
-[![Video Label](http://img.youtube.com/vi/HpNjroxkML4/0.jpg)]  
+[![Video Label](http://img.youtube.com/vi/HpNjroxkML4/)]  
   
   
 ```
