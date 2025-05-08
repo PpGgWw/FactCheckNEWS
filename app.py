@@ -1,5 +1,5 @@
-# app.py
 from flask import Flask, render_template, request, redirect, url_for
+from modules import naver_news_scraper # 새로운 모듈 임포트
 
 # Flask 앱 초기화
 app = Flask(__name__)
@@ -8,15 +8,11 @@ app = Flask(__name__)
 def scrape_naver_news(url):
     """지정된 URL에서 네이버 뉴스 본문을 스크래핑하는 함수"""
     print(f"Scraping content from: {url}")
-    # 여기에 requests, BeautifulSoup 등을 사용한 실제 스크래핑 로직 구현
-    if "news.naver.com" in url: # 간단한 URL 검증 예시
-        text = ""
-        with open('./static/news.txt', 'r', encoding='UTF-8') as f:
-            for i in f.readlines():
-                text += i
-        return text
+    if "news.naver.com" in url:
+        article_text = naver_news_scraper.extract_naver_news_content(url)
+        return article_text
     else:
-        return None # 네이버 뉴스 URL이 아니거나 스크래핑 실패 시
+        return "유효하지 않은 네이버 뉴스 URL입니다."
 
 # 신뢰도 판단 모델 함수 (예시 - 실제 구현 필요)
 def analyze_trustworthiness(text):
