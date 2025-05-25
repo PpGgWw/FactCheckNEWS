@@ -27,7 +27,7 @@ FactCheckNEWS2/  # 프로젝트 루트 폴더명
 ```
 ---
 다이어 그램 입니다. 다운로드 받아서 보면 더 자세히 보입니다.   
-![diagram1](https://github.com/user-attachments/assets/dd57258c-ab20-4fa8-b4ef-87a10bad84d4)
+![제목 없는 다이어그램 (4)](https://github.com/user-attachments/assets/897f5284-471e-457e-ba8d-d7e62e1c831d)
 ---
 
 ```  
