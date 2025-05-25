@@ -1,5 +1,8 @@
 https://drive.google.com/file/d/1ZJR4a-l0hXacJdxVFYtN9n8-JzG5A2o7/view?usp=sharing
 
+현재 다운 받을 모델은 빠르게 코드 동작 테스트를 위한 경량화 모델입니다.
+나중에 원래 모델로 바꿔 동작할 겁니다.
+
 링크로 모델을 다운 받습니다. 모델을 5.3G 이며, 필요 vram은 약 9.58GB 입니다.
 아마 RTX 3080 이상 일겁니다!
 
