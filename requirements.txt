@@ -1,0 +1,7 @@
+flask
+requests
+beautifulsoup4
+fastapi
+uvicorn
+pydantic
+llama-cpp-python
