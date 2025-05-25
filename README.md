@@ -33,9 +33,9 @@ FaCtCheCKNEWS3/
 ### 1️⃣ 단계: AI 분석 API 서버 실행
 
 1.  **터미널**(명령 프롬프트 또는 PowerShell 등)을 엽니다.  
-2.  프로젝트의 루트 폴더인 `FactCheckNEWS2/`로 이동합니다.  
+2.  프로젝트의 루트 폴더인 `FactCheckNEWS3/`로 이동합니다.  
     ```bash
-    cd 경로/FactCheckNEWS2
+    cd 경로/FactCheckNEWS3
     ```
 3.  다음 명령어를 입력하여 FastAPI 기반의 AI 분석 API 서버를 실행합니다:  
     ```bash
@@ -47,9 +47,9 @@ FaCtCheCKNEWS3/
 ### 2️⃣ 단계: 웹 애플리케이션 (Flask) 실행
 
 1.  **새로운 터미널 창**을 엽니다. (이전 터미널은 AI 분석 API 서버가 계속 실행 중이어야 합니다.)  
-2.  마찬가지로 프로젝트의 루트 폴더인 `FactCheckNEWS2/`로 이동합니다.  
+2.  마찬가지로 프로젝트의 루트 폴더인 `FactCheckNEWS3/`로 이동합니다.  
     ```bash
-    cd 경로/FactCheckNEWS2
+    cd 경로/FactCheckNEWS3
     ```
 3.  다음 명령어를 입력하여 Flask 웹 애플리케이션을 실행합니다:  
     ```bash
@@ -69,12 +69,12 @@ FaCtCheCKNEWS3/
 **✅ 실행 전 확인 사항:**
 
 * **Python 설치:** 파이썬이 시스템에 설치되어 있어야 합니다.  
-* **필수 라이브러리 설치:** `requirements.txt`에 명시된 모든 라이브러리가 설치되어 있어야 합니다. 프로젝트 루트 폴더(`FactCheckNEWS2/`)에서 다음 명령어를 실행하세요:  
+* **필수 라이브러리 설치:** `requirements.txt`에 명시된 모든 라이브러리가 설치되어 있어야 합니다. 프로젝트 루트 폴더(`FactCheckNEWS3/`)에서 다음 명령어를 실행하세요:  
     ```bash
     pip install -r requirements.txt
     ```
     (만약 `requirements.txt` 파일이 없다면, 다음 명령어로 주요 라이브러리를 설치할 수 있습니다: `pip install Flask requests beautifulsoup4 fastapi uvicorn pydantic llama-cpp-python`)  
-* **모델 파일 위치:** `Meta-Llama-3-8B-Instruct.Q5_K_M.gguf` 파일이 `FactCheckNEWS2/models/` 폴더 안에 있는지 다시 한번 확인해주세요.  
+* **모델 파일 위치:** `Meta-Llama-3-8B-Instruct.Q5_K_M.gguf` 파일이 `FactCheckNEWS3/models/` 폴더 안에 있는지 다시 한번 확인해주세요.  
 
 ---   
   
