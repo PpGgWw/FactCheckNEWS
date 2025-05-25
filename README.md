@@ -29,9 +29,9 @@ FaCtCheCKNEWS3/
 📄 각 파일 및 폴더 상세 설명:   
 ```
 app.py:  
-Flask 프레임워크를 사용하여 웹 애플리케이션을 실행하는 중심 파일입니다.
-사용자 요청을 받아 URL을 처리하고, 크롤링 또는 AI 분석을 지시하며, 결과를 HTML 페이지로 렌더링합니다.
-/, /process, /get_analysis_stream과 같은 라우트(URL 경로)를 정의합니다.
+Flask 프레임워크를 사용하여 웹 애플리케이션을 실행하는 중심 파일입니다.  
+사용자 요청을 받아 URL을 처리하고, 크롤링 또는 AI 분석을 지시하며, 결과를 HTML 페이지로 렌더링합니다.  
+/, /process, /get_analysis_stream과 같은 라우트(URL 경로)를 정의합니다.  
 ```
 `fake_api_server.py:  `  
 ```  
