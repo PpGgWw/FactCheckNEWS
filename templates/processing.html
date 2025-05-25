@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>뉴스 분석 중...</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="{{ url_for('static', filename='processing.js') }}" defer></script>
+    </head>
+{# news_text_data와 article_title_data를 받도록 수정 #}
+<body id="processing-body" 
+      data-news-text="{{ news_text_data | e }}" 
+      data-article-title="{{ article_title_data | e }}"> 
+
+    <div id="loading-indicator">
+        <div class="loader"></div>
+        <p id="status-message">입력된 내용을 처리 중입니다. 잠시만 기다려 주세요...</p>
+    </div>
+
+    <div id="ai-status-container">
+        <h4>AI 분석 과정 (시뮬레이션)</h4>
+        <ul id="ai-thoughts-list">
+            </ul>
+    </div>
+
+    <div id="error-message" style="display: none;">
+        </div>
+
+    <div id="result-container" style="display: none;">
+        </div>
+
+</body>
+</html>

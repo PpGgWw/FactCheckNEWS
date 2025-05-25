@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>뉴스 진위 분석기</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        /* 기존 스타일 유지 */
+        .text-form {
+            display: flex;
+            flex-direction: column;
+            width: 95%;
+            max-width: 650px;
+            gap: 18px;
+            align-items: stretch;
+        }
+
+        .text-form > #news_text_input {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 14px 18px;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            font-size: 1rem;
+            background-color: #EEEEEE;
+            color: #333;
+            min-height: 150px; 
+            resize: vertical; 
+            font-family: inherit; 
+        }
+
+        .text-form > #news_text_input::placeholder {
+            color: #6c757d;
+        }
+
+        .text-form > #news_text_input:focus {
+            outline: none;
+            border-color: #948979;
+            box-shadow: 0 0 0 2px rgba(148, 137, 121, 0.25);
+        }
+
+        .text-form > #Run {
+            padding: 15px 25px;
+            cursor: pointer;
+            border: none;
+            text-decoration: none;
+            font-size: 1.05rem;
+            font-weight: bold;
+            color: white;
+            background-color: #948979;
+            border-radius: 6px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+            transition: background-color 0.2s ease-out, transform 0.1s ease-out, box-shadow 0.1s ease-out;
+            width: 100%;
+        }
+        .text-form > #Run:hover { background-color: #7a7061; }
+        .text-form > #Run:active { transform: translateY(1px); box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15); }
+        .text-form > #Run:disabled { background-color: #6c757d; cursor: not-allowed; opacity: 0.7; }
+
+        @media (min-width: 768px) {
+             .text-form > #Run {
+                width: auto; 
+                align-self: flex-end; 
+            }
+        }
+    </style>
+</head>
+<body>
+    <button id="menu-button" class="hamburger-btn" aria-label="메뉴 열기/닫기" aria-expanded="false">
+        <span></span>
+        <span></span>
+        <span></span>
+    </button>
+
+    <nav id="main-menu" class="main-nav">
+        <ul>
+            <li><a href="#">메뉴 1</a></li>
+            <li><a href="#">메뉴 2</a></li>
+            <li><a href="#">메뉴 3</a></li>
+        </ul>
+    </nav>
+
+    <header class="title">
+        <h1 id="title_main">뉴스 진위 분석</h1>
+        <hr id="title_line">
+    </header>
+
+    <main class="main">
+        <form method="POST" action="{{ url_for('process_url') }}" class="text-form">
+            <textarea id="news_text_input" name="news_text" placeholder="분석할 네이버 뉴스 URL 또는 뉴스 내용을 여기에 입력하세요..." required aria-label="뉴스 URL 또는 내용 입력"></textarea>
+            <button type="submit" id="Run">분석 시작</button>
+        </form>
+    </main>
+
+    <script src="{{ url_for('static', filename='script.js') }}" defer></script>
+</body>
+</html>

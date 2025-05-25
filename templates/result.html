@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>분석 결과 (참조용)</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <button id="menu-button" class="hamburger-btn" aria-label="메뉴 열기/닫기" aria-expanded="false">
+        <span></span>
+        <span></span>
+        <span></span>
+    </button>
+
+    <nav id="main-menu" class="main-nav">
+        <ul>
+            <li><a href="/">홈으로</a></li>
+            </ul>
+    </nav>
+
+    <header class="title">
+        <h1 id="title_main">분석 결과</h1>
+        <hr id="title_line">
+    </header>
+
+    <main class="result-container-inner">
+        <!-- 
+            이 페이지는 processing.js에서 동적으로 내용을 생성하여 채웁니다.
+            아래 섹션들은 processing.js의 createResultHtml 함수에 의해 채워질 구조 예시입니다.
+            실제로는 processing.js가 #result-container 내부를 완전히 대체합니다.
+        -->
+        <section class="score-section">
+            <h2>신뢰도 점수</h2>
+            </section>
+
+        <section class="title-section">
+            <h2>입력된 내용 제목</h2>
+            </section>
+
+        <section class="content-section">
+            <h2>입력된 내용 본문</h2>
+            </section>
+
+        <section class="analysis-section">
+            <h2>AI 분석 결과</h2>
+            </section>
+
+        <div class="back-button-container">
+            <a href="/" class="back-button">다시 입력하기</a>
+        </div>
+
+    </main>
+    </body>
+</html>
