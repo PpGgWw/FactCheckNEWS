@@ -32,8 +32,6 @@ FactCheckNEWS2/  # 프로젝트 루트 폴더명
 https://drive.google.com/file/d/1TziU-X2hCEU_5JTOUiW9LAwwAwGAKLp6/view?usp=sharing   
 ---
 
-```  
-
 # 저희 깃허브는 가독성을 높이기 위해, 아이콘, 비유를 적극 활용합니다.
 > 코드 전체에도 가독성, 현재 상황을 잘 표현하기 위해, 아이콘을 적극 활용하였습니다.
 ---
