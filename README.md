@@ -24,6 +24,10 @@ FactCheckNEWS2/  # 프로젝트 루트 폴더명
 |
 └── models/                        # 🧠 Llama 모델 파일 저장 폴더
     └── Meta-Llama-3-8B-Instruct.Q5_K_M.gguf # 💡 실제 Llama-3 모델 파일 (빠르게 코드 동작 테스트를 위한 경량화 / 양자화 모델입니다. 양자화는 CPU에서도 효율적으로 모델을 실행할 수 있도록 합니다.)
+---
+![diagram1](https://github.com/user-attachments/assets/dd57258c-ab20-4fa8-b4ef-87a10bad84d4)
+---
+
 ```  
 
 # 저희 깃허브는 가독성을 높이기 위해, 아이콘, 비유를 적극 활용합니다.
