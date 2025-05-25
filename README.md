@@ -2,38 +2,67 @@
 **Gunicorn**: 여러 요청을 동시에, 더 안정적으로 처리할 수 있습니다.  
 **Celery**: 요청만 받고, 실제 힘든 일은 보이지 않는 곳(백그라운드)에서 처리합니다. 그럼 서버는 계속 다른 클라이언트를 받아들일 수 있습니다. (앱이 바로바로 반응하는게 핵심입니다.)  
 ```
-├── app.py                 # Flask 애플리케이션 메인 파일
+FaCtCheCKNEWS3/
+├── app.py                         # 🌐 Flask 웹 애플리케이션의 메인 실행 파일
+├── fake_api_server.py             # 🤖 (AI 모델) FastAPI 기반의 뉴스 분석 API 서버 (이 파일은 OpenAI, text-generation-webui 를 모방한 코드파일이며 실제와 다릅니다!)
 |
-├── modules/               # 기능별 파이썬 모듈을 저장합니다.
-│   ├── __init__.py        # 이 폴더를 파이썬 패키지로 만듭니다. (내용은 비어 있습니다.)
-│   ├── scraper.py         # (예시) 뉴스 스크래핑 관련 함수/클래스
-│   ├── analyzer.py        # (예시) 신뢰도 분석 모델 관련 함수/클래스
-│   └── llama_analyzer.py  # (예시) Llama 모델 연동 관련 함수/클래스
-│   └── ...                # 다른 기능 모듈들
+├── modules/                       # 🛠️ 기능별 파이썬 모듈
+│   ├── __init__.py                #    (이 폴더를 파이썬 패키지로 인식시킵니다. 내용은 비어있음)
+│   ├── crawler.py                 #    📰 뉴스 기사 웹 크롤링 (수집) 기능 담당
+│   ├── analyzer_api_simulator.py  #    📞 AI 분석 API 호출 및 응답 처리 담당 (클라이언트 역할)
+│   └── highlighter.py             #    ✨ 텍스트 내 특정 부분을 강조하는 기능 (현재는 사용 빈도 낮음)
 |
-├── static/                # 정적 파일 폴더를 저장합니다. (CSS, JS, 이미지 등)
-│   ├── style.css          # 스타일시트
-│   └── script.js          # 자바스크립트 파일
-│   └── (images/)          # (선택) 이미지 폴더
+├── static/                        # 🎨 웹 페이지의 정적 파일 (CSS, JavaScript 등)
+│   ├── style.css                  #    🎨 웹 페이지 전체 스타일 시트
+│   ├── script.js                  #    ⚙️ 공통 UI 상호작용 (예: 햄버거 메뉴) JavaScript
+│   └── processing.js              #    ⏳ 분석 중 페이지의 동적 처리 JavaScript (SSE 연동)
 |
-└── templates/             # HTML 템플릿을 저장합니다.
-    ├── index.html         # 메인 페이지 템플릿
-    └── result.html        # 결과 페이지 템플릿
+├── templates/                     # 📄 웹 페이지의 HTML 템플릿
+│   ├── index.html                 #    🏠 사용자가 URL/텍스트를 입력하는 메인 페이지
+│   ├── processing.html            #    ⚙️ 분석이 진행되는 동안 보여지는 로딩/상태 표시 페이지
+│   └── result.html                #    📊 분석 결과를 사용자에게 보여주는 페이지
+|
+└── models/                        # 🧠 Llama 모델 파일 저장 폴더
+    └── Meta-Llama-3-8B-Instruct.Q5_K_M.gguf # 💡 실제 Llama-3 모델 파일
+```  
+  
+📄 각 파일 및 폴더 상세 설명:   
 ```
-실행을 위해 콘솔에서 명령어를 입력합니다.  
+app.py:  
+Flask 프레임워크를 사용하여 웹 애플리케이션을 실행하는 중심 파일입니다.
+사용자 요청을 받아 URL을 처리하고, 크롤링 또는 AI 분석을 지시하며, 결과를 HTML 페이지로 렌더링합니다.
+/, /process, /get_analysis_stream과 같은 라우트(URL 경로)를 정의합니다.
 ```
-pip install Flask requests beautifulsoup4
+`fake_api_server.py:  `  
+```  
+FastAPI 프레임워크를 사용하여 models/ 폴더 내의 Llama-3 모델을 로드하고, 뉴스 분석 요청을 받아 JSON 형식으로 응답하는 API 서버입니다.  
+app.py의 analyzer_api_simulator.py 모듈로부터 /v1/chat/completions 엔드포인트로 요청을 받습니다.  
 ```
+`modules/: 이 폴더는 애플리케이션의 주요 기능들을 모듈화하여 관리합니다.  `  
+```  
+__init__.py: 이 파일이 있으면 modules 폴더를 파이썬 패키지로 만들 수 있습니다. 내용은 비어 있어도 됩니다.    
+  
+crawler.py: 웹에서 뉴스 기사의 제목, 본문, 날짜, 언론사 등의 정보를 수집(크롤링)하는 기능을 담당합니다.    
+  
+analyzer_api_simulator.py: fake_api_server.py로 실제 뉴스 분석 요청을 보내고, 그 결과를 받아 처리하는 클라이언트 역할을 합니다.    
+  
+highlighter.py: 텍스트 내에서 특정 키워드나 문장을 찾아 HTML 태그로 감싸 강조 표시하는 기능을 제공합니다. (현재 앱에서는 AI 분석 기능 제거로 인해 사용 빈도가 낮을 수 있다고 언급되었습니다.)    
+```
+`static/: 웹 페이지에서 사용되는 정적 파일들을 모아둡니다.  `  
+```
+style.css: 웹 페이지의 전반적인 디자인과 레이아웃을 정의하는 CSS 파일입니다.  
 
-접속 방법:  
-  
-서버 PC의 로컬 IP 주소 확인:  
-> Flask 서버를 실행하는 PC의 내부 네트워크 IP 주소를 알아야 합니다. 이 주소는 보통 192.168.x.x 또는 10.x.x.x 와 같은 형태입니다.  
-> 1. Windows: 명령 프롬프트(cmd)에서 ipconfig 명령어를 실행하고, 사용 중인 네트워크 어댑터(예: 이더넷 어댑터 또는 Wi-Fi 어댑터)의 "IPv4 주소"를 확인합니다.  
-> 2. macOS: 터미널에서 ifconfig 명령어를 실행하거나, 시스템 환경설정 > 네트워크에서 사용 중인 연결의 IP 주소를 확인합니다.  
-> 3. Linux: 터미널에서 ip addr 또는 ifconfig 명령어를 실행합니다.
-  
-다른 기기에서 접속:  
-> 1. 같은 네트워크에 연결된 다른 PC나 모바일 기기의 웹 브라우저를 엽니다.
-> 2. 주소창에 http://<서버 PC의 로컬 IP 주소>:5000 을 입력합니다. (예: http://192.168.0.15:5000)
-> 3. Flask 앱이 정상적으로 실행 중이라면 해당 기기에서도 웹 페이지가 보여야 합니다.
+script.js: 모든 페이지에 공통적으로 적용될 수 있는 JavaScript 코드를 포함합니다. 예를 들어, 내비게이션 메뉴(햄버거 메뉴)의 동작 등을 처리합니다.  
+
+processing.js: processing.html 페이지에서 사용되며, 서버로부터 실시간으로 분석 상태를 받아 표시하고(SSE), 최종 결과를 동적으로 result.html의 구조에 맞게 생성하여 보여주는 역할을 합니다.  
+```
+`templates/: Flask가 웹 페이지를 동적으로 생성할 때 사용하는 HTML 템플릿 파일들을 저장합니다.  `  
+```
+index.html: 사용자가 처음 접속하는 메인 페이지로, 뉴스 URL이나 텍스트를 입력받는 폼이 있습니다.  
+processing.html: 뉴스 분석이 진행되는 동안 사용자에게 로딩 상태나 진행 상황을 보여주는 페이지입니다. processing.js에 의해 내용이 업데이트됩니다.  
+result.html: 분석이 완료된 후, 신뢰도 점수, AI 분석 결과, 하이라이트된 본문 등을 표시하는 페이지입니다. 이 페이지의 실제 내용은 processing.js에 의해 동적으로 채워집니다.  
+```
+`models/:`   
+```
+Meta-Llama-3-8B-Instruct.Q5_K_M.gguf: fake_api_server.py에서 로드하여 실제 뉴스 분석에 사용되는 Llama-3 모델 파일입니다.
+```
