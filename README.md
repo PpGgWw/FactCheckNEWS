@@ -2,9 +2,10 @@
 **Gunicorn**: 여러 요청을 동시에, 더 안정적으로 처리할 수 있습니다.  
 **Celery**: 요청만 받고, 실제 힘든 일은 보이지 않는 곳(백그라운드)에서 처리합니다. 그럼 서버는 계속 다른 클라이언트를 받아들일 수 있습니다. (앱이 바로바로 반응하는게 핵심입니다.)  
 ```
-FaCtCheCKNEWS3/
+FactCheckNEWS2/  # 프로젝트 루트 폴더명
 ├── app.py                         # 🌐 Flask 웹 애플리케이션의 메인 실행 파일
-├── fake_api_server.py             # 🤖 (AI 모델) FastAPI 기반의 뉴스 분석 API 서버 (이 파일은 OpenAI, text-generation-webui 를 모방한 코드파일이며 실제와 다릅니다!)
+├── fake_api_server.py             # 🤖 (AI 모델) FastAPI 기반의 뉴스 분석 API 서버 (OpenAI, text-generation-webui 의 API 방식을 모방한 코드이며 실제와 다를 수 있습니다!)
+├── requirements.txt               # 📦 프로젝트 실행에 필요한 파이썬 라이브러리 목록
 |
 ├── modules/                       # 🛠️ 기능별 파이썬 모듈
 │   ├── __init__.py                #    (이 폴더를 파이썬 패키지로 인식시킵니다. 내용은 비어있음)
