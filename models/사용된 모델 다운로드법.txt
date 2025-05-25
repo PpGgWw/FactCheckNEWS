@@ -1,0 +1,11 @@
+https://drive.google.com/file/d/1ZJR4a-l0hXacJdxVFYtN9n8-JzG5A2o7/view?usp=sharing
+
+링크로 모델을 다운 받습니다. 모델을 5.3G 이며, 필요 vram은 약 9.58GB 입니다.
+아마 RTX 3080 이상 일겁니다!
+
+n_gpu_layers 설정: llama-cpp-python (또는 llama.cpp 기반 도구) 사용 시, n_gpu_layers 파라미터를 통해 GPU에 올릴 레이어 수를 조절할 수 있어요. VRAM이 부족하면 이 값을 줄여서 일부만 GPU에 올리고 나머지는 CPU가 처리하게 할 수 있지만, 속도는 느려집니다.
+
+컨텍스트 크기 (ctx_size): 한 번에 처리할 수 있는 토큰의 양인데, 이 크기가 커질수록 더 많은 VRAM을 소모합니다.
+
+CPU 및 시스템 RAM: GPU 오프로딩을 전부 하지 않거나 못할 경우, CPU 성능과 시스템 RAM 용량도 전체적인 실행 속도와 안정성에 영향을 줍니다.
+소프트웨어 및 드라이버: 최신 GPU 드라이버와 llama.cpp 관련 소프트웨어를 사용하는 것이 좋습니다.
