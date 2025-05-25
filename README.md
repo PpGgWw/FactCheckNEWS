@@ -1,5 +1,4 @@
 추가 계획.  
-**Gunicorn**: 여러 요청을 동시에, 더 안정적으로 처리할 수 있습니다.  
 **Celery**: 요청만 받고, 실제 힘든 일은 보이지 않는 곳(백그라운드)에서 처리합니다. 그럼 서버는 계속 다른 클라이언트를 받아들일 수 있습니다. (앱이 바로바로 반응하는게 핵심입니다.)  
 ```
 FactCheckNEWS2/  # 프로젝트 루트 폴더명
@@ -27,6 +26,49 @@ FactCheckNEWS2/  # 프로젝트 루트 폴더명
     └── Meta-Llama-3-8B-Instruct.Q5_K_M.gguf # 💡 실제 Llama-3 모델 파일
 ```  
 
+# 저희 깃허브 섫명들은 가독성을 높이기 위해, 아이콘, 비유를 적극 활용합니다.
+
+## 🚀 GPU CUDA 사용 설정 가이드
+
+우리 프로젝트의 AI 모델(`Meta-Llama-3-8B-Instruct-Q5_K_M.gguf`)을 GPU CUDA를 통해 실행하려면, `fake_api_server.py` 파일의 코드 일부를 다음과 같이 수정해야 합니다.
+
+### 1. 수정 대상 파일
+
+* `FactCheckNEWS2/fake_api_server.py` (또는 프로젝트 루트 폴더명이 `FactCheckNEWS3`이라면 해당 경로의 파일)
+
+### 2. 수정할 코드 부분
+
+`fake_api_server.py` 파일 상단 부근의 **모델 설정** 섹션에서 `N_GPU_LAYERS` 변수의 값을 변경합니다.  
+
+### ✅ 추가 확인 사항 (중요!)
+
+GPU를 사용하여 모델을 실행하려면 코드 수정 외에도 다음 환경 설정이 매우 중요합니다.
+
+* **`llama-cpp-python` 라이브러리 CUDA 지원 설치**:
+    * GPU를 사용하려면 `llama-cpp-python` 라이브러리가 **CUDA를 지원하도록 특별히 설치**되어야 합니다.
+    * 일반적인 `pip install llama-cpp-python` 명령어로는 CPU 버전만 설치될 수 있습니다.
+    * CUDA 지원 빌드를 위해서는 보통 CUDA Toolkit이 설치된 환경에서 다음과 유사한 방법으로 설치를 시도합니다 (정확한 방법은 `llama-cpp-python` 공식 문서 참고):
+        ```bash
+        # 예시: 환경 변수 설정 후 pip 설치 (Windows PowerShell)
+        $env:CMAKE_ARGS="-DLLAMA_CUBLAS=on"
+        $env:FORCE_CMAKE=1
+        pip install --upgrade --force-reinstall llama-cpp-python --no-cache-dir
+
+        # 예시: 환경 변수 설정 후 pip 설치 (Linux/macOS Bash)
+        CMAKE_ARGS="-DLLAMA_CUBLAS=on" FORCE_CMAKE=1 pip install --upgrade --force-reinstall llama-cpp-python --no-cache-dir
+        ```
+    * 이미 라이브러리가 설치되어 있다면, CUDA 지원 버전으로 **재설치**해야 할 수 있습니다.
+
+* **NVIDIA 드라이버 및 CUDA Toolkit**:
+    * 시스템에 사용 중인 NVIDIA 그래픽 카드와 호환되는 **최신 NVIDIA 드라이버**가 설치되어 있어야 합니다.
+    * `llama-cpp-python`이 요구하는 버전과 호환되는 **CUDA Toolkit**이 시스템에 설치되어 있어야 합니다. (보통 `llama-cpp-python` 설치 과정에서 필요한 CUDA 버전을 명시하거나, 시스템에 설치된 CUDA를 감지합니다.)
+
+* **VRAM (그래픽 카드 메모리) 용량**:
+    * GPU의 VRAM이 모델과 현재 컨텍스트 크기(`N_CTX`)를 로드하기에 충분해야 합니다.
+    * `Meta-Llama-3-8B-Instruct.Q5_K_M.gguf` 모델 자체는 약 5.73GB이지만, 실제 실행 시에는 컨텍스트 캐시 등으로 인해 추가적인 VRAM이 필요합니다.
+    * `N_GPU_LAYERS` 값을 너무 높게 설정하면 VRAM 부족으로 오류가 발생할 수 있습니다. 이 경우, `N_GPU_LAYERS` 값을 줄여서 GPU에 올리는 레이어 수를 조절해야 합니다.
+
+---  
 ## 🚀 프로젝트 실행 가이드
 
 **실행 순서가 중요합니다!** AI 분석 API 서버가 먼저 실행되어야 웹 애플리케이션이 정상적으로 AI 분석 기능을 호출할 수 있습니다.  
