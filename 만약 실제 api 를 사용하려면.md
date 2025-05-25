@@ -65,7 +65,7 @@
 
 ---
 
-### 🚫 `fake_api_server.py`는 이제 안녕!
+### 🚫 `fake_api_server.py` 사용 중지!
 
 * 실제 `text-generation-webui`를 사용하게 되면, 우리가 Llama 3 모델을 직접 돌리기 위해 만들었던 `fake_api_server.py` 파일은 더 이상 **실행할 필요가 없어져요.**
 * 왜냐하면 `text-generation-webui` 자체가 진짜 AI 모델을 실행하고 API 요청을 처리하는 "진짜 서버" 역할을 해주기 때문이죠!
@@ -76,5 +76,3 @@
 **✨ 가장 중요한 점!**
 
 * 실제 `text-generation-webui`의 **공식 API 사용 설명서(문서)를 꼼꼼히 읽어보는 것**이 가장 중요해요. 거기에 모든 정답(정확한 API 주소, 요청/응답 형식, 필요한 파라미터 등)이 적혀 있답니다!
-
-이 설명이 `text-generation-webui` 연동 과정을 이해하시는 데 도움이 되었으면 좋겠어요! 😊
