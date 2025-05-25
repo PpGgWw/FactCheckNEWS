@@ -25,6 +25,63 @@ FaCtCheCKNEWS3/
 └── models/                        # 🧠 Llama 모델 파일 저장 폴더
     └── Meta-Llama-3-8B-Instruct.Q5_K_M.gguf # 💡 실제 Llama-3 모델 파일
 ```  
+
+## 🚀 프로젝트 실행 가이드
+
+**실행 순서가 중요합니다!** AI 분석 API 서버가 먼저 실행되어야 웹 애플리케이션이 정상적으로 AI 분석 기능을 호출할 수 있습니다.  
+
+### 1️⃣ 단계: AI 분석 API 서버 실행
+
+1.  **터미널**(명령 프롬프트 또는 PowerShell 등)을 엽니다.  
+2.  프로젝트의 루트 폴더인 `FactCheckNEWS2/`로 이동합니다.  
+    ```bash
+    cd 경로/FactCheckNEWS2
+    ```
+3.  다음 명령어를 입력하여 FastAPI 기반의 AI 분석 API 서버를 실행합니다:  
+    ```bash
+    python fake_api_server.py
+    ```
+    * 성공적으로 실행되면, 터미널에 `Uvicorn running on http://0.0.0.0:5005 (Press CTRL+C to quit)` 와 유사한 메시지가 나타납니다.  
+    * **주의:** `models/Meta-Llama-3-8B-Instruct.Q5_K_M.gguf` 모델 파일이 `FactCheckNEWS2/models/` 폴더 안에 정확히 위치해야 합니다. 모델 파일이 없거나 경로가 다르면 서버 실행 시 오류가 발생합니다.  
+
+### 2️⃣ 단계: 웹 애플리케이션 (Flask) 실행
+
+1.  **새로운 터미널 창**을 엽니다. (이전 터미널은 AI 분석 API 서버가 계속 실행 중이어야 합니다.)  
+2.  마찬가지로 프로젝트의 루트 폴더인 `FactCheckNEWS2/`로 이동합니다.  
+    ```bash
+    cd 경로/FactCheckNEWS2
+    ```
+3.  다음 명령어를 입력하여 Flask 웹 애플리케이션을 실행합니다:  
+    ```bash
+    python app.py
+    ```
+    * 성공적으로 실행되면, 터미널에 `Running on http://0.0.0.0:5000/ (Press CTRL+C to quit)` 와 유사한 메시지가 나타납니다.  
+
+### 3️⃣ 단계: 웹 브라우저에서 접속
+
+1.  **웹 브라우저**를 엽니다.  
+2.  주소창에 다음 URL을 입력하여 접속합니다:  
+    `http://127.0.0.1:5000/`  
+    (또는 Flask 서버 실행 시 터미널에 나타난 URL, 예를 들어 `http://0.0.0.0:5000/`의 경우에도 `http://127.0.0.1:5000/` 또는 `http://localhost:5000/`으로 접속)  
+
+---
+
+**✅ 실행 전 확인 사항:**
+
+* **Python 설치:** 파이썬이 시스템에 설치되어 있어야 합니다.  
+* **필수 라이브러리 설치:** `requirements.txt`에 명시된 모든 라이브러리가 설치되어 있어야 합니다. 프로젝트 루트 폴더(`FactCheckNEWS2/`)에서 다음 명령어를 실행하세요:  
+    ```bash
+    pip install -r requirements.txt
+    ```
+    (만약 `requirements.txt` 파일이 없다면, 다음 명령어로 주요 라이브러리를 설치할 수 있습니다: `pip install Flask requests beautifulsoup4 fastapi uvicorn pydantic llama-cpp-python`)  
+* **모델 파일 위치:** `Meta-Llama-3-8B-Instruct.Q5_K_M.gguf` 파일이 `FactCheckNEWS2/models/` 폴더 안에 있는지 다시 한번 확인해주세요.  
+
+---   
+  
+  
+  
+  
+  
   
 📄 각 파일 및 폴더 상세 설명:   
 ```
