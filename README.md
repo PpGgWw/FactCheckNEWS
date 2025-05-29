@@ -5,7 +5,7 @@
 1. NginX 도입 - (도입 완료)
 2. HTML 디자인 변경 - (변경 완료)
 3. HTML 애니메이션 추가. gsap 사용 - (구현중)
-4. React 도입
+4. React 또는 Vue 도입
 ---
 ```
 FactCheckNEWS2/  # 프로젝트 루트 폴더명
