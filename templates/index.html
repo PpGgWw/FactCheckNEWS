@@ -25,9 +25,9 @@
             font-size: 1rem;
             background-color: #EEEEEE;
             color: #333;
-            min-height: 150px; 
-            resize: vertical; 
-            font-family: inherit; 
+            min-height: 150px;
+            resize: vertical;
+            font-family: inherit;
         }
 
         .text-form > #news_text_input::placeholder {
@@ -60,8 +60,8 @@
 
         @media (min-width: 768px) {
              .text-form > #Run {
-                width: auto; 
-                align-self: flex-end; 
+                width: auto;
+                align-self: flex-end;
             }
         }
     </style>
@@ -87,9 +87,9 @@
     </header>
 
     <main class="main">
-        <form method="POST" action="{{ url_for('process_url') }}" class="text-form">
+        <form method="POST" action="{{ url_for('process_input') }}" class="text-form">
             <textarea id="news_text_input" name="news_text" placeholder="분석할 네이버 뉴스 URL 또는 뉴스 내용을 여기에 입력하세요..." required aria-label="뉴스 URL 또는 내용 입력"></textarea>
-            <button type="submit" id="Run">분석 시작</button>
+            <button type="submit" id="Run">분석 시작 (결과는 서버 콘솔 확인)</button>
         </form>
     </main>
 

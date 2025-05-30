@@ -1,55 +1,136 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>분석 결과 (참조용)</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>뉴스 분석 결과</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: 'Arial', sans-serif;
+      /* nav.jpg 파일을 static 폴더에 넣어주세요 */
+      background: url("{{ url_for('static', filename='nav.png') }}") no-repeat center center fixed;
+      background-size: cover;
+      /* overflow: hidden; /* 내용이 길 경우 스크롤이 필요하므로 주석 처리 또는 삭제 */
+    }
+
+    .wrapper {
+      position: relative;
+      width: 100%;
+      min-height: 100vh; /* 최소 높이를 화면 전체로 설정 */
+      overflow-y: auto; /* 내용이 길면 수직 스크롤 자동 생성 */
+      display: flex;
+      justify-content: center;
+      align-items: center; /* 수직 중앙 정렬 (내용이 짧을 때) */
+      padding: 40px 20px; /* 좌우 패딩 추가 및 상하 패딩 유지 */
+      box-sizing: border-box;
+    }
+
+    .card {
+      width: 90%; /* 모바일 반응형을 위해 % 사용 */
+      max-width: 700px; /* 최대 너비 제한 */
+      background: rgba(255, 255, 255, 0.92); /* 배경 약간 더 불투명하게 */
+      border-radius: 15px; /* 모서리 약간 덜 둥글게 */
+      padding: 25px;
+      box-shadow: 0 6px 25px rgba(0, 0, 0, 0.35); /* 그림자 강조 */
+      backdrop-filter: blur(10px); /* 블러 효과 약간 더 */
+      margin: 20px 0; /* 카드 위아래 여백 추가 */
+    }
+
+    .header {
+      text-align: center;
+      font-size: 26px; /* 글꼴 크기 조정 */
+      font-weight: bold;
+      margin-bottom: 25px;
+      font-family: 'Georgia', serif; /* serif 계열로 변경 */
+      color: #333; /* 헤더 색상 */
+    }
+
+    .section {
+      margin-bottom: 20px;
+    }
+
+    .section label {
+      font-weight: bold;
+      display: block;
+      margin-bottom: 10px;
+      font-size: 17px; /* 라벨 글꼴 크기 조정 */
+      color: #444; /* 라벨 색상 */
+    }
+
+    .section .box {
+      background-color: #f8f9fa; /* 박스 배경색 약간 변경 */
+      border-radius: 8px;
+      padding: 15px;
+      white-space: pre-wrap; /* 공백 및 줄바꿈 유지, 자동 줄바꿈 허용 */
+      word-wrap: break-word; /* 긴 단어 자동 줄바꿈 */
+      font-size: 15px; /* 내용 글꼴 크기 */
+      line-height: 1.7; /* 줄 간격 */
+      color: #333; /* 내용 글꼴 색상 */
+      border: 1px solid #e0e0e0; /* 테두리 추가 */
+      max-height: 300px; /* 내용이 너무 길 경우 스크롤 */
+      overflow-y: auto; /* 내용 넘칠 시 스크롤 */
+    }
+    
+    .section .box strong { /* AI 판단 결과의 strong 태그 스타일 */
+        color: #0056b3; /* 강조 색상 */
+    }
+
+
+    .button-wrapper {
+      text-align: center;
+      margin-top: 25px;
+    }
+
+    .button-wrapper button {
+      background-color: #007bff; /* 버튼 색상 변경 */
+      color: white;
+      border: none;
+      padding: 12px 25px; /* 버튼 패딩 조정 */
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+      transition: background-color 0.3s ease; /* 부드러운 전환 효과 */
+    }
+
+    .button-wrapper button:hover {
+      background-color: #0056b3; /* 호버 시 버튼 색상 변경 */
+    }
+  </style>
 </head>
 <body>
-    <button id="menu-button" class="hamburger-btn" aria-label="메뉴 열기/닫기" aria-expanded="false">
-        <span></span>
-        <span></span>
-        <span></span>
-    </button>
+  <div class="wrapper">
+    <div class="card">
+      <div class="header">뉴스 분석 결과</div>
 
-    <nav id="main-menu" class="main-nav">
-        <ul>
-            <li><a href="/">홈으로</a></li>
-            </ul>
-    </nav>
+      <div class="section">
+        <label>제목 (Title) :</label>
+        <div class="box" id="news-title">{{ title | e }}</div>
+      </div>
 
-    <header class="title">
-        <h1 id="title_main">분석 결과</h1>
-        <hr id="title_line">
-    </header>
+      <div class="section">
+        <label>내용 (Content) :</label>
+        <div class="box" id="news-content">{{ content | e }}</div>
+      </div>
 
-    <main class="result-container-inner">
-        <!-- 
-            이 페이지는 processing.js에서 동적으로 내용을 생성하여 채웁니다.
-            아래 섹션들은 processing.js의 createResultHtml 함수에 의해 채워질 구조 예시입니다.
-            실제로는 processing.js가 #result-container 내부를 완전히 대체합니다.
-        -->
-        <section class="score-section">
-            <h2>신뢰도 점수</h2>
-            </section>
-
-        <section class="title-section">
-            <h2>입력된 내용 제목</h2>
-            </section>
-
-        <section class="content-section">
-            <h2>입력된 내용 본문</h2>
-            </section>
-
-        <section class="analysis-section">
-            <h2>AI 분석 결과</h2>
-            </section>
-
-        <div class="back-button-container">
-            <a href="/" class="back-button">다시 입력하기</a>
+      <div class="section">
+        <label>AI 판단 (AI Analysis) :</label>
+        <div class="box" id="ai-analysis">
+          {% if analysis_result %}
+            <p><strong>진위:</strong> {{ analysis_result['진위'] | e }}</p>
+            <p><strong>근거:</strong> {{ analysis_result['근거'] | e }}</p>
+            <p><strong>분석:</strong> {{ analysis_result['분석'] | e }}</p>
+          {% else %}
+            <p>AI 분석 결과를 가져오지 못했습니다.</p>
+          {% endif %}
         </div>
+      </div>
 
-    </main>
-    </body>
+      <div class="button-wrapper">
+        <button onclick="window.location.href='{{ url_for('index') }}'">새로운 분석하기</button>
+      </div>
+    </div>
+  </div>
+</body>
 </html>
