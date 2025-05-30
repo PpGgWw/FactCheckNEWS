@@ -23,7 +23,8 @@ AI 기반 가짜뉴스 탐지 시스템으로, 네이버 뉴스 URL 또는 텍�
 
 ## 📝 작동 순서
 
-![Editor _ Mermaid Chart-2025-05-30-145012](https://github.com/user-attachments/assets/bfa6fe63-eb4a-4ddd-a85d-74c6fd8aca08)
+![Editor _ Mermaid Chart-2025-05-30-145909](https://github.com/user-attachments/assets/206dafab-8cb9-408d-8ee9-f57c96cc410f)
+
 
 
 ### 상세 처리 과정
