@@ -122,10 +122,6 @@ FactCheckNEWS2/
 ├── templates/                      # HTML 템플릿
 │   ├── index.html                  # 메인 입력 페이지
 │   └── result.html                 # 결과 출력 페이지
-│
-└── models/                         # AI 모델 파일
-    └── Meta-Llama-3-8B-Instruct.Q5_K_M.gguf  # 테스트용 범용 모델
-    # └── factcheck-specialized-model.gguf     # 파인튜닝 전용 모델 (개발 예정)
 ```
 
 ## 🚀 설치 및 실행
