@@ -75,7 +75,7 @@ https://drive.google.com/file/d/1TziU-X2hCEU_5JTOUiW9LAwwAwGAKLp6/view?usp=shari
 ---
 # CUDA
 ## 저희 깃허브는 가독성을 높이기 위해, 아이콘, 비유를 적극 활용합니다.
-> 코드 내부엔 이모지와, 아이콘을 사용 안합니다.
+> 코드 내부엔 이모지와, 아이콘을 사용하지 않습니다.
 ---
 ## GPU CUDA 사용 설정 가이드
 
