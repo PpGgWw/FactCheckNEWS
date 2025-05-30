@@ -6,6 +6,7 @@
 2. HTML 디자인 변경 - (변경 완료)
 3. HTML 애니메이션 추가. gsap 사용 - (구현중)
 4. React 또는 Vue 도입
+5. 코드 전체 이모티콘, 아이콘 삭제 - (진행중)
 ---
 ```
 FactCheckNEWS2/  # 프로젝트 루트 폴더명
@@ -40,7 +41,7 @@ https://drive.google.com/file/d/1TziU-X2hCEU_5JTOUiW9LAwwAwGAKLp6/view?usp=shari
 ---
 
 # 저희 깃허브는 가독성을 높이기 위해, 아이콘, 비유를 적극 활용합니다.
-> 코드 전체에도 가독성, 현재 상황을 잘 표현하기 위해, 아이콘을 적극 활용하였습니다.
+> 코드 내부엔 이모지와, 아이콘을 사용 안합니다.
 ---
 ## 🚀 GPU CUDA 사용 설정 가이드
 
