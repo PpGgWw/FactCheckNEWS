@@ -9,7 +9,7 @@ import html
 import traceback
 from flask import Flask, render_template, request, redirect, url_for, jsonify
 
-# 🛠️ 자체 제작 모듈 임포트
+# 자체 제작 모듈 임포트
 from modules import crawler # 뉴스 웹 크롤링 담당
 from modules import analyzer_api_simulator # AI 분석 API 호출 담당
 
