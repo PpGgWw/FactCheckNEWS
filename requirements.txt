@@ -2,7 +2,6 @@ flask
 requests
 beautifulsoup4
 fastapi
-uvicorn
 pydantic
 openai
 llama-cpp-python
