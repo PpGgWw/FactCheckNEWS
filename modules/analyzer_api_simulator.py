@@ -131,7 +131,7 @@ def call_fake_analysis_api(news_content: str, news_title: str) -> Dict[str, str]
         "stream": False,     # 스트리밍 응답 여부 (현재는 False로 고정)
     }
     # API 호출 타임아웃 시간 설정 (초 단위)
-    API_TIMEOUT_SECONDS = 180
+    API_TIMEOUT_SECONDS = 300
 
     try:
         print(f"[API Client] POST 요청 전송: {TEXT_GENERATION_WEBUI_API_ENDPOINT} (Timeout: {API_TIMEOUT_SECONDS}s)")
