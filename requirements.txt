@@ -1,7 +1,0 @@
-flask
-requests
-beautifulsoup4
-fastapi
-pydantic
-openai
-llama-cpp-python
