@@ -1,0 +1,33 @@
+{
+  "manifest_version": 3,
+  "name": "네이버 뉴스 핵심 분석기 (Gemini)",
+  "version": "1.1",
+  "description": "네이버 뉴스 기사를 분석하여 Gemini API를 통해 핵심 문장을 추출합니다.",
+  "icons": {
+    "48": "icon48.png"
+  },
+  "permissions": [],
+  "host_permissions": [
+    "https://generativelanguage.googleapis.com/*"
+  ],
+  "background": {
+    "service_worker": "service_worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://n.news.naver.com/article/*",
+        "https://n.news.naver.com/mnews/*"
+      ],
+      "js": [
+        "components/AnalysisPanel.js",
+        "components/AnalysisBlock.js", 
+        "components/VerdictBlock.js",
+        "components/EvidenceBlock.js",
+        "components/AnalysisDetailBlock.js",
+        "content_script.js"
+      ],
+      "css": ["panel/tailwind.css"]
+    }
+  ]
+}
