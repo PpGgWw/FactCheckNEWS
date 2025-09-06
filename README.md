@@ -54,7 +54,7 @@ const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-
 ## 추가 안내: Node.js 설치 및 빌드 과정 (선택 사항)
 
 * **기본적으로 npm install이나 빌드 과정은 필요하지 않습니다.**
-* 다만, 확장 프로그램 코드를 수정하거나 직접 빌드 과정이 필요할 경우를 대비하여 **Node.js**를 설치해두는 것이 좋습니다.
+* 다만, 확장 프로그램 디자인 코드를 수정하거나 직접 빌드 과정이 필요할 경우를 대비하여 **Node.js**를 설치해두는 것이 좋습니다.
 * [Node.js 공식 웹사이트](https://nodejs.org/)에서 최신 LTS(Long Term Support) 버전을 다운로드 후 설치하세요.
 
 ### 설치 후 빌드 과정
