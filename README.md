@@ -51,13 +51,13 @@ const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-
 
 ---
 
-## 추가 안내: Node.js 설치 및 빌드 과정 (선택 사항)
+## 추가 안내: Node.js 설치 과정 (선택 사항)
 
-* **기본적으로 npm install이나 빌드 과정은 필요하지 않습니다.**
-* 다만, 확장 프로그램 디자인 코드를 수정하거나 직접 빌드 과정이 필요할 경우를 대비하여 **Node.js**를 설치해두는 것이 좋습니다.
+* **기본적으로 npm install이 필요하지 않습니다.**
+* 다만, 확장 프로그램 디자인 코드를 수정하는 과정이 필요할 경우를 대비하여 **Node.js**를 설치해두는 것이 좋습니다.
 * [Node.js 공식 웹사이트](https://nodejs.org/)에서 최신 LTS(Long Term Support) 버전을 다운로드 후 설치하세요.
 
-### 설치 후 빌드 과정
+### 설치 과정
 
 1. 터미널을 열고 FactCheckNEWS 프로젝트 폴더로 이동합니다.
 
@@ -69,12 +69,6 @@ cd FactCheckNEWS
 
 ```bash
 npm install
-```
-
-3. 빌드 명령어를 실행합니다. (예: webpack 또는 parcel 등을 사용한다면 아래와 같이 실행)
-
-```bash
-npm run build
 ```
 
 4. 빌드 결과물(`dist` 폴더 등\`)이 생성되면 해당 폴더를 크롬 확장 프로그램에 로드하여 사용할 수 있습니다.
