@@ -1,7 +1,7 @@
 // service_worker.js
 
 // 중요: 'YOUR_GEMINI_API_KEY' 부분에 자신의 Gemini API 키를 입력하세요.
-const API_KEY = 'AIzaSyC_EGtvfbtITHcG6BJ-Gem8vTEExZHfgLo';
+const API_KEY = '';
 const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`;
 
 // content_script로부터 메시지를 수신하는 리스너
