@@ -63,7 +63,7 @@ const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-
 
 ## 코드 구조 및 동작 원리
 
-- `content_script.js` / `content_script_new.js`: 뉴스 데이터 추출, 하이라이트, Gemini API 분석 요청
+- `content_script.js`: 뉴스 데이터 추출, 하이라이트, Gemini API 분석 요청
 - `service_worker.js`: Gemini API 호출, 분석 결과 전달
 - `components/AnalysisBlock.js` 등: 분석 결과 패널 UI
 - `manifest.json`: 확장 프로그램 정보 및 권한 설정
