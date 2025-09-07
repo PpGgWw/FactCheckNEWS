@@ -38,8 +38,8 @@ class AnalysisBlock {
     
     return `
       <div class="mb-4 p-4 ${style.bgColor} border ${style.borderColor} rounded-lg">
-        <h3 class="font-semibold text-sm ${style.titleColor} mb-2">${this.title}</h3>
-        <div class="text-sm text-gray-800 leading-relaxed">${this.content}</div>
+    <h3 class="font-semibold text-lg ${style.titleColor} mb-2">${this.title}</h3>
+    <div class="text-lg text-gray-800 leading-relaxed">${this.content}</div>
       </div>
     `;
   }

@@ -107,12 +107,12 @@
 }
 
 /*
-! tailwindcss v3.4.17 | MIT License | https://tailwindcss.com
+! tailwindcss v3.4.17 | MIT 라이선스 | https://tailwindcss.com
 */
 
 /*
-1. Prevent padding and border from affecting element width. (https://github.com/mozdevs/cssremedy/issues/4)
-2. Allow adding a border to an element by just adding a border-width. (https://github.com/tailwindcss/tailwindcss/pull/116)
+1. 패딩과 테두리가 요소의 너비에 영향을 주지 않도록 방지합니다. (https://github.com/mozdevs/cssremedy/issues/4)
+2. border-width만 추가해도 테두리가 생기도록 허용합니다. (https://github.com/tailwindcss/tailwindcss/pull/116)
 */
 
 *,
@@ -134,13 +134,13 @@
 }
 
 /*
-1. Use a consistent sensible line-height in all browsers.
-2. Prevent adjustments of font size after orientation changes in iOS.
-3. Use a more readable tab size.
-4. Use the user's configured `sans` font-family by default.
-5. Use the user's configured `sans` font-feature-settings by default.
-6. Use the user's configured `sans` font-variation-settings by default.
-7. Disable tap highlights on iOS
+1. 모든 브라우저에서 일관된 line-height를 사용합니다.
+2. iOS에서 방향 변경 후 폰트 크기 조정 방지.
+3. 더 읽기 쉬운 탭 크기 사용.
+4. 기본적으로 사용자의 설정된 `sans` 폰트 패밀리 사용.
+5. 사용자의 설정된 `sans` font-feature-settings 사용.
+6. 사용자의 설정된 `sans` font-variation-settings 사용.
+7. iOS에서 탭 하이라이트 비활성화
 */
 
 html,
@@ -165,8 +165,8 @@ html,
 }
 
 /*
-1. Remove the margin in all browsers.
-2. Inherit line-height from `html` so users can set them as a class directly on the `html` element.
+1. 모든 브라우저에서 margin 제거.
+2. `html`에서 line-height를 상속받아 사용자가 직접 클래스 지정 가능.
 */
 
 body {
@@ -174,12 +174,13 @@ body {
   /* 1 */
   line-height: inherit;
   /* 2 */
+  font-size: 40px;
 }
 
 /*
-1. Add the correct height in Firefox.
-2. Correct the inheritance of border color in Firefox. (https://bugzilla.mozilla.org/show_bug.cgi?id=190655)
-3. Ensure horizontal rules are visible by default.
+1. Firefox에서 올바른 높이 추가.
+2. Firefox에서 테두리 색상 상속 수정. (https://bugzilla.mozilla.org/show_bug.cgi?id=190655)
+3. 기본적으로 수평선이 보이도록 설정.
 */
 
 hr {
@@ -192,7 +193,7 @@ hr {
 }
 
 /*
-Add the correct text decoration in Chrome, Edge, and Safari.
+Chrome, Edge, Safari에서 올바른 텍스트 데코레이션 추가.
 */
 
 abbr:where([title]) {
@@ -201,7 +202,7 @@ abbr:where([title]) {
 }
 
 /*
-Remove the default font size and weight for headings.
+헤딩 태그의 기본 폰트 크기와 두께 제거.
 */
 
 h1,
@@ -215,7 +216,7 @@ h6 {
 }
 
 /*
-Reset links to optimize for opt-in styling instead of opt-out.
+링크 스타일을 opt-in 방식으로 최적화.
 */
 
 a {
@@ -224,7 +225,7 @@ a {
 }
 
 /*
-Add the correct font weight in Edge and Safari.
+Edge와 Safari에서 올바른 폰트 두께 적용.
 */
 
 b,
@@ -233,10 +234,10 @@ strong {
 }
 
 /*
-1. Use the user's configured `mono` font-family by default.
-2. Use the user's configured `mono` font-feature-settings by default.
-3. Use the user's configured `mono` font-variation-settings by default.
-4. Correct the odd `em` font sizing in all browsers.
+1. 기본적으로 사용자의 설정된 `mono` 폰트 패밀리 사용.
+2. 사용자의 설정된 `mono` font-feature-settings 사용.
+3. 사용자의 설정된 `mono` font-variation-settings 사용.
+4. 모든 브라우저에서 이상한 `em` 폰트 크기 수정.
 */
 
 code,
@@ -254,7 +255,7 @@ pre {
 }
 
 /*
-Add the correct font size in all browsers.
+모든 브라우저에서 올바른 폰트 크기 적용.
 */
 
 small {
@@ -262,7 +263,7 @@ small {
 }
 
 /*
-Prevent `sub` and `sup` elements from affecting the line height in all browsers.
+모든 브라우저에서 sub, sup 요소가 line-height에 영향을 주지 않도록 방지.
 */
 
 sub,
@@ -282,9 +283,9 @@ sup {
 }
 
 /*
-1. Remove text indentation from table contents in Chrome and Safari. (https://bugs.chromium.org/p/chromium/issues/detail?id=999088, https://bugs.webkit.org/show_bug.cgi?id=201297)
-2. Correct table border color inheritance in all Chrome and Safari. (https://bugs.chromium.org/p/chromium/issues/detail?id=935729, https://bugs.webkit.org/show_bug.cgi?id=195016)
-3. Remove gaps between table borders by default.
+1. Chrome, Safari에서 테이블 내용의 들여쓰기 제거. (https://bugs.chromium.org/p/chromium/issues/detail?id=999088, https://bugs.webkit.org/show_bug.cgi?id=201297)
+2. Chrome, Safari에서 테이블 테두리 색상 상속 수정. (https://bugs.chromium.org/p/chromium/issues/detail?id=935729, https://bugs.webkit.org/show_bug.cgi?id=195016)
+3. 기본적으로 테이블 테두리 사이 간격 제거.
 */
 
 table {
@@ -297,9 +298,9 @@ table {
 }
 
 /*
-1. Change the font styles in all browsers.
-2. Remove the margin in Firefox and Safari.
-3. Remove default padding in all browsers.
+1. 모든 브라우저에서 폰트 스타일 변경.
+2. Firefox, Safari에서 margin 제거.
+3. 모든 브라우저에서 기본 padding 제거.
 */
 
 button,
@@ -330,7 +331,7 @@ textarea {
 }
 
 /*
-Remove the inheritance of text transform in Edge and Firefox.
+Edge, Firefox에서 text-transform 상속 제거.
 */
 
 button,
@@ -339,8 +340,8 @@ select {
 }
 
 /*
-1. Correct the inability to style clickable types in iOS and Safari.
-2. Remove default button styles.
+1. iOS, Safari에서 클릭 가능한 타입 스타일링 문제 수정.
+2. 기본 버튼 스타일 제거.
 */
 
 button,
@@ -356,7 +357,7 @@ input:where([type='submit']) {
 }
 
 /*
-Use the modern Firefox focus style for all focusable elements.
+모던 Firefox 포커스 스타일을 모든 포커스 가능한 요소에 적용.
 */
 
 :-moz-focusring {
@@ -364,7 +365,7 @@ Use the modern Firefox focus style for all focusable elements.
 }
 
 /*
-Remove the additional `:invalid` styles in Firefox. (https://github.com/mozilla/gecko-dev/blob/2f9eacd9d3d995c937b4251a5557d95d494c9be1/layout/style/res/forms.css#L728-L737)
+Firefox에서 추가적인 `:invalid` 스타일 제거. (https://github.com/mozilla/gecko-dev/blob/2f9eacd9d3d995c937b4251a5557d95d494c9be1/layout/style/res/forms.css#L728-L737)
 */
 
 :-moz-ui-invalid {
@@ -372,7 +373,7 @@ Remove the additional `:invalid` styles in Firefox. (https://github.com/mozilla/
 }
 
 /*
-Add the correct vertical alignment in Chrome and Firefox.
+Chrome, Firefox에서 올바른 수직 정렬 적용.
 */
 
 progress {
@@ -380,7 +381,7 @@ progress {
 }
 
 /*
-Correct the cursor style of increment and decrement buttons in Safari.
+Safari에서 증감 버튼의 커서 스타일 수정.
 */
 
 ::-webkit-inner-spin-button,
@@ -389,8 +390,8 @@ Correct the cursor style of increment and decrement buttons in Safari.
 }
 
 /*
-1. Correct the odd appearance in Chrome and Safari.
-2. Correct the outline style in Safari.
+1. Chrome, Safari에서 이상한 외형 수정.
+2. Safari에서 outline 스타일 수정.
 */
 
 [type='search'] {
@@ -401,7 +402,7 @@ Correct the cursor style of increment and decrement buttons in Safari.
 }
 
 /*
-Remove the inner padding in Chrome and Safari on macOS.
+macOS의 Chrome, Safari에서 내부 패딩 제거.
 */
 
 ::-webkit-search-decoration {
@@ -409,8 +410,8 @@ Remove the inner padding in Chrome and Safari on macOS.
 }
 
 /*
-1. Correct the inability to style clickable types in iOS and Safari.
-2. Change font properties to `inherit` in Safari.
+1. iOS, Safari에서 클릭 가능한 타입 스타일링 문제 수정.
+2. Safari에서 폰트 속성을 `inherit`로 변경.
 */
 
 ::-webkit-file-upload-button {
@@ -421,7 +422,7 @@ Remove the inner padding in Chrome and Safari on macOS.
 }
 
 /*
-Add the correct display in Chrome and Safari.
+Chrome, Safari에서 올바른 display 적용.
 */
 
 summary {
@@ -429,7 +430,7 @@ summary {
 }
 
 /*
-Removes the default spacing and border for appropriate elements.
+적절한 요소의 기본 간격과 테두리 제거.
 */
 
 blockquote,
@@ -466,7 +467,7 @@ menu {
 }
 
 /*
-Reset default styling for dialogs.
+다이얼로그의 기본 스타일 초기화.
 */
 
 dialog {
@@ -474,7 +475,7 @@ dialog {
 }
 
 /*
-Prevent resizing textareas horizontally by default.
+기본적으로 textarea의 수평 크기 조정 방지.
 */
 
 textarea {
@@ -482,8 +483,8 @@ textarea {
 }
 
 /*
-1. Reset the default placeholder opacity in Firefox. (https://github.com/tailwindlabs/tailwindcss/issues/3300)
-2. Set the default placeholder color to the user's configured gray 400 color.
+1. Firefox에서 기본 placeholder 투명도 초기화. (https://github.com/tailwindlabs/tailwindcss/issues/3300)
+2. 기본 placeholder 색상을 사용자의 설정된 gray 400으로 지정.
 */
 
 input::-moz-placeholder, textarea::-moz-placeholder {
@@ -502,7 +503,7 @@ textarea::placeholder {
 }
 
 /*
-Set the default cursor for buttons.
+버튼의 기본 커서 설정.
 */
 
 button,
@@ -511,7 +512,7 @@ button,
 }
 
 /*
-Make sure disabled buttons don't get the pointer cursor.
+비활성화된 버튼에 pointer 커서가 적용되지 않도록 함.
 */
 
 :disabled {
@@ -519,9 +520,9 @@ Make sure disabled buttons don't get the pointer cursor.
 }
 
 /*
-1. Make replaced elements `display: block` by default. (https://github.com/mozdevs/cssremedy/issues/14)
-2. Add `vertical-align: middle` to align replaced elements more sensibly by default. (https://github.com/jensimmons/cssremedy/issues/14#issuecomment-634934210)
-   This can trigger a poorly considered lint error in some tools but is included by design.
+1. 기본적으로 대체 요소를 `display: block`으로 설정. (https://github.com/mozdevs/cssremedy/issues/14)
+2. 기본적으로 대체 요소에 `vertical-align: middle` 적용. (https://github.com/jensimmons/cssremedy/issues/14#issuecomment-634934210)
+  일부 도구에서 lint 에러가 발생할 수 있지만 의도적으로 포함됨.
 */
 
 img,
@@ -539,7 +540,7 @@ object {
 }
 
 /*
-Constrain images and videos to the parent width and preserve their intrinsic aspect ratio. (https://github.com/mozdevs/cssremedy/issues/14)
+이미지와 비디오를 부모 너비에 맞추고 고유의 종횡비를 유지.
 */
 
 img,
@@ -548,7 +549,7 @@ video {
   height: auto;
 }
 
-/* Make elements with the HTML hidden attribute stay hidden by default */
+/* HTML hidden 속성이 있는 요소를 기본적으로 숨김 처리 */
 
 [hidden]:where(:not([hidden="until-found"])) {
   display: none;

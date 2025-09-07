@@ -72,9 +72,9 @@ function showAnalysisLoading() {
         <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 shadow-sm">
           <div class="flex items-center mb-2">
             <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
-            <div class="text-blue-700 font-medium text-sm">분석 중...</div>
+            <div class="text-blue-700 font-medium text-lg">분석 중...</div>
           </div>
-          <div class="text-blue-600 text-xs">Gemini가 뉴스를 분석하고 있습니다.</div>
+          <div class="text-blue-600 text-xl">Gemini가 뉴스를 분석하고 있습니다.</div>
         </div>
       </div>
     `;
@@ -120,8 +120,8 @@ function displayAnalysisResult(result) {
       <div class="p-4">
         ${analysisPanel.renderHeader()}
         <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3 shadow-sm">
-          <div class="text-yellow-700 font-medium text-sm">Gemini 응답(텍스트)</div>
-          <div class="text-gray-800 text-xs mt-2 whitespace-pre-line">${result}</div>
+          <div class="text-yellow-700 font-medium text-lg">Gemini 응답(텍스트)</div>
+          <div class="text-gray-800 text-xl mt-2 whitespace-pre-line">${result}</div>
         </div>
       </div>
     `;
@@ -140,7 +140,7 @@ function displayAnalysisResult(result) {
       <div class="p-4">
         ${analysisPanel.renderHeader()}
         <div class="bg-red-50 border border-red-200 rounded-lg p-3 shadow-sm">
-          <div class="text-red-700 font-medium text-sm">분석 결과가 없습니다</div>
+          <div class="text-red-700 font-medium text-lg">분석 결과가 없습니다</div>
         </div>
       </div>
     `;
@@ -192,8 +192,8 @@ function displayError(error) {
     <div class="p-4">
       ${analysisPanel.renderHeader()}
       <div class="bg-red-50 border border-red-200 rounded-lg p-3 shadow-sm">
-        <div class="text-red-700 font-medium text-sm">분석 실패</div>
-        <div class="text-red-600 text-xs mt-1">${error}</div>
+        <div class="text-red-700 font-medium text-lg">분석 실패</div>
+        <div class="text-red-600 text-lg mt-1">${error}</div>
       </div>
     </div>
   `;

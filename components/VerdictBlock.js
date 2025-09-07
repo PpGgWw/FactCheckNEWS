@@ -39,9 +39,9 @@ class VerdictBlock {
       <div class="mb-3 p-3 ${style.bgColor} border ${style.borderColor} rounded-lg shadow-sm">
         <div class="flex items-center mb-2">
           <span class="text-base mr-2">${style.icon}</span>
-          <h3 class="font-semibold text-sm ${style.titleColor}">진위 판단</h3>
+          <h3 class="font-semibold text-lg ${style.titleColor}">진위 판단</h3>
         </div>
-        <div class="text-sm text-gray-800 leading-relaxed font-medium">${this.content}</div>
+        <div class="text-lg text-gray-800 leading-relaxed font-medium">${this.content}</div>
       </div>
     `;
   }
