@@ -25,6 +25,26 @@
 
 ### 2. 빌드 과정 (필수)
 
+---
+
+## 빌드가 필요한 경우
+
+아래 파일 또는 폴더의 코드를 수정하면 반드시 빌드 과정을 다시 거쳐야 합니다.
+
+- `panel/tailwind.css`, `tailwind.config.js` 등 **디자인/스타일 관련 파일**
+- `panel/index.js`, `panel/Panel.jsx` 등 **패널 UI/React 컴포넌트 코드**
+- `components/AnalysisBlock.js` 등 **분석 결과 UI 컴포넌트**
+- 기타 **CSS, JS, JSX, 스타일 관련 코드**
+
+즉, **디자인(UI/UX)이나 화면에 표시되는 컴포넌트/스타일을 수정한 경우**
+→ `npm run build-once`로 반드시 빌드 후, 크롬 확장프로그램을 새로고침해야 최신 내용이 적용됩니다.
+
+**참고:**
+`content_script.js`, `service_worker.js` 등 로직만 수정할 경우에는 빌드가 필요하지 않습니다.
+(단, 이 파일에서 UI/스타일 관련 코드가 변경되면 빌드 필요)
+
+---
+
 **최신 코드/디자인을 적용하려면 반드시 아래 빌드 과정을 거쳐야 합니다.**
 
 1. Node.js 설치 ([공식 사이트](https://nodejs.org/))
@@ -76,24 +96,6 @@ const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-
 - 분석 결과는 패널에 "진위", "근거", "분석"으로 표시
 - API KEY 미입력 시 분석 기능 미작동
 - 코드/디자인 수정 시 반드시 빌드 후 확장프로그램 새로고침
-
----
-
-## 빌드가 필요한 경우
-
-아래 파일 또는 폴더의 코드를 수정하면 반드시 빌드 과정을 다시 거쳐야 합니다.
-
-- `panel/tailwind.css`, `tailwind.config.js` 등 **디자인/스타일 관련 파일**
-- `panel/index.js`, `panel/Panel.jsx` 등 **패널 UI/React 컴포넌트 코드**
-- `components/AnalysisBlock.js` 등 **분석 결과 UI 컴포넌트**
-- 기타 **CSS, JS, JSX, 스타일 관련 코드**
-
-즉, **디자인(UI/UX)이나 화면에 표시되는 컴포넌트/스타일을 수정한 경우**
-→ `npm run build-once`로 반드시 빌드 후, 크롬 확장프로그램을 새로고침해야 최신 내용이 적용됩니다.
-
-**참고:**
-`content_script.js`, `service_worker.js` 등 로직만 수정할 경우에는 빌드가 필요하지 않습니다.
-(단, 이 파일에서 UI/스타일 관련 코드가 변경되면 빌드 필요)
 
 ---
 
