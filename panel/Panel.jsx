@@ -8,7 +8,6 @@ export default function Panel() {
         {/* Gemini 결과가 여기에 표시됩니다 */}
         <div className="text-gray-400 text-center mt-8">아직 결과가 없습니다.</div>
       </div>
-      <div className="mt-4 text-xs text-gray-400 text-center">Powered by Gemini API</div>
     </div>
   );
 }
