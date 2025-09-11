@@ -40,28 +40,14 @@ function showAnalysisLoading() {
       console.log('패널 생성 완료:', panel);
     } else {
       analysisPanel = panel.__analysisPanel || new window.AnalysisPanel();
-      panel.style.display = 'block';
-      panel.style.visibility = 'visible';
       console.log('기존 패널 재사용:', panel);
     }
     panel.__analysisPanel = analysisPanel;
     
     // 패널 위치와 스타일 강제 설정
-    panel.style.position = 'fixed';
-  panel.style.bottom = '20px';
-  panel.style.right = '20px';
-  panel.style.width = '400px';
-  panel.style.maxHeight = '90vh';
-  panel.style.height = '90vh';
-  panel.style.backgroundColor = 'white';
-  panel.style.zIndex = '999999';
-  panel.style.border = '2px solid #3b82f6';
-  panel.style.borderRadius = '12px';
-  panel.style.boxShadow = '0 10px 25px rgba(0,0,0,0.2)';
-  panel.style.overflow = 'auto';
-  panel.style.display = 'block';
-  panel.style.visibility = 'visible';
-  panel.style.fontSize = '1.15rem';
+    panel.className = ''; // 기존 클래스 초기화
+    panel.classList.add('analysis-panel-base');
+    panel.style.display = 'block'; // 보이도록 설정
     
     console.log('패널 스타일 강제 설정 완료');
     
@@ -69,24 +55,17 @@ function showAnalysisLoading() {
       <div class="p-4">
         ${analysisPanel.renderHeader()}
         
-        <div class="bg-blue-50 border border-blue-200 rounded-lg p-3 shadow-sm">
+        <div class="bg-accent-light border border-accent rounded-lg p-3 shadow-sm">
           <div class="flex items-center mb-2">
-            <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
-            <div class="text-blue-700 font-medium text-lg">분석 중...</div>
+            <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-accent mr-2"></div>
+            <div class="text-accent font-medium text-lg">분석 중...</div>
           </div>
-          <div class="text-blue-600 text-xl">Gemini가 뉴스를 분석하고 있습니다.</div>
+          <div class="text-accent text-xl">Gemini가 뉴스를 분석하고 있습니다.</div>
         </div>
       </div>
     `;
     
     console.log('패널 HTML 설정 완료');
-    
-    // 패널이 DOM에 제대로 추가되었는지 확인
-    const addedPanel = document.getElementById('news-analysis-panel');
-    console.log('DOM에서 패널 찾기:', addedPanel);
-    console.log('패널 표시 상태:', addedPanel ? addedPanel.style.display : 'null');
-    console.log('패널 visibility:', addedPanel ? addedPanel.style.visibility : 'null');
-    console.log('패널 z-index:', addedPanel ? addedPanel.style.zIndex : 'null');
     
     // 닫기 버튼 이벤트 추가
     analysisPanel.attachCloseEvent(panel);
@@ -110,7 +89,6 @@ function displayAnalysisResult(result) {
   } else {
     analysisPanel = panel.__analysisPanel || new window.AnalysisPanel();
     panel.style.display = 'block';
-    panel.style.visibility = 'visible';
   }
   panel.__analysisPanel = analysisPanel;
   
@@ -119,9 +97,9 @@ function displayAnalysisResult(result) {
     panel.innerHTML = `
       <div class="p-4">
         ${analysisPanel.renderHeader()}
-        <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3 shadow-sm">
-          <div class="text-yellow-700 font-medium text-lg">Gemini 응답(텍스트)</div>
-          <div class="text-gray-800 text-xl mt-2 whitespace-pre-line">${result}</div>
+        <div class="bg-status-warning-light border border-status-warning rounded-lg p-3 shadow-sm">
+          <div class="text-status-warning font-medium text-lg">Gemini 응답(텍스트)</div>
+          <div class="text-text-main text-xl mt-2 whitespace-pre-line">${result}</div>
         </div>
       </div>
     `;
@@ -139,8 +117,8 @@ function displayAnalysisResult(result) {
     panel.innerHTML = `
       <div class="p-4">
         ${analysisPanel.renderHeader()}
-        <div class="bg-red-50 border border-red-200 rounded-lg p-3 shadow-sm">
-          <div class="text-red-700 font-medium text-lg">분석 결과가 없습니다</div>
+        <div class="bg-status-error-light border border-status-error rounded-lg p-3 shadow-sm">
+          <div class="text-status-error font-medium text-lg">분석 결과가 없습니다</div>
         </div>
       </div>
     `;
@@ -184,16 +162,15 @@ function displayError(error) {
   } else {
     analysisPanel = panel.__analysisPanel || new window.AnalysisPanel();
     panel.style.display = 'block';
-    panel.style.visibility = 'visible';
   }
   panel.__analysisPanel = analysisPanel;
   
   panel.innerHTML = `
     <div class="p-4">
       ${analysisPanel.renderHeader()}
-      <div class="bg-red-50 border border-red-200 rounded-lg p-3 shadow-sm">
-        <div class="text-red-700 font-medium text-lg">분석 실패</div>
-        <div class="text-red-600 text-lg mt-1">${error}</div>
+      <div class="bg-status-error-light border border-status-error rounded-lg p-3 shadow-sm">
+        <div class="text-status-error font-medium text-lg">분석 실패</div>
+        <div class="text-status-error text-lg mt-1">${error}</div>
       </div>
     </div>
   `;
@@ -308,9 +285,7 @@ const titleElement = document.querySelector(titleSelector);
 
 if (titleElement) {
   // 하이라이트
-  titleElement.style.backgroundColor = '#d2f5d2'; // 연한 초록색
-  titleElement.style.padding = '5px';
-  titleElement.style.borderRadius = '5px';
+  titleElement.classList.add('highlight-title');
 
   // 데이터 수집
   const titleText = titleElement.textContent?.trim();
@@ -337,10 +312,7 @@ for (const selector of contentSelectors) {
   if (contentElements.length > 0) {
     contentElements.forEach((element, index) => {
       // 하이라이트
-      element.style.backgroundColor = '#ffffcc'; // 연한 노란색
-      element.style.padding = '10px';
-      element.style.borderRadius = '5px';
-      element.style.border = '2px solid #ffeb3b';
+      element.classList.add('highlight-content');
 
       // 데이터 수집
       const contentText = element.textContent?.trim();
@@ -365,9 +337,7 @@ const subtitleElement = document.querySelector(subtitleSelector);
 
 if (subtitleElement) {
   // 하이라이트
-  subtitleElement.style.backgroundColor = '#e1f5fe';
-  subtitleElement.style.padding = '3px';
-  subtitleElement.style.borderRadius = '3px';
+  subtitleElement.classList.add('highlight-subtitle');
 
   // 데이터 수집
   const subtitleText = subtitleElement.textContent?.trim();
