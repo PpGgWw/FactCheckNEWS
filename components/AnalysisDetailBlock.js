@@ -14,7 +14,7 @@ class AnalysisDetailBlock {
           <span class="text-base mr-2">🔍</span>
           <h3 class="font-semibold text-lg text-accent">상세 분석</h3>
         </div>
-        <div class="text-lg text-charcoal-gray leading-relaxed">${this.content}</div>
+        <div class="text-lg text-text-main leading-relaxed">${this.content}</div>
       </div>
     `;
   }

@@ -14,7 +14,7 @@ class EvidenceBlock {
           <span class="text-base mr-2">📋</span>
           <h3 class="font-semibold text-sm text-accent">근거</h3>
         </div>
-        <div class="text-sm text-charcoal-gray leading-relaxed">${this.content}</div>
+        <div class="text-sm text-text-main leading-relaxed">${this.content}</div>
       </div>
     `;
   }

@@ -17,10 +17,17 @@ module.exports = {
   },
   plugins: [],
   safelist: [
-    'bg-light-beige',
-    'text-charcoal-gray',
-    'bg-taupe-gray',
-    'text-taupe-gray',
+    // Main theme
+    'bg-background-main',
+    'text-text-main',
+    'text-text-title',
+    'bg-container-and-border',
+    'border-container-and-border',
+    'text-container-and-border', // Used for muted text
+    'from-accent-light', // For gradient
+    'to-background-main', // For gradient
+
+    // Status and Accent (already semantic)
     'bg-status-success-light',
     'border-status-success',
     'text-status-success',
@@ -33,9 +40,9 @@ module.exports = {
     'bg-accent-light',
     'border-accent',
     'text-accent',
-    'from-accent-light',
-    'to-light-beige',
-    'hover:text-charcoal-gray',
-    'hover:bg-taupe-gray',
+
+    // Hover states
+    'hover:text-text-main',
+    'hover:bg-container-and-border',
   ],
 }

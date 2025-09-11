@@ -25,9 +25,9 @@ class AnalysisBlock {
     }
     
     return {
-      bgColor: 'bg-light-beige',
-      borderColor: 'border-taupe-gray',
-      titleColor: 'text-charcoal-gray'
+      bgColor: 'bg-container-and-border',
+      borderColor: 'border-container-and-border',
+      titleColor: 'text-title'
     };
   }
 
@@ -39,7 +39,7 @@ class AnalysisBlock {
     return `
       <div class="mb-4 p-4 ${style.bgColor} border ${style.borderColor} rounded-lg">
     <h3 class="font-semibold text-lg ${style.titleColor} mb-2">${this.title}</h3>
-    <div class="text-lg text-charcoal-gray leading-relaxed">${this.content}</div>
+    <div class="text-lg text-text-main leading-relaxed">${this.content}</div>
       </div>
     `;
   }

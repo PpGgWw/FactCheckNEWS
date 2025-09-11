@@ -15,7 +15,7 @@ class AnalysisPanel {
     // 패널 컨테이너 생성
     const panelContainer = document.createElement('div');
     panelContainer.id = this.panelId;
-    panelContainer.className = 'fixed bottom-1 right-1 w-96 max-h-96 bg-light-beige shadow-2xl z-50 overflow-y-auto rounded-xl border border-taupe-gray';
+    panelContainer.className = 'fixed bottom-1 right-1 w-96 max-h-96 bg-background-main shadow-2xl z-50 overflow-y-auto rounded-xl border border-container-and-border';
     
     // 애니메이션 효과 추가
     panelContainer.style.cssText += `
@@ -37,9 +37,9 @@ class AnalysisPanel {
 
   renderHeader() {
     return `
-      <div class="flex justify-between items-center mb-4 pb-3 border-b border-taupe-gray bg-gradient-to-r from-accent-light to-light-beige -m-4 p-4 rounded-t-xl">
-        <h2 class="text-lg font-bold text-charcoal-gray">🔍 뉴스 분석</h2>
-        <button id="close-panel" class="text-taupe-gray hover:text-charcoal-gray hover:bg-taupe-gray rounded-full w-8 h-8 flex items-center justify-center transition-colors">&times;</button>
+      <div class="flex justify-between items-center mb-4 pb-3 border-b border-container-and-border bg-gradient-to-r from-accent-light to-background-main -m-4 p-4 rounded-t-xl">
+        <h2 class="text-lg font-bold text-text-title">🔍 뉴스 분석</h2>
+        <button id="close-panel" class="text-container-and-border hover:text-text-main hover:bg-container-and-border rounded-full w-8 h-8 flex items-center justify-center transition-colors">&times;</button>
       </div>
     `;
   }
