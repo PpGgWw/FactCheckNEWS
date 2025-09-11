@@ -11,23 +11,23 @@ class AnalysisBlock {
     if (this.type === 'verdict') {
       if (this.content.includes('진짜')) {
         return {
-          bgColor: 'bg-green-50',
-          borderColor: 'border-green-200', 
-          titleColor: 'text-green-700'
+          bgColor: 'bg-status-success-light',
+          borderColor: 'border-status-success',
+          titleColor: 'text-status-success'
         };
       } else if (this.content.includes('가짜')) {
         return {
-          bgColor: 'bg-red-50',
-          borderColor: 'border-red-200',
-          titleColor: 'text-red-700'
+          bgColor: 'bg-status-error-light',
+          borderColor: 'border-status-error',
+          titleColor: 'text-status-error'
         };
       }
     }
     
     return {
-      bgColor: 'bg-gray-50',
-      borderColor: 'border-gray-200',
-      titleColor: 'text-gray-700'
+      bgColor: 'bg-container-and-border',
+      borderColor: 'border-container-and-border',
+      titleColor: 'text-title'
     };
   }
 
@@ -39,7 +39,7 @@ class AnalysisBlock {
     return `
       <div class="mb-4 p-4 ${style.bgColor} border ${style.borderColor} rounded-lg">
     <h3 class="font-semibold text-lg ${style.titleColor} mb-2">${this.title}</h3>
-    <div class="text-lg text-gray-800 leading-relaxed">${this.content}</div>
+    <div class="text-lg text-text-main leading-relaxed">${this.content}</div>
       </div>
     `;
   }

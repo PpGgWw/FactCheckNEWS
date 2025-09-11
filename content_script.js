@@ -51,12 +51,12 @@ function showAnalysisLoading() {
   panel.style.bottom = '20px';
   panel.style.right = '20px';
   panel.style.width = '400px';
-  panel.style.maxHeight = '90vh';
-  panel.style.height = '90vh';
+  panel.style.maxHeight = '70vh';
+  panel.style.height = '70vh';
   panel.style.backgroundColor = 'white';
   panel.style.zIndex = '999999';
   panel.style.border = '2px solid #3b82f6';
-  panel.style.borderRadius = '12px';
+  panel.style.borderRadius = '15px';
   panel.style.boxShadow = '0 10px 25px rgba(0,0,0,0.2)';
   panel.style.overflow = 'auto';
   panel.style.display = 'block';

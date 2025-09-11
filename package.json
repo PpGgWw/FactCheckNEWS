@@ -4,8 +4,8 @@
   "description": "네이버 뉴스 분석 크롬 확장",
   "main": "content_script.js",
   "scripts": {
-    "build": "npx tailwindcss -i ./panel/tailwind.css -o ./panel/tailwind.css --watch",
-    "build-once": "npx tailwindcss -i ./panel/tailwind.css -o ./panel/tailwind.css"
+    "build": "npx tailwindcss -i ./src/input.css -o ./panel/tailwind.css --watch",
+    "build-once": "npx tailwindcss -i ./src/input.css -o ./panel/tailwind.css"
   },
   "dependencies": {
     "react": "^19.1.1",
