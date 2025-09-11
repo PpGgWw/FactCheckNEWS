@@ -10,9 +10,9 @@
     @apply bg-status-warning-light p-3 rounded border-2 border-status-warning;
   }
   .highlight-subtitle {
-    @apply bg-accent-light p-1 rounded;
+    @apply bg-container-and-border p-1 rounded;
   }
   .analysis-panel-base {
-    @apply fixed bottom-5 right-5 w-96 max-h-[90vh] h-[90vh] bg-background-main z-[999999] border-2 border-accent rounded-xl shadow-2xl overflow-auto text-lg;
+    @apply fixed bottom-5 right-5 w-96 max-h-[90vh] h-[90vh] bg-background-main z-[999999] border-2 border-container-and-border rounded-xl shadow-2xl overflow-auto text-lg;
   }
 }

@@ -37,9 +37,9 @@ class AnalysisPanel {
 
   renderHeader() {
     return `
-      <div class="flex justify-between items-center mb-4 pb-3 border-b border-container-and-border bg-gradient-to-r from-accent-light to-background-main -m-4 p-4 rounded-t-xl">
+      <div class="flex justify-between items-center mb-4 pb-3 border-b border-container-and-border bg-container-and-border -m-4 p-4 rounded-t-xl">
         <h2 class="text-lg font-bold text-text-title">🔍 뉴스 분석</h2>
-        <button id="close-panel" class="text-container-and-border hover:text-text-main hover:bg-container-and-border rounded-full w-8 h-8 flex items-center justify-center transition-colors">&times;</button>
+        <button id="close-panel" class="text-text-main hover:text-text-title hover:bg-background-main rounded-full w-8 h-8 flex items-center justify-center transition-colors">&times;</button>
       </div>
     `;
   }

@@ -13,10 +13,6 @@ const colors = {
   'status-error-light': '#fee2e2',  // Light Red
   'status-warning': '#eab308',      // Yellow
   'status-warning-light': '#fef9c3',// Light Yellow
-
-  // Accent Colors (already semantic)
-  'accent': '#3b82f6',              // Blue
-  'accent-light': '#dbeafe',        // Light Blue
 };
 
 module.exports = colors;

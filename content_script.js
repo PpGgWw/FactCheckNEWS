@@ -55,12 +55,12 @@ function showAnalysisLoading() {
       <div class="p-4">
         ${analysisPanel.renderHeader()}
         
-        <div class="bg-accent-light border border-accent rounded-lg p-3 shadow-sm">
+        <div class="bg-container-and-border border border-container-and-border rounded-lg p-3 shadow-sm">
           <div class="flex items-center mb-2">
-            <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-accent mr-2"></div>
-            <div class="text-accent font-medium text-lg">분석 중...</div>
+            <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-text-title mr-2"></div>
+            <div class="text-text-title font-medium text-lg">분석 중...</div>
           </div>
-          <div class="text-accent text-xl">Gemini가 뉴스를 분석하고 있습니다.</div>
+          <div class="text-text-main text-xl">Gemini가 뉴스를 분석하고 있습니다.</div>
         </div>
       </div>
     `;

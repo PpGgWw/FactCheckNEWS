@@ -9,10 +9,10 @@ class EvidenceBlock {
     if (!this.content) return '';
     
     return `
-      <div class="mb-3 p-3 bg-accent-light border border-accent rounded-lg shadow-sm">
+      <div class="mb-3 p-3 bg-container-and-border border border-container-and-border rounded-lg shadow-sm">
         <div class="flex items-center mb-2">
           <span class="text-base mr-2">📋</span>
-          <h3 class="font-semibold text-sm text-accent">근거</h3>
+          <h3 class="font-semibold text-sm text-text-title">근거</h3>
         </div>
         <div class="text-sm text-text-main leading-relaxed">${this.content}</div>
       </div>
