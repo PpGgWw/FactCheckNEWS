@@ -107,12 +107,12 @@
 }
 
 /*
-! tailwindcss v3.4.17 | MIT 라이선스 | https://tailwindcss.com
+! tailwindcss v3.4.17 | MIT License | https://tailwindcss.com
 */
 
 /*
-1. 패딩과 테두리가 요소의 너비에 영향을 주지 않도록 방지합니다. (https://github.com/mozdevs/cssremedy/issues/4)
-2. border-width만 추가해도 테두리가 생기도록 허용합니다. (https://github.com/tailwindcss/tailwindcss/pull/116)
+1. Prevent padding and border from affecting element width. (https://github.com/mozdevs/cssremedy/issues/4)
+2. Allow adding a border to an element by just adding a border-width. (https://github.com/tailwindcss/tailwindcss/pull/116)
 */
 
 *,
@@ -134,13 +134,13 @@
 }
 
 /*
-1. 모든 브라우저에서 일관된 line-height를 사용합니다.
-2. iOS에서 방향 변경 후 폰트 크기 조정 방지.
-3. 더 읽기 쉬운 탭 크기 사용.
-4. 기본적으로 사용자의 설정된 `sans` 폰트 패밀리 사용.
-5. 사용자의 설정된 `sans` font-feature-settings 사용.
-6. 사용자의 설정된 `sans` font-variation-settings 사용.
-7. iOS에서 탭 하이라이트 비활성화
+1. Use a consistent sensible line-height in all browsers.
+2. Prevent adjustments of font size after orientation changes in iOS.
+3. Use a more readable tab size.
+4. Use the user's configured `sans` font-family by default.
+5. Use the user's configured `sans` font-feature-settings by default.
+6. Use the user's configured `sans` font-variation-settings by default.
+7. Disable tap highlights on iOS
 */
 
 html,
@@ -152,7 +152,7 @@ html,
   -moz-tab-size: 4;
   /* 3 */
   -o-tab-size: 4;
-  tab-size: 4;
+     tab-size: 4;
   /* 3 */
   font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
   /* 4 */
@@ -165,8 +165,8 @@ html,
 }
 
 /*
-1. 모든 브라우저에서 margin 제거.
-2. `html`에서 line-height를 상속받아 사용자가 직접 클래스 지정 가능.
+1. Remove the margin in all browsers.
+2. Inherit line-height from `html` so users can set them as a class directly on the `html` element.
 */
 
 body {
@@ -174,13 +174,12 @@ body {
   /* 1 */
   line-height: inherit;
   /* 2 */
-  font-size: 40px;
 }
 
 /*
-1. Firefox에서 올바른 높이 추가.
-2. Firefox에서 테두리 색상 상속 수정. (https://bugzilla.mozilla.org/show_bug.cgi?id=190655)
-3. 기본적으로 수평선이 보이도록 설정.
+1. Add the correct height in Firefox.
+2. Correct the inheritance of border color in Firefox. (https://bugzilla.mozilla.org/show_bug.cgi?id=190655)
+3. Ensure horizontal rules are visible by default.
 */
 
 hr {
@@ -193,16 +192,16 @@ hr {
 }
 
 /*
-Chrome, Edge, Safari에서 올바른 텍스트 데코레이션 추가.
+Add the correct text decoration in Chrome, Edge, and Safari.
 */
 
 abbr:where([title]) {
   -webkit-text-decoration: underline dotted;
-  text-decoration: underline dotted;
+          text-decoration: underline dotted;
 }
 
 /*
-헤딩 태그의 기본 폰트 크기와 두께 제거.
+Remove the default font size and weight for headings.
 */
 
 h1,
@@ -216,7 +215,7 @@ h6 {
 }
 
 /*
-링크 스타일을 opt-in 방식으로 최적화.
+Reset links to optimize for opt-in styling instead of opt-out.
 */
 
 a {
@@ -225,7 +224,7 @@ a {
 }
 
 /*
-Edge와 Safari에서 올바른 폰트 두께 적용.
+Add the correct font weight in Edge and Safari.
 */
 
 b,
@@ -234,10 +233,10 @@ strong {
 }
 
 /*
-1. 기본적으로 사용자의 설정된 `mono` 폰트 패밀리 사용.
-2. 사용자의 설정된 `mono` font-feature-settings 사용.
-3. 사용자의 설정된 `mono` font-variation-settings 사용.
-4. 모든 브라우저에서 이상한 `em` 폰트 크기 수정.
+1. Use the user's configured `mono` font-family by default.
+2. Use the user's configured `mono` font-feature-settings by default.
+3. Use the user's configured `mono` font-variation-settings by default.
+4. Correct the odd `em` font sizing in all browsers.
 */
 
 code,
@@ -255,7 +254,7 @@ pre {
 }
 
 /*
-모든 브라우저에서 올바른 폰트 크기 적용.
+Add the correct font size in all browsers.
 */
 
 small {
@@ -263,7 +262,7 @@ small {
 }
 
 /*
-모든 브라우저에서 sub, sup 요소가 line-height에 영향을 주지 않도록 방지.
+Prevent `sub` and `sup` elements from affecting the line height in all browsers.
 */
 
 sub,
@@ -283,9 +282,9 @@ sup {
 }
 
 /*
-1. Chrome, Safari에서 테이블 내용의 들여쓰기 제거. (https://bugs.chromium.org/p/chromium/issues/detail?id=999088, https://bugs.webkit.org/show_bug.cgi?id=201297)
-2. Chrome, Safari에서 테이블 테두리 색상 상속 수정. (https://bugs.chromium.org/p/chromium/issues/detail?id=935729, https://bugs.webkit.org/show_bug.cgi?id=195016)
-3. 기본적으로 테이블 테두리 사이 간격 제거.
+1. Remove text indentation from table contents in Chrome and Safari. (https://bugs.chromium.org/p/chromium/issues/detail?id=999088, https://bugs.webkit.org/show_bug.cgi?id=201297)
+2. Correct table border color inheritance in all Chrome and Safari. (https://bugs.chromium.org/p/chromium/issues/detail?id=935729, https://bugs.webkit.org/show_bug.cgi?id=195016)
+3. Remove gaps between table borders by default.
 */
 
 table {
@@ -298,9 +297,9 @@ table {
 }
 
 /*
-1. 모든 브라우저에서 폰트 스타일 변경.
-2. Firefox, Safari에서 margin 제거.
-3. 모든 브라우저에서 기본 padding 제거.
+1. Change the font styles in all browsers.
+2. Remove the margin in Firefox and Safari.
+3. Remove default padding in all browsers.
 */
 
 button,
@@ -331,7 +330,7 @@ textarea {
 }
 
 /*
-Edge, Firefox에서 text-transform 상속 제거.
+Remove the inheritance of text transform in Edge and Firefox.
 */
 
 button,
@@ -340,8 +339,8 @@ select {
 }
 
 /*
-1. iOS, Safari에서 클릭 가능한 타입 스타일링 문제 수정.
-2. 기본 버튼 스타일 제거.
+1. Correct the inability to style clickable types in iOS and Safari.
+2. Remove default button styles.
 */
 
 button,
@@ -357,7 +356,7 @@ input:where([type='submit']) {
 }
 
 /*
-모던 Firefox 포커스 스타일을 모든 포커스 가능한 요소에 적용.
+Use the modern Firefox focus style for all focusable elements.
 */
 
 :-moz-focusring {
@@ -365,7 +364,7 @@ input:where([type='submit']) {
 }
 
 /*
-Firefox에서 추가적인 `:invalid` 스타일 제거. (https://github.com/mozilla/gecko-dev/blob/2f9eacd9d3d995c937b4251a5557d95d494c9be1/layout/style/res/forms.css#L728-L737)
+Remove the additional `:invalid` styles in Firefox. (https://github.com/mozilla/gecko-dev/blob/2f9eacd9d3d995c937b4251a5557d95d494c9be1/layout/style/res/forms.css#L728-L737)
 */
 
 :-moz-ui-invalid {
@@ -373,7 +372,7 @@ Firefox에서 추가적인 `:invalid` 스타일 제거. (https://github.com/mozi
 }
 
 /*
-Chrome, Firefox에서 올바른 수직 정렬 적용.
+Add the correct vertical alignment in Chrome and Firefox.
 */
 
 progress {
@@ -381,7 +380,7 @@ progress {
 }
 
 /*
-Safari에서 증감 버튼의 커서 스타일 수정.
+Correct the cursor style of increment and decrement buttons in Safari.
 */
 
 ::-webkit-inner-spin-button,
@@ -390,8 +389,8 @@ Safari에서 증감 버튼의 커서 스타일 수정.
 }
 
 /*
-1. Chrome, Safari에서 이상한 외형 수정.
-2. Safari에서 outline 스타일 수정.
+1. Correct the odd appearance in Chrome and Safari.
+2. Correct the outline style in Safari.
 */
 
 [type='search'] {
@@ -402,7 +401,7 @@ Safari에서 증감 버튼의 커서 스타일 수정.
 }
 
 /*
-macOS의 Chrome, Safari에서 내부 패딩 제거.
+Remove the inner padding in Chrome and Safari on macOS.
 */
 
 ::-webkit-search-decoration {
@@ -410,8 +409,8 @@ macOS의 Chrome, Safari에서 내부 패딩 제거.
 }
 
 /*
-1. iOS, Safari에서 클릭 가능한 타입 스타일링 문제 수정.
-2. Safari에서 폰트 속성을 `inherit`로 변경.
+1. Correct the inability to style clickable types in iOS and Safari.
+2. Change font properties to `inherit` in Safari.
 */
 
 ::-webkit-file-upload-button {
@@ -422,7 +421,7 @@ macOS의 Chrome, Safari에서 내부 패딩 제거.
 }
 
 /*
-Chrome, Safari에서 올바른 display 적용.
+Add the correct display in Chrome and Safari.
 */
 
 summary {
@@ -430,7 +429,7 @@ summary {
 }
 
 /*
-적절한 요소의 기본 간격과 테두리 제거.
+Removes the default spacing and border for appropriate elements.
 */
 
 blockquote,
@@ -467,7 +466,7 @@ menu {
 }
 
 /*
-다이얼로그의 기본 스타일 초기화.
+Reset default styling for dialogs.
 */
 
 dialog {
@@ -475,7 +474,7 @@ dialog {
 }
 
 /*
-기본적으로 textarea의 수평 크기 조정 방지.
+Prevent resizing textareas horizontally by default.
 */
 
 textarea {
@@ -483,8 +482,8 @@ textarea {
 }
 
 /*
-1. Firefox에서 기본 placeholder 투명도 초기화. (https://github.com/tailwindlabs/tailwindcss/issues/3300)
-2. 기본 placeholder 색상을 사용자의 설정된 gray 400으로 지정.
+1. Reset the default placeholder opacity in Firefox. (https://github.com/tailwindlabs/tailwindcss/issues/3300)
+2. Set the default placeholder color to the user's configured gray 400 color.
 */
 
 input::-moz-placeholder, textarea::-moz-placeholder {
@@ -503,7 +502,7 @@ textarea::placeholder {
 }
 
 /*
-버튼의 기본 커서 설정.
+Set the default cursor for buttons.
 */
 
 button,
@@ -512,7 +511,7 @@ button,
 }
 
 /*
-비활성화된 버튼에 pointer 커서가 적용되지 않도록 함.
+Make sure disabled buttons don't get the pointer cursor.
 */
 
 :disabled {
@@ -520,9 +519,9 @@ button,
 }
 
 /*
-1. 기본적으로 대체 요소를 `display: block`으로 설정. (https://github.com/mozdevs/cssremedy/issues/14)
-2. 기본적으로 대체 요소에 `vertical-align: middle` 적용. (https://github.com/jensimmons/cssremedy/issues/14#issuecomment-634934210)
-  일부 도구에서 lint 에러가 발생할 수 있지만 의도적으로 포함됨.
+1. Make replaced elements `display: block` by default. (https://github.com/mozdevs/cssremedy/issues/14)
+2. Add `vertical-align: middle` to align replaced elements more sensibly by default. (https://github.com/jensimmons/cssremedy/issues/14#issuecomment-634934210)
+   This can trigger a poorly considered lint error in some tools but is included by design.
 */
 
 img,
@@ -540,7 +539,7 @@ object {
 }
 
 /*
-이미지와 비디오를 부모 너비에 맞추고 고유의 종횡비를 유지.
+Constrain images and videos to the parent width and preserve their intrinsic aspect ratio. (https://github.com/mozdevs/cssremedy/issues/14)
 */
 
 img,
@@ -549,26 +548,34 @@ video {
   height: auto;
 }
 
-/* HTML hidden 속성이 있는 요소를 기본적으로 숨김 처리 */
+/* Make elements with the HTML hidden attribute stay hidden by default */
 
 [hidden]:where(:not([hidden="until-found"])) {
   display: none;
+}
+
+.visible {
+  visibility: visible;
 }
 
 .fixed {
   position: fixed;
 }
 
-.right-0 {
-  right: 0px;
+.bottom-1 {
+  bottom: 0.25rem;
 }
 
-.top-0 {
-  top: 0px;
+.right-1 {
+  right: 0.25rem;
 }
 
 .z-50 {
   z-index: 50;
+}
+
+.-m-4 {
+  margin: -1rem;
 }
 
 .m-0 {
@@ -579,32 +586,60 @@ video {
   margin-bottom: 0.5rem;
 }
 
-.mb-4 {
-  margin-bottom: 1rem;
+.mb-3 {
+  margin-bottom: 0.75rem;
 }
 
-.mb-6 {
-  margin-bottom: 1.5rem;
+.mb-4 {
+  margin-bottom: 1rem;
 }
 
 .mr-2 {
   margin-right: 0.5rem;
 }
 
-.mt-4 {
-  margin-top: 1rem;
+.mt-1 {
+  margin-top: 0.25rem;
+}
+
+.mt-2 {
+  margin-top: 0.5rem;
 }
 
 .mt-8 {
   margin-top: 2rem;
 }
 
+.block {
+  display: block;
+}
+
 .flex {
   display: flex;
 }
 
+.h-4 {
+  height: 1rem;
+}
+
+.h-8 {
+  height: 2rem;
+}
+
 .h-full {
   height: 100%;
+}
+
+.max-h-96 {
+  max-height: 24rem;
+}
+
+.w-4 {
+  width: 1rem;
+}
+
+.w-8 {
+  width: 2rem;
 }
 
 .w-96 {
@@ -619,6 +654,20 @@ video {
   flex: 1 1 0%;
 }
 
+.transform {
+  transform: translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(var(--tw-rotate)) skewX(var(--tw-skew-x)) skewY(var(--tw-skew-y)) scaleX(var(--tw-scale-x)) scaleY(var(--tw-scale-y));
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
+
 .flex-col {
   flex-direction: column;
 }
@@ -627,26 +676,47 @@ video {
   align-items: center;
 }
 
+.justify-center {
+  justify-content: center;
+}
+
 .justify-between {
   justify-content: space-between;
 }
 
-.space-y-4 > :not([hidden]) ~ :not([hidden]) {
+.space-y-3 > :not([hidden]) ~ :not([hidden]) {
   --tw-space-y-reverse: 0;
-  margin-top: calc(1rem * calc(1 - var(--tw-space-y-reverse)));
-  margin-bottom: calc(1rem * var(--tw-space-y-reverse));
+  margin-top: calc(0.75rem * calc(1 - var(--tw-space-y-reverse)));
+  margin-bottom: calc(0.75rem * var(--tw-space-y-reverse));
 }
 
 .overflow-y-auto {
   overflow-y: auto;
 }
 
+.whitespace-pre-line {
+  white-space: pre-line;
+}
+
 .rounded {
   border-radius: 0.25rem;
 }
 
+.rounded-full {
+  border-radius: 9999px;
+}
+
 .rounded-lg {
   border-radius: 0.5rem;
+}
+
+.rounded-xl {
+  border-radius: 0.75rem;
+}
+
+.rounded-t-xl {
+  border-top-left-radius: 0.75rem;
+  border-top-right-radius: 0.75rem;
 }
 
 .border {
@@ -657,24 +727,23 @@ video {
   border-bottom-width: 1px;
 }
 
+.border-b-2 {
+  border-bottom-width: 2px;
+}
+
+.border-accent {
+  --tw-border-opacity: 1;
+  border-color: rgb(59 130 246 / var(--tw-border-opacity, 1));
+}
+
 .border-blue-200 {
   --tw-border-opacity: 1;
   border-color: rgb(191 219 254 / var(--tw-border-opacity, 1));
 }
 
-.border-gray-200 {
+.border-blue-600 {
   --tw-border-opacity: 1;
-  border-color: rgb(229 231 235 / var(--tw-border-opacity, 1));
-}
-
-.border-green-200 {
-  --tw-border-opacity: 1;
-  border-color: rgb(187 247 208 / var(--tw-border-opacity, 1));
-}
-
-.border-purple-200 {
-  --tw-border-opacity: 1;
-  border-color: rgb(233 213 255 / var(--tw-border-opacity, 1));
+  border-color: rgb(37 99 235 / var(--tw-border-opacity, 1));
 }
 
 .border-red-200 {
@@ -682,9 +751,34 @@ video {
   border-color: rgb(254 202 202 / var(--tw-border-opacity, 1));
 }
 
+.border-status-error {
+  --tw-border-opacity: 1;
+  border-color: rgb(239 68 68 / var(--tw-border-opacity, 1));
+}
+
+.border-status-success {
+  --tw-border-opacity: 1;
+  border-color: rgb(34 197 94 / var(--tw-border-opacity, 1));
+}
+
+.border-status-warning {
+  --tw-border-opacity: 1;
+  border-color: rgb(234 179 8 / var(--tw-border-opacity, 1));
+}
+
+.border-taupe-gray {
+  --tw-border-opacity: 1;
+  border-color: rgb(140 130 116 / var(--tw-border-opacity, 1));
+}
+
 .border-yellow-200 {
   --tw-border-opacity: 1;
   border-color: rgb(254 240 138 / var(--tw-border-opacity, 1));
+}
+
+.bg-accent-light {
+  --tw-bg-opacity: 1;
+  background-color: rgb(219 234 254 / var(--tw-bg-opacity, 1));
 }
 
 .bg-blue-50 {
@@ -692,19 +786,9 @@ video {
   background-color: rgb(239 246 255 / var(--tw-bg-opacity, 1));
 }
 
-.bg-gray-50 {
+.bg-light-beige {
   --tw-bg-opacity: 1;
-  background-color: rgb(249 250 251 / var(--tw-bg-opacity, 1));
-}
-
-.bg-green-50 {
-  --tw-bg-opacity: 1;
-  background-color: rgb(240 253 244 / var(--tw-bg-opacity, 1));
-}
-
-.bg-purple-50 {
-  --tw-bg-opacity: 1;
-  background-color: rgb(250 245 255 / var(--tw-bg-opacity, 1));
+  background-color: rgb(217 210 197 / var(--tw-bg-opacity, 1));
 }
 
 .bg-red-50 {
@@ -712,14 +796,43 @@ video {
   background-color: rgb(254 242 242 / var(--tw-bg-opacity, 1));
 }
 
-.bg-white {
+.bg-status-error-light {
   --tw-bg-opacity: 1;
-  background-color: rgb(255 255 255 / var(--tw-bg-opacity, 1));
+  background-color: rgb(254 226 226 / var(--tw-bg-opacity, 1));
+}
+
+.bg-status-success-light {
+  --tw-bg-opacity: 1;
+  background-color: rgb(220 252 231 / var(--tw-bg-opacity, 1));
+}
+
+.bg-status-warning-light {
+  --tw-bg-opacity: 1;
+  background-color: rgb(254 249 195 / var(--tw-bg-opacity, 1));
+}
+
+.bg-taupe-gray {
+  --tw-bg-opacity: 1;
+  background-color: rgb(140 130 116 / var(--tw-bg-opacity, 1));
 }
 
 .bg-yellow-50 {
   --tw-bg-opacity: 1;
   background-color: rgb(254 252 232 / var(--tw-bg-opacity, 1));
+}
+
+.bg-gradient-to-r {
+  background-image: linear-gradient(to right, var(--tw-gradient-stops));
+}
+
+.from-accent-light {
+  --tw-gradient-from: #dbeafe var(--tw-gradient-from-position);
+  --tw-gradient-to: rgb(219 234 254 / 0) var(--tw-gradient-to-position);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
+}
+
+.to-light-beige {
+  --tw-gradient-to: #D9D2C5 var(--tw-gradient-to-position);
 }
 
 .p-0 {
@@ -728,6 +841,10 @@ video {
 
 .p-2 {
   padding: 0.5rem;
+}
+
+.p-3 {
+  padding: 0.75rem;
 }
 
 .p-4 {
@@ -746,6 +863,11 @@ video {
   text-align: center;
 }
 
+.text-base {
+  font-size: 1rem;
+  line-height: 1.5rem;
+}
+
 .text-lg {
   font-size: 1.125rem;
   line-height: 1.75rem;
@@ -759,11 +881,6 @@ video {
 .text-xl {
   font-size: 1.25rem;
   line-height: 1.75rem;
-}
-
-.text-xs {
-  font-size: 0.75rem;
-  line-height: 1rem;
 }
 
 .font-bold {
@@ -782,19 +899,24 @@ video {
   line-height: 1.625;
 }
 
+.text-accent {
+  --tw-text-opacity: 1;
+  color: rgb(59 130 246 / var(--tw-text-opacity, 1));
+}
+
+.text-blue-600 {
+  --tw-text-opacity: 1;
+  color: rgb(37 99 235 / var(--tw-text-opacity, 1));
+}
+
 .text-blue-700 {
   --tw-text-opacity: 1;
   color: rgb(29 78 216 / var(--tw-text-opacity, 1));
 }
 
-.text-gray-400 {
+.text-charcoal-gray {
   --tw-text-opacity: 1;
-  color: rgb(156 163 175 / var(--tw-text-opacity, 1));
-}
-
-.text-gray-700 {
-  --tw-text-opacity: 1;
-  color: rgb(55 65 81 / var(--tw-text-opacity, 1));
+  color: rgb(60 63 64 / var(--tw-text-opacity, 1));
 }
 
 .text-gray-800 {
@@ -802,19 +924,9 @@ video {
   color: rgb(31 41 55 / var(--tw-text-opacity, 1));
 }
 
-.text-gray-900 {
+.text-red-600 {
   --tw-text-opacity: 1;
-  color: rgb(17 24 39 / var(--tw-text-opacity, 1));
-}
-
-.text-green-700 {
-  --tw-text-opacity: 1;
-  color: rgb(21 128 61 / var(--tw-text-opacity, 1));
-}
-
-.text-purple-700 {
-  --tw-text-opacity: 1;
-  color: rgb(126 34 206 / var(--tw-text-opacity, 1));
+  color: rgb(220 38 38 / var(--tw-text-opacity, 1));
 }
 
 .text-red-700 {
@@ -822,22 +934,67 @@ video {
   color: rgb(185 28 28 / var(--tw-text-opacity, 1));
 }
 
+.text-status-error {
+  --tw-text-opacity: 1;
+  color: rgb(239 68 68 / var(--tw-text-opacity, 1));
+}
+
+.text-status-success {
+  --tw-text-opacity: 1;
+  color: rgb(34 197 94 / var(--tw-text-opacity, 1));
+}
+
+.text-status-warning {
+  --tw-text-opacity: 1;
+  color: rgb(234 179 8 / var(--tw-text-opacity, 1));
+}
+
+.text-taupe-gray {
+  --tw-text-opacity: 1;
+  color: rgb(140 130 116 / var(--tw-text-opacity, 1));
+}
+
 .text-yellow-700 {
   --tw-text-opacity: 1;
   color: rgb(161 98 7 / var(--tw-text-opacity, 1));
 }
 
-.shadow-xl {
-  --tw-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
-  --tw-shadow-colored: 0 20px 25px -5px var(--tw-shadow-color), 0 8px 10px -6px var(--tw-shadow-color);
+.shadow-2xl {
+  --tw-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.25);
+  --tw-shadow-colored: 0 25px 50px -12px var(--tw-shadow-color);
   box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow);
 }
 
-.outline {
-  outline-style: solid;
+.shadow-sm {
+  --tw-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --tw-shadow-colored: 0 1px 2px 0 var(--tw-shadow-color);
+  box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow);
 }
 
-.hover\:text-gray-600:hover {
+.filter {
+  filter: var(--tw-blur) var(--tw-brightness) var(--tw-contrast) var(--tw-grayscale) var(--tw-hue-rotate) var(--tw-invert) var(--tw-saturate) var(--tw-sepia) var(--tw-drop-shadow);
+}
+
+.transition {
+  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, -webkit-backdrop-filter;
+  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, backdrop-filter;
+  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke, opacity, box-shadow, transform, filter, backdrop-filter, -webkit-backdrop-filter;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+
+.transition-colors {
+  transition-property: color, background-color, border-color, text-decoration-color, fill, stroke;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+}
+
+.hover\:bg-taupe-gray:hover {
+  --tw-bg-opacity: 1;
+  background-color: rgb(140 130 116 / var(--tw-bg-opacity, 1));
+}
+
+.hover\:text-charcoal-gray:hover {
   --tw-text-opacity: 1;
-  color: rgb(75 85 99 / var(--tw-text-opacity, 1));
+  color: rgb(60 63 64 / var(--tw-text-opacity, 1));
 }
