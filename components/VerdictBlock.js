@@ -8,24 +8,24 @@ class VerdictBlock {
   getVerdictStyle() {
     if (this.content.includes('진짜')) {
       return {
-        bgColor: 'bg-green-50',
-        borderColor: 'border-green-200',
-        titleColor: 'text-green-700',
+        bgColor: 'bg-status-success-light',
+        borderColor: 'border-status-success',
+        titleColor: 'text-status-success',
         icon: '✓'
       };
     } else if (this.content.includes('가짜')) {
       return {
-        bgColor: 'bg-red-50',
-        borderColor: 'border-red-200',
-        titleColor: 'text-red-700',
+        bgColor: 'bg-status-error-light',
+        borderColor: 'border-status-error',
+        titleColor: 'text-status-error',
         icon: '✗'
       };
     }
     
     return {
-      bgColor: 'bg-yellow-50',
-      borderColor: 'border-yellow-200',
-      titleColor: 'text-yellow-700',
+      bgColor: 'bg-status-warning-light',
+      borderColor: 'border-status-warning',
+      titleColor: 'text-status-warning',
       icon: '?'
     };
   }
@@ -41,7 +41,7 @@ class VerdictBlock {
           <span class="text-base mr-2">${style.icon}</span>
           <h3 class="font-semibold text-lg ${style.titleColor}">진위 판단</h3>
         </div>
-        <div class="text-lg text-gray-800 leading-relaxed font-medium">${this.content}</div>
+        <div class="text-lg text-charcoal-gray leading-relaxed font-medium">${this.content}</div>
       </div>
     `;
   }
