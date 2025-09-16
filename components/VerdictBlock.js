@@ -41,7 +41,7 @@ class VerdictBlock {
           <span class="text-base mr-2">${style.icon}</span>
           <h3 class="font-semibold text-lg ${style.titleColor}">진위 판단</h3>
         </div>
-        <div class="text-lg text-text-main leading-relaxed font-medium">${this.content}</div>
+        <div class="text-lg text-text-primary leading-relaxed font-medium">${this.content}</div>
       </div>
     `;
   }

@@ -18,14 +18,14 @@ module.exports = {
   plugins: [],
   safelist: [
     // Main theme
-    'bg-background-main',
-    'text-text-main',
-    'text-text-title',
-    'bg-container-and-border',
-    'border-container-and-border',
-    'text-container-and-border', // Used for muted text
+    'bg-background',
+    'bg-primary',
+    'bg-secondary',
+    'text-text-primary',
+    'text-text-secondary',
+    'border-secondary',
 
-    // Status Colors
+    // Status Colors (using theme colors)
     'bg-status-success-light',
     'border-status-success',
     'text-status-success',
@@ -37,7 +37,7 @@ module.exports = {
     'text-status-warning',
 
     // Hover states
-    'hover:text-text-main',
-    'hover:bg-container-and-border',
+    'hover:text-text-primary',
+    'hover:bg-secondary',
   ],
 }

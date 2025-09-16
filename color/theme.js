@@ -1,18 +1,18 @@
 const colors = {
   // Main Palette with Semantic Names
-  'background-main': '#D9D2C5',
-  'container-and-border': '#8C8274',
-  'text-main': '#3C3F40',
-  'text-title': '#0D0D0D',
-  'brand-dark': '#00010D',
+  'primary': '#F2CEA2',        // 주요 배경/강조색
+  'secondary': '#BF9780',      // 보조색/컨테이너
+  'background': '#F2F2F2',     // 메인 배경색
+  'text-secondary': '#737373', // 보조 텍스트
+  'text-primary': '#0D0D0D',   // 주요 텍스트
 
-  // Semantic/Status Colors (already semantic)
-  'status-success': '#22c55e',      // Green
-  'status-success-light': '#dcfce7', // Light Green
-  'status-error': '#ef4444',        // Red
-  'status-error-light': '#fee2e2',  // Light Red
-  'status-warning': '#eab308',      // Yellow
-  'status-warning-light': '#fef9c3',// Light Yellow
+  // Semantic/Status Colors (using theme colors when possible)
+  'status-success': '#BF9780',      // Theme secondary
+  'status-success-light': '#F2CEA2', // Theme primary
+  'status-error': '#737373',        // Theme text-secondary
+  'status-error-light': '#F2F2F2',  // Theme background
+  'status-warning': '#F2CEA2',      // Theme primary
+  'status-warning-light': '#F2F2F2',// Theme background
 };
 
 module.exports = colors;

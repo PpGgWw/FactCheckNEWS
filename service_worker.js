@@ -1,39 +1,52 @@
 // service_worker.js
 
-// 중요: 'YOUR_GEMINI_API_KEY' 부분에 자신의 Gemini API 키를 입력하세요.
-const API_KEY = '';
-const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`;
-
 // content_script로부터 메시지를 수신하는 리스너
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "analyzeNewsWithGemini") {
     console.log("Content Script로부터 뉴스 분석 요청을 받았습니다.");
     
-    // Gemini API 호출 함수 실행
-    callGeminiAPI(message.prompt)
-      .then(result => {
-        console.log("--- Gemini API 응답 (핵심 문장) ---");
-        console.log(result);
-        
-        // 결과를 content script로 다시 전송
-        chrome.tabs.sendMessage(sender.tab.id, {
-          action: "displayAnalysisResult",
-          result: result
-        });
-        
-        sendResponse({ status: "분석 완료 및 결과 전송 성공" });
-      })
-      .catch(error => {
-        console.error("Gemini API 처리 중 오류 발생:", error);
-        
-        // 오류를 content script로 전송
+    // 저장된 API 키 가져오기
+    chrome.storage.local.get(['apiKey'], (result) => {
+      const API_KEY = result.apiKey;
+      
+      if (!API_KEY) {
+        console.error("API 키가 설정되지 않았습니다.");
         chrome.tabs.sendMessage(sender.tab.id, {
           action: "displayError",
-          error: error.message
+          error: "API 키가 설정되지 않았습니다. 설정 버튼을 클릭하여 API 키를 입력해주세요."
         });
-        
-        sendResponse({ status: "API 처리 오류", error: error.message });
-      });
+        sendResponse({ status: "API 키 없음", error: "API 키가 설정되지 않았습니다." });
+        return;
+      }
+      
+      const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`;
+      
+      // Gemini API 호출 함수 실행
+      callGeminiAPI(message.prompt, API_URL)
+        .then(result => {
+          console.log("--- Gemini API 응답 (핵심 문장) ---");
+          console.log(result);
+          
+          // 결과를 content script로 다시 전송
+          chrome.tabs.sendMessage(sender.tab.id, {
+            action: "displayAnalysisResult",
+            result: result
+          });
+          
+          sendResponse({ status: "분석 완료 및 결과 전송 성공" });
+        })
+        .catch(error => {
+          console.error("Gemini API 처리 중 오류 발생:", error);
+          
+          // 오류를 content script로 전송
+          chrome.tabs.sendMessage(sender.tab.id, {
+            action: "displayError",
+            error: error.message
+          });
+          
+          sendResponse({ status: "API 처리 오류", error: error.message });
+        });
+    });
 
     // 비동기 응답을 위해 true를 반환
     return true; 
@@ -43,11 +56,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 /**
  * Gemini API를 호출하는 비동기 함수
  * @param {string} prompt - API에 전송할 전체 프롬프트
+ * @param {string} apiUrl - API URL (키 포함)
  * @returns {Promise<string>} - API가 반환한 텍스트 결과
  */
-async function callGeminiAPI(prompt) {
+async function callGeminiAPI(prompt, apiUrl) {
   try {
-    const response = await fetch(API_URL, {
+    const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
