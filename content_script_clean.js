@@ -115,10 +115,7 @@ function addNewsToPanel() {
   console.log('패널에 뉴스 블록 추가 시작');
   
   const title = extractedData.find(item => item.type === '제목')?.text || '제목 없음';
-  const content = extractedData.filter(item => item.type === '내용').map(item => item.text).join('\n');
   const url = window.location.href;
-  
-  console.log('추출된 데이터:', { title, content: content.substring(0, 100) + '...', url });
   
   // 패널 생성 또는 가져오기
   let panel = document.getElementById('news-analysis-panel');
@@ -132,8 +129,8 @@ function addNewsToPanel() {
   }
   
   if (analysisPanel) {
-    // 뉴스 블록 추가 (content 포함)
-    analysisPanel.addNews(title, url, content);
+    // 뉴스 블록 추가
+    analysisPanel.addNews(title, url);
     console.log('뉴스 블록이 패널에 추가되었습니다.');
   } else {
     console.error('AnalysisPanel 인스턴스를 찾을 수 없습니다.');
@@ -247,15 +244,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // 결과를 패널에 표시
     const panel = document.getElementById('news-analysis-panel');
     if (panel && panel.__analysisPanel) {
-      console.log('분석 결과 표시:', message.blockId, message.result);
       panel.__analysisPanel.updateNewsStatus(message.blockId, 'completed', message.result);
     }
   } else if (message.action === "displayError" && message.error) {
     // 에러를 패널에 표시
     const panel = document.getElementById('news-analysis-panel');
     if (panel && panel.__analysisPanel) {
-      console.log('분석 에러 표시:', message.blockId, message.error);
-      panel.__analysisPanel.updateNewsStatus(message.blockId, 'error', null, null, message.error);
+      panel.__analysisPanel.updateNewsStatus(message.blockId, 'error', null, message.error);
     }
   } else if (message.action === "startAnalysis") {
     // 분석 시작 요청

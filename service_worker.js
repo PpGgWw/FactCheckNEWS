@@ -3,7 +3,7 @@
 // content_script로부터 메시지를 수신하는 리스너
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.action === "analyzeNewsWithGemini") {
-    console.log("Content Script로부터 뉴스 분석 요청을 받았습니다.");
+    console.log("Content Script로부터 뉴스 분석 요청을 받았습니다. blockId:", message.blockId);
     
     // 저장된 API 키 가져오기
     chrome.storage.local.get(['apiKey'], (result) => {
@@ -13,7 +13,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         console.error("API 키가 설정되지 않았습니다.");
         chrome.tabs.sendMessage(sender.tab.id, {
           action: "displayError",
-          error: "API 키가 설정되지 않았습니다. 설정 버튼을 클릭하여 API 키를 입력해주세요."
+          error: "API 키가 설정되지 않았습니다. 설정 버튼을 클릭하여 API 키를 입력해주세요.",
+          blockId: message.blockId
         });
         sendResponse({ status: "API 키 없음", error: "API 키가 설정되지 않았습니다." });
         return;
@@ -27,10 +28,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           console.log("--- Gemini API 응답 (핵심 문장) ---");
           console.log(result);
           
-          // 결과를 content script로 다시 전송
+          // 결과를 content script로 다시 전송 (blockId 포함)
           chrome.tabs.sendMessage(sender.tab.id, {
             action: "displayAnalysisResult",
-            result: result
+            result: result,
+            blockId: message.blockId
           });
           
           sendResponse({ status: "분석 완료 및 결과 전송 성공" });
@@ -38,10 +40,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         .catch(error => {
           console.error("Gemini API 처리 중 오류 발생:", error);
           
-          // 오류를 content script로 전송
+          // 오류를 content script로 전송 (blockId 포함)
           chrome.tabs.sendMessage(sender.tab.id, {
             action: "displayError",
-            error: error.message
+            error: error.message,
+            blockId: message.blockId
           });
           
           sendResponse({ status: "API 처리 오류", error: error.message });

@@ -16,23 +16,12 @@ class AnalysisPanel {
 
     const panelContainer = document.createElement('div');
     panelContainer.id = this.panelId;
-    panelContainer.style.cssText = `
-      position: fixed;
-      bottom: 4px;
-      right: 4px;
-      width: 384px;
-      height: 700px;
-      background: #F2F2F2;
-      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-      z-index: 2147483646;
-      border-radius: 12px;
-      border: 1px solid #BF9780;
+    panelContainer.className = 'fixed bottom-1 right-1 w-96 max-h-96 bg-background shadow-2xl z-50 overflow-y-auto rounded-xl border border-secondary';
+    
+    panelContainer.style.cssText += `
       transform: translateX(100%);
       transition: transform 0.3s ease-out, opacity 0.3s ease-out;
       opacity: 0;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
     `;
     
     document.body.appendChild(panelContainer);
@@ -51,40 +40,14 @@ class AnalysisPanel {
 
   // 패널 전체 렌더링
   renderPanel(panel) {
-    // CSS 애니메이션 스타일 추가
-    if (!document.getElementById('analysis-panel-styles')) {
-      const style = document.createElement('style');
-      style.id = 'analysis-panel-styles';
-      style.textContent = `
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-      `;
-      document.head.appendChild(style);
-    }
-    
     panel.innerHTML = `
       ${this.renderHeader()}
-      <div style="
-        flex: 1;
-        overflow-y: auto;
-        overflow-x: hidden;
-        padding: 16px;
-      ">
-        <div id="news-blocks-container" style="
-          display: flex; 
-          flex-direction: column; 
-          gap: 12px;
-          width: 100%;
-        ">
+      <div class="p-4">
+        <div id="news-blocks-container" class="space-y-3">
           ${this.newsBlocks.size === 0 ? this.renderEmptyState() : this.renderNewsBlocks()}
         </div>
       </div>
     `;
-    
-    // panel에 AnalysisPanel 인스턴스 저장
-    panel.__analysisPanel = this;
     
     this.attachEvents(panel);
   }
@@ -92,51 +55,11 @@ class AnalysisPanel {
   // 헤더 렌더링
   renderHeader() {
     return `
-      <div style="
-        display: flex;
-        align-items: center;
-        padding: 16px;
-        border-bottom: 1px solid #BF9780;
-        background: #BF9780;
-        border-radius: 12px 12px 0 0;
-        flex-shrink: 0;
-      ">
-        <h2 style="
-          font-size: 18px;
-          font-weight: bold;
-          color: #0D0D0D;
-          flex: 1;
-          margin: 0;
-        ">뉴스 분석 대기열</h2>
-        <div style="display: flex; justify-content: end; align-items: center; gap: 4px;">
-          <button id="Settings" style="
-            color: #737373;
-            background: none;
-            border: none;
-            border-radius: 50%;
-            width: 32px;
-            height: 32px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: all 0.2s;
-            margin-right: 4px;
-          " onmouseover="this.style.color='#0D0D0D'; this.style.background='#F2F2F2';" onmouseout="this.style.color='#737373'; this.style.background='none';">⚙️</button>
-          <button id="close-panel" style="
-            color: #737373;
-            background: none;
-            border: none;
-            border-radius: 50%;
-            width: 32px;
-            height: 32px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: all 0.2s;
-            font-size: 20px;
-          " onmouseover="this.style.color='#0D0D0D'; this.style.background='#F2F2F2';" onmouseout="this.style.color='#737373'; this.style.background='none';">&times;</button>
+      <div class="flex items-center mb-4 pb-3 border-b border-secondary bg-secondary -m-4 p-4 rounded-t-xl">
+        <h2 class="text-lg font-bold text-text-primary flex-1">뉴스 분석 대기열</h2>
+        <div class="flex justify-end items-center gap-1">
+          <button id="Settings" class="text-text-secondary hover:text-text-primary hover:bg-background rounded-full w-8 h-8 flex items-center justify-center transition-colors mr-1">⚙️</button>
+          <button id="close-panel" class="text-text-secondary hover:text-text-primary hover:bg-background rounded-full w-8 h-8 flex items-center justify-center transition-colors">&times;</button>
         </div>
       </div>
     `;
@@ -145,9 +68,9 @@ class AnalysisPanel {
   // 빈 상태 렌더링
   renderEmptyState() {
     return `
-      <div style="text-align: center; padding: 32px 0;">
-        <div style="color: #737373; font-size: 18px; margin-bottom: 8px;">📰</div>
-        <div style="color: #737373;">분석할 뉴스가 없습니다</div>
+      <div class="text-center py-8">
+        <div class="text-text-secondary text-lg mb-2">📰</div>
+        <div class="text-text-secondary">분석할 뉴스가 없습니다</div>
       </div>
     `;
   }
@@ -169,153 +92,46 @@ class AnalysisPanel {
     switch (status) {
       case 'pending':
         actionButtons = `
-          <button class="analyze-btn" data-id="${id}" style="
-            background: #F2CEA2;
-            color: #0D0D0D;
-            padding: 6px 16px;
-            border-radius: 4px;
-            font-size: 14px;
-            border: none;
-            cursor: pointer;
-            transition: all 0.2s;
-            flex: 1;
-          " onmouseover="this.style.background='#BF9780'" onmouseout="this.style.background='#F2CEA2'">분석</button>
-          <button class="delete-btn" data-id="${id}" style="
-            background: #dc2626;
-            color: #F2F2F2;
-            padding: 6px 16px;
-            border-radius: 4px;
-            font-size: 14px;
-            border: none;
-            cursor: pointer;
-            transition: opacity 0.2s;
-            flex: 1;
-          " onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">삭제</button>
+          <button class="analyze-btn bg-primary text-text-primary px-3 py-1 rounded text-sm hover:bg-secondary transition-colors" data-id="${id}">분석</button>
+          <button class="delete-btn bg-status-error text-background px-3 py-1 rounded text-sm hover:opacity-80 transition-opacity ml-2" data-id="${id}">삭제</button>
         `;
         break;
       case 'analyzing':
         statusIndicator = `
-          <div style="
-            display: flex; 
-            align-items: center; 
-            justify-content: center;
-            color: #d97706; 
-            font-size: 14px;
-            padding: 6px 0;
-            width: 100%;
-          ">
-            <div style="
-              width: 16px;
-              height: 16px;
-              border: 2px solid #d97706;
-              border-top: 2px solid transparent;
-              border-radius: 50%;
-              margin-right: 8px;
-              animation: spin 1s linear infinite;
-            "></div>
+          <div class="flex items-center text-status-warning text-sm">
+            <div class="animate-spin rounded-full h-4 w-4 border-b-2 border-status-warning mr-2"></div>
             ${progress || '분석 중...'}
           </div>
         `;
         break;
       case 'completed':
         actionButtons = `
-          <button class="delete-btn" data-id="${id}" style="
-            background: #dc2626;
-            color: #F2F2F2;
-            padding: 6px 16px;
-            border-radius: 4px;
-            font-size: 14px;
-            border: none;
-            cursor: pointer;
-            transition: opacity 0.2s;
-            width: 100%;
-          " onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">삭제</button>
+          <button class="delete-btn bg-status-error text-background px-3 py-1 rounded text-sm hover:opacity-80 transition-opacity" data-id="${id}">삭제</button>
         `;
         break;
       case 'error':
         actionButtons = `
-          <button class="retry-btn" data-id="${id}" style="
-            background: #d97706;
-            color: #0D0D0D;
-            padding: 6px 16px;
-            border-radius: 4px;
-            font-size: 14px;
-            border: none;
-            cursor: pointer;
-            transition: opacity 0.2s;
-            flex: 1;
-          " onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">재시도</button>
-          <button class="delete-btn" data-id="${id}" style="
-            background: #dc2626;
-            color: #F2F2F2;
-            padding: 6px 16px;
-            border-radius: 4px;
-            font-size: 14px;
-            border: none;
-            cursor: pointer;
-            transition: opacity 0.2s;
-            flex: 1;
-          " onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">삭제</button>
+          <button class="retry-btn bg-status-warning text-text-primary px-3 py-1 rounded text-sm hover:opacity-80 transition-opacity" data-id="${id}">재시도</button>
+          <button class="delete-btn bg-status-error text-background px-3 py-1 rounded text-sm hover:opacity-80 transition-opacity ml-2" data-id="${id}">삭제</button>
         `;
         break;
     }
     
-    const isClickable = status === 'completed';
-    const cursorStyle = isClickable ? 'cursor: pointer;' : '';
-    const hoverStyle = isClickable ? 'onmouseover="this.style.background=\'#F2CEA2\'" onmouseout="this.style.background=\'#F2F2F2\'"' : '';
+    const isClickable = status === 'completed' ? 'cursor-pointer hover:bg-primary' : '';
     
     return `
-      <div class="news-block" data-id="${id}" style="
-        border: 1px solid #BF9780;
-        border-radius: 8px;
-        background: #F2F2F2;
-        transition: background-color 0.2s;
-        width: 100%;
-        overflow: hidden;
-      ">
-        <!-- 뉴스 내용 영역 -->
-        <div class="news-content-area" data-id="${id}" style="
-          padding: 12px;
-          ${cursorStyle}
-        " ${isClickable ? hoverStyle : ''}>
-          <h3 style="
-            color: #0D0D0D;
-            font-weight: 500;
-            font-size: 14px;
-            margin-bottom: 4px;
-            line-height: 1.4;
-            word-break: break-word;
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
-            width: 100%;
-          ">${this.escapeHtml(title)}</h3>
-          <div style="
-            color: #737373;
-            font-size: 12px;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-            width: 100%;
-          ">${this.escapeHtml(url)}</div>
-        </div>
-        
-        <!-- 상태 표시 또는 버튼 영역 -->
-        <div style="
-          border-top: 1px solid #BF9780;
-          padding: 8px 12px;
-          background: rgba(191, 151, 128, 0.1);
-        ">
-          ${statusIndicator ? statusIndicator : `
-            <div style="
-              display: flex;
-              gap: 8px;
-              width: 100%;
-            ">
+      <div class="news-block border border-secondary rounded-lg p-3 bg-background ${isClickable} transition-colors" data-id="${id}">
+        <div class="flex justify-between items-start">
+          <div class="flex-1 mr-3">
+            <h3 class="text-text-primary font-medium text-sm mb-1 line-clamp-2">${this.escapeHtml(title)}</h3>
+            <div class="text-text-secondary text-xs truncate">${this.escapeHtml(url)}</div>
+          </div>
+          <div class="flex flex-col items-end gap-2">
+            ${statusIndicator}
+            <div class="flex">
               ${actionButtons}
             </div>
-          `}
+          </div>
         </div>
       </div>
     `;
@@ -348,20 +164,15 @@ class AnalysisPanel {
   }
 
   // 뉴스 블록 상태 업데이트
-  updateNewsStatus(id, status, result = null, progress = null, error = null) {
-    console.log('updateNewsStatus 호출됨:', { id, status, result, progress, error });
+  updateNewsStatus(id, status, data = {}) {
     const block = this.newsBlocks.get(id);
-    if (!block) {
-      console.error('블록을 찾을 수 없음, ID:', id);
-      return;
-    }
+    if (!block) return;
     
     block.status = status;
-    if (progress) block.progress = progress;
-    if (result) block.result = result;
-    if (error) block.error = error;
+    if (data.progress) block.progress = data.progress;
+    if (data.result) block.result = data.result;
+    if (data.error) block.error = data.error;
     
-    console.log('블록 상태 업데이트됨:', block);
     this.updatePanel();
   }
 
@@ -397,7 +208,6 @@ class AnalysisPanel {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const id = parseInt(btn.dataset.id);
-        console.log('분석 버튼 클릭, ID:', id);
         this.startAnalysis(id);
       });
     });
@@ -407,7 +217,6 @@ class AnalysisPanel {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const id = parseInt(btn.dataset.id);
-        console.log('삭제 버튼 클릭, ID:', id);
         this.deleteNews(id);
       });
     });
@@ -417,20 +226,17 @@ class AnalysisPanel {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         const id = parseInt(btn.dataset.id);
-        console.log('재시도 버튼 클릭, ID:', id);
         this.startAnalysis(id);
       });
     });
     
-    // 뉴스 내용 영역 클릭 (완료된 것만)
-    container.querySelectorAll('.news-content-area').forEach(contentArea => {
-      const id = parseInt(contentArea.dataset.id);
+    // 뉴스 블록 클릭 (완료된 것만)
+    container.querySelectorAll('.news-block').forEach(block => {
+      const id = parseInt(block.dataset.id);
       const newsData = this.newsBlocks.get(id);
       
       if (newsData && newsData.status === 'completed') {
-        contentArea.addEventListener('click', (e) => {
-          e.stopPropagation();
-          console.log('뉴스 내용 클릭, ID:', id);
+        block.addEventListener('click', () => {
           this.showAnalysisResult(id);
         });
       }
@@ -439,21 +245,14 @@ class AnalysisPanel {
 
   // 분석 시작
   startAnalysis(id) {
-    console.log('startAnalysis 호출됨, ID:', id);
     const block = this.newsBlocks.get(id);
-    if (!block) {
-      console.error('블록을 찾을 수 없음, ID:', id);
-      return;
-    }
+    if (!block) return;
     
-    console.log('분석할 블록:', block);
-    
-    this.updateNewsStatus(id, 'analyzing', null, '분석 준비 중...');
+    this.updateNewsStatus(id, 'analyzing', { progress: '분석 준비 중...' });
     
     // Gemini 분석 요청
     const fullPrompt = this.generateAnalysisPrompt(block.title, block.content);
     
-    console.log('Gemini로 분석 요청 전송, blockId:', id);
     chrome.runtime.sendMessage({
       action: "analyzeNewsWithGemini",
       prompt: fullPrompt,
@@ -921,17 +720,17 @@ ${articleContent}
 
   // 분석 진행 상황 업데이트 (외부에서 호출)
   updateAnalysisProgress(blockId, progress) {
-    this.updateNewsStatus(blockId, 'analyzing', null, progress);
+    this.updateNewsStatus(blockId, 'analyzing', { progress });
   }
 
   // 분석 완료 (외부에서 호출)
   completeAnalysis(blockId, result) {
-    this.updateNewsStatus(blockId, 'completed', result);
+    this.updateNewsStatus(blockId, 'completed', { result });
   }
 
   // 분석 실패 (외부에서 호출)
   failAnalysis(blockId, error) {
-    this.updateNewsStatus(blockId, 'error', null, null, error);
+    this.updateNewsStatus(blockId, 'error', { error });
   }
 }
 
