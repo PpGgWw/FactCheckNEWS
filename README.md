@@ -106,3 +106,5 @@ const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-
 - 버그, 미완성 기능 있을 수 있으니 참고 바랍니다
 
 ---
+
+- npx tailwindcss -i ./src/input.css -o ./panel/tailwind.css --watch
