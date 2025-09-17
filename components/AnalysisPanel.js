@@ -8,6 +8,11 @@ class AnalysisPanel {
     this.blockIdCounter = 0; // 고유 ID 생성용
     this.streamingResults = new Map(); // 실시간 스트리밍 결과 저장
     
+    // 실시간 타이핑 효과 관련 속성
+    this.typingSpeed = 30; // 타이핑 속도 (ms)
+    this.currentTypingIntervals = new Map(); // 현재 타이핑 중인 인터벌들
+    this.analysisSteps = ['진위', '근거', '분석']; // 분석 단계
+    
     // 저장된 뉴스 블록 데이터 로드
     this.loadSavedNewsBlocks();
   }
@@ -21,37 +26,89 @@ class AnalysisPanel {
 
     const panelContainer = document.createElement('div');
     panelContainer.id = this.panelId;
+    panelContainer.className = 'analysis-panel-base';
+    
+    // 반응형 스타일 적용
+    const isMobile = window.innerWidth <= 768;
     panelContainer.style.cssText = `
       position: fixed;
-      bottom: 4px;
-      right: 4px;
-      width: 384px;
-      height: 700px;
-      background: #F2F2F2;
-      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+      ${isMobile ? `
+        bottom: 0;
+        right: 0;
+        left: 0;
+        width: 100%;
+        height: 70vh;
+        border-radius: 20px 20px 0 0;
+      ` : `
+        bottom: 20px;
+        right: 20px;
+        width: 400px;
+        height: 700px;
+        border-radius: 20px;
+      `}
+      background: #FAFAFA;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(191, 151, 128, 0.1);
       z-index: 2147483646;
-      border-radius: 12px;
-      border: 1px solid #BF9780;
-      transform: translateX(100%);
-      transition: transform 0.3s ease-out, opacity 0.3s ease-out;
+      border: 1px solid rgba(191, 151, 128, 0.3);
+      transform: ${isMobile ? 'translateY(100%)' : 'translateX(120%)'};
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
       opacity: 0;
       display: flex;
       flex-direction: column;
       overflow: hidden;
+      backdrop-filter: blur(10px);
     `;
     
     document.body.appendChild(panelContainer);
     
+    // 반응형 리사이즈 이벤트 추가
+    this.addResponsiveListener(panelContainer);
+    
     // 초기 컨텐츠 렌더링
     this.renderPanel(panelContainer);
     
-    // 애니메이션 시작
-    setTimeout(() => {
-      panelContainer.style.transform = 'translateX(0)';
+    // 부드러운 애니메이션 시작
+    requestAnimationFrame(() => {
+      panelContainer.style.transform = 'translateX(0) translateY(0)';
       panelContainer.style.opacity = '1';
-    }, 10);
+    });
     
     return panelContainer;
+  }
+
+  // 반응형 리사이즈 리스너 추가
+  addResponsiveListener(panelContainer) {
+    const resizeHandler = () => {
+      const isMobile = window.innerWidth <= 768;
+      
+      if (isMobile) {
+        panelContainer.style.cssText = panelContainer.style.cssText.replace(
+          /bottom: 20px; right: 20px; width: 400px; height: 700px; border-radius: 20px;/,
+          'bottom: 0; right: 0; left: 0; width: 100%; height: 70vh; border-radius: 20px 20px 0 0;'
+        );
+      } else {
+        panelContainer.style.cssText = panelContainer.style.cssText.replace(
+          /bottom: 0; right: 0; left: 0; width: 100%; height: 70vh; border-radius: 20px 20px 0 0;/,
+          'bottom: 20px; right: 20px; width: 400px; height: 700px; border-radius: 20px;'
+        );
+      }
+    };
+    
+    window.addEventListener('resize', resizeHandler);
+    
+    // 패널이 제거될 때 리스너도 제거
+    const observer = new MutationObserver((mutations) => {
+      mutations.forEach((mutation) => {
+        mutation.removedNodes.forEach((node) => {
+          if (node === panelContainer) {
+            window.removeEventListener('resize', resizeHandler);
+            observer.disconnect();
+          }
+        });
+      });
+    });
+    
+    observer.observe(document.body, { childList: true });
   }
 
   // 패널 전체 렌더링
@@ -74,18 +131,28 @@ class AnalysisPanel {
       
       <!-- 현재 뉴스 블록 (고정) -->
       <div id="current-news-section" style="
-        padding: 16px;
-        border-bottom: 2px solid #BF9780;
-        background: #F8F8F8;
+        padding: 20px;
+        background: linear-gradient(to bottom, #FAFAFA, #F5F5F5);
+        border-bottom: 1px solid rgba(229, 229, 229, 0.8);
         flex-shrink: 0;
       ">
-        <h3 style="
-          font-size: 14px;
-          font-weight: bold;
-          color: #0D0D0D;
-          margin: 0 0 12px 0;
-        ">현재 뉴스</h3>
-        <div id="current-news-container">
+        <div style="display: flex; align-items: center; justify-content: between; margin-bottom: 16px;">
+          <h3 style="
+            font-size: 16px;
+            font-weight: 600;
+            color: #1A1A1A;
+            margin: 0;
+          ">
+            현재 페이지
+          </h3>
+        </div>
+        <div id="current-news-container" style="
+          background: #FFFFFF;
+          border-radius: 12px;
+          border: 1px solid rgba(229, 229, 229, 0.6);
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+          overflow: hidden;
+        ">
           ${this.renderCurrentNews()}
         </div>
       </div>
@@ -96,28 +163,46 @@ class AnalysisPanel {
         display: flex;
         flex-direction: column;
         overflow: hidden;
+        background: #FAFAFA;
       ">
         <div style="
-          padding: 16px 16px 8px 16px;
+          padding: 20px 20px 12px 20px;
           flex-shrink: 0;
+          background: linear-gradient(to bottom, #FAFAFA, rgba(250, 250, 250, 0.95));
+          border-bottom: 1px solid rgba(229, 229, 229, 0.3);
         ">
-          <h3 style="
-            font-size: 14px;
-            font-weight: bold;
-            color: #0D0D0D;
-            margin: 0;
-          ">분석 기록</h3>
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <h3 style="
+              font-size: 16px;
+              font-weight: 600;
+              color: #1A1A1A;
+              margin: 0;
+            ">
+              분석 기록
+            </h3>
+            <span id="analysis-count" style="
+              background: #F2CEA2;
+              color: #1A1A1A;
+              padding: 4px 8px;
+              border-radius: 12px;
+              font-size: 12px;
+              font-weight: 600;
+              min-width: 20px;
+              text-align: center;
+            ">${this.newsBlocks.size}</span>
+          </div>
         </div>
         <div style="
           flex: 1;
           overflow-y: auto;
           overflow-x: hidden;
-          padding: 0 16px 16px 16px;
+          padding: 16px 20px 20px 20px;
+          background: #FAFAFA;
         ">
           <div id="analyzed-news-container" style="
             display: flex; 
             flex-direction: column; 
-            gap: 12px;
+            gap: 16px;
             width: 100%;
           ">
             ${this.renderAnalyzedNews()}
@@ -136,50 +221,97 @@ class AnalysisPanel {
   renderHeader() {
     return `
       <div style="
-        display: flex;
-        align-items: center;
-        padding: 16px;
-        border-bottom: 1px solid #BF9780;
-        background: #BF9780;
-        border-radius: 12px 12px 0 0;
+        background: linear-gradient(135deg, #F2CEA2 0%, #BF9780 100%);
+        padding: 20px;
+        border-bottom: none;
+        border-radius: 20px 20px 0 0;
         flex-shrink: 0;
+        position: relative;
+        overflow: hidden;
       ">
-        <h2 style="
-          font-size: 18px;
-          font-weight: bold;
-          color: #0D0D0D;
-          flex: 1;
-          margin: 0;
-        ">뉴스 분석 대기열</h2>
-        <div style="display: flex; justify-content: end; align-items: center; gap: 4px;">
-          <button id="Settings" style="
-            color: #737373;
-            background: none;
-            border: none;
-            border-radius: 50%;
-            width: 32px;
-            height: 32px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: all 0.2s;
-            margin-right: 4px;
-          " onmouseover="this.style.color='#0D0D0D'; this.style.background='#F2F2F2';" onmouseout="this.style.color='#737373'; this.style.background='none';">⚙️</button>
-          <button id="close-panel" style="
-            color: #737373;
-            background: none;
-            border: none;
-            border-radius: 50%;
-            width: 32px;
-            height: 32px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: all 0.2s;
-            font-size: 20px;
-          " onmouseover="this.style.color='#0D0D0D'; this.style.background='#F2F2F2';" onmouseout="this.style.color='#737373'; this.style.background='none';">&times;</button>
+        <!-- Background Pattern -->
+        <div style="
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background-image: radial-gradient(circle at 20% 50%, rgba(255,255,255,0.1) 1px, transparent 1px),
+                           radial-gradient(circle at 80% 50%, rgba(255,255,255,0.1) 1px, transparent 1px);
+          background-size: 50px 50px;
+          pointer-events: none;
+        "></div>
+        
+        <div style="position: relative; z-index: 1;">
+          <div style="display: flex; align-items: center; justify-content: between; margin-bottom: 8px;">
+            <div style="flex: 1;">
+              <h2 style="
+                font-size: 20px;
+                font-weight: 700;
+                color: #1A1A1A;
+                margin: 0 0 4px 0;
+                letter-spacing: -0.5px;
+              ">뉴스 팩트체크</h2>
+              <p style="
+                font-size: 13px;
+                color: rgba(26, 26, 26, 0.7);
+                margin: 0;
+                font-weight: 500;
+              ">AI 기반 실시간 신뢰도 검증</p>
+            </div>
+            
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <!-- Status Indicator -->
+              <div style="display: flex; align-items: center; gap: 6px; margin-right: 8px;">
+                <div style="
+                  width: 8px;
+                  height: 8px;
+                  background: #10B981;
+                  border-radius: 50%;
+                  animation: pulse 2s infinite;
+                "></div>
+                <span style="
+                  font-size: 11px;
+                  color: rgba(26, 26, 26, 0.6);
+                  font-weight: 500;
+                ">연결됨</span>
+              </div>
+              
+              <!-- Action Buttons -->
+              <button id="Settings" style="
+                width: 36px;
+                height: 36px;
+                background: rgba(255, 255, 255, 0.15);
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                border-radius: 10px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                font-size: 16px;
+                backdrop-filter: blur(10px);
+              " onmouseover="this.style.background='rgba(255, 255, 255, 0.25)'; this.style.transform='scale(1.05)';" 
+                 onmouseout="this.style.background='rgba(255, 255, 255, 0.15)'; this.style.transform='scale(1)';">⚙️</button>
+              
+              <button id="close-panel" style="
+                width: 36px;
+                height: 36px;
+                background: rgba(255, 255, 255, 0.15);
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                border-radius: 10px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                font-size: 18px;
+                font-weight: 300;
+                backdrop-filter: blur(10px);
+              " onmouseover="this.style.background='rgba(239, 68, 68, 0.2)'; this.style.transform='scale(1.05)';" 
+                 onmouseout="this.style.background='rgba(255, 255, 255, 0.15)'; this.style.transform='scale(1)';">&times;</button>
+            </div>
+          </div>
         </div>
       </div>
     `;
@@ -188,9 +320,38 @@ class AnalysisPanel {
   // 빈 상태 렌더링
   renderEmptyState() {
     return `
-      <div style="text-align: center; padding: 32px 0;">
-        <div style="color: #737373; font-size: 18px; margin-bottom: 8px;">📰</div>
-        <div style="color: #737373;">분석할 뉴스가 없습니다</div>
+      <div style="
+        text-align: center; 
+        padding: 40px 20px;
+        background: #FFFFFF;
+        border-radius: 12px;
+        border: 1px solid rgba(229, 229, 229, 0.6);
+      ">
+        <div style="
+          width: 64px;
+          height: 64px;
+          background: linear-gradient(135deg, #F2CEA2, #BF9780);
+          border-radius: 16px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin: 0 auto 16px;
+          box-shadow: 0 4px 12px rgba(242, 206, 162, 0.3);
+        ">
+          <span style="font-size: 24px;">📰</span>
+        </div>
+        <h4 style="
+          font-size: 16px;
+          font-weight: 600;
+          color: #1A1A1A;
+          margin: 0 0 8px 0;
+        ">분석할 뉴스가 없습니다</h4>
+        <p style="
+          font-size: 13px;
+          color: #6B6B6B;
+          margin: 0;
+          line-height: 1.4;
+        ">뉴스 기사를 선택하면<br>자동으로 분석을 시작합니다</p>
       </div>
     `;
   }
@@ -199,8 +360,16 @@ class AnalysisPanel {
   renderCurrentNews() {
     if (!this.currentNews) {
       return `
-        <div style="text-align: center; padding: 16px 0; color: #737373;">
-          현재 페이지에서 뉴스를 찾을 수 없습니다
+        <div style="
+          text-align: center; 
+          padding: 24px 16px;
+          color: #6B6B6B;
+        ">
+          <p style="
+            font-size: 14px;
+            margin: 0;
+            line-height: 1.4;
+          ">현재 페이지에서<br>뉴스를 찾을 수 없습니다</p>
         </div>
       `;
     }
@@ -212,8 +381,19 @@ class AnalysisPanel {
   renderAnalyzedNews() {
     if (this.newsBlocks.size === 0) {
       return `
-        <div style="text-align: center; padding: 16px 0; color: #737373;">
-          분석된 뉴스가 없습니다
+        <div style="
+          text-align: center; 
+          padding: 32px 16px;
+          background: #FFFFFF;
+          border-radius: 12px;
+          border: 1px solid rgba(229, 229, 229, 0.4);
+        ">
+          <p style="
+            font-size: 14px;
+            color: #6B6B6B;
+            margin: 0;
+            line-height: 1.4;
+          ">아직 분석된 뉴스가 없습니다<br><span style='font-size: 12px; color: #9CA3AF;'>뉴스를 선택하여 분석을 시작하세요</span></p>
         </div>
       `;
     }
@@ -237,7 +417,6 @@ class AnalysisPanel {
     const { id, title, url, status, result, progress } = block;
     
     let actionButtons = '';
-    let statusIndicator = '';
     
     if (isCurrent) {
       // 현재 뉴스의 경우
@@ -258,26 +437,36 @@ class AnalysisPanel {
           `;
           break;
         case 'analyzing':
-          statusIndicator = `
+          actionButtons = `
             <div style="
-              display: flex; 
-              align-items: center; 
-              justify-content: center;
-              color: #d97706; 
-              font-size: 14px;
-              padding: 6px 0;
+              background: linear-gradient(135deg, #F2CEA2, #BF9780);
+              color: #1A1A1A;
+              padding: 8px 12px;
+              border-radius: 6px;
+              font-size: 11px;
               width: 100%;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              min-height: 36px;
+              font-weight: 500;
             ">
               <div style="
-                width: 16px;
-                height: 16px;
-                border: 2px solid #d97706;
+                width: 12px;
+                height: 12px;
+                border: 2px solid #1A1A1A;
                 border-top: 2px solid transparent;
                 border-radius: 50%;
-                margin-right: 8px;
+                margin-right: 6px;
                 animation: spin 1s linear infinite;
+                flex-shrink: 0;
               "></div>
-              ${progress || '분석 중...'}
+              <span style="
+                line-height: 1.2;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+              ">${this.getTransparentProgress(progress)}</span>
             </div>
           `;
           break;
@@ -299,51 +488,55 @@ class AnalysisPanel {
           break;
       }
     } else {
-      // 분석된 뉴스 리스트의 경우 - 삭제 버튼만 표시
-      switch (status) {
-        case 'pending':
-        case 'analyzing':
-        case 'completed':
-        case 'error':
-          actionButtons = `
-            <button class="delete-btn" data-id="${id}" style="
-              background: #dc2626;
-              color: #F2F2F2;
-              padding: 6px 16px;
-              border-radius: 4px;
-              font-size: 14px;
-              border: none;
-              cursor: pointer;
-              transition: opacity 0.2s;
-              width: 100%;
-            " onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">삭제</button>
-          `;
-          break;
-      }
-      
-      // 분석 중일 때만 진행상황 표시
+      // 분석된 뉴스 리스트의 경우
       if (status === 'analyzing') {
-        statusIndicator = `
+        // 분석 중일 때는 투명한 진행상황을 삭제 버튼 위치에 표시
+        actionButtons = `
           <div style="
-            display: flex; 
-            align-items: center; 
-            justify-content: center;
-            color: #d97706; 
-            font-size: 14px;
-            padding: 6px 0;
+            background: linear-gradient(135deg, #F2CEA2, #BF9780);
+            color: #1A1A1A;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 10px;
             width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 36px;
+            font-weight: 500;
           ">
             <div style="
-              width: 16px;
-              height: 16px;
-              border: 2px solid #d97706;
+              width: 12px;
+              height: 12px;
+              border: 2px solid #1A1A1A;
               border-top: 2px solid transparent;
               border-radius: 50%;
-              margin-right: 8px;
+              margin-right: 6px;
               animation: spin 1s linear infinite;
+              flex-shrink: 0;
             "></div>
-            ${progress || '분석 중...'}
+            <span style="
+              line-height: 1.2;
+              overflow: hidden;
+              text-overflow: ellipsis;
+              white-space: nowrap;
+            ">${this.getTransparentProgress(progress)}</span>
           </div>
+        `;
+      } else {
+        // 분석 완료 또는 기타 상태일 때는 삭제 버튼 표시
+        actionButtons = `
+          <button class="delete-btn" data-id="${id}" style="
+            background: #dc2626;
+            color: #F2F2F2;
+            padding: 6px 16px;
+            border-radius: 4px;
+            font-size: 14px;
+            border: none;
+            cursor: pointer;
+            transition: opacity 0.2s;
+            width: 100%;
+          " onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">삭제</button>
         `;
       }
     }
@@ -389,21 +582,53 @@ class AnalysisPanel {
           ">${this.escapeHtml(url)}</div>
         </div>
         
+        <!-- 분석 중일 때만 표시되는 타이핑 영역 -->
+        ${status === 'analyzing' ? `
+        <div id="typing-area-${id}" style="
+          border-top: 1px solid #E5E5E5;
+          padding: 12px;
+          background: #FFFFFF;
+          height: 72px;
+          overflow: hidden;
+          transition: all 0.3s ease;
+        ">
+          <div style="
+            font-size: 12px;
+            color: #6B6B6B;
+            margin-bottom: 8px;
+            font-weight: 500;
+          ">실시간 분석 결과</div>
+          <div id="typing-content-${id}" style="
+            font-size: 11px;
+            line-height: 1.4;
+            color: #1A1A1A;
+            word-wrap: break-word;
+            height: 44px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            border: 1px solid #E5E5E5;
+            border-radius: 4px;
+            padding: 6px;
+            background: #FAFAFA;
+            scrollbar-width: thin;
+            scrollbar-color: #BF9780 #F0F0F0;
+          " onscroll="this.setAttribute('data-user-scrolled', this.scrollTop < this.scrollHeight - this.offsetHeight ? 'true' : 'false')">분석을 시작합니다...</div>
+        </div>
+        ` : ''}
+        
         <!-- 상태 표시 또는 버튼 영역 -->
         <div style="
           border-top: 1px solid #BF9780;
           padding: 8px 12px;
           background: rgba(191, 151, 128, 0.1);
         ">
-          ${statusIndicator ? statusIndicator : `
-            <div style="
-              display: flex;
-              gap: 8px;
-              width: 100%;
-            ">
-              ${actionButtons}
-            </div>
-          `}
+          <div style="
+            display: flex;
+            gap: 8px;
+            width: 100%;
+          ">
+            ${actionButtons}
+          </div>
         </div>
       </div>
     `;
@@ -415,6 +640,62 @@ class AnalysisPanel {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+  }
+
+  // 분석 기록용 투명한 진행상황 텍스트 생성
+  getTransparentProgress(progress) {
+    if (!progress) return '분석 중...';
+    
+    // 투명하고 구체적인 진행상황 표시
+    const progressMap = {
+      'API': '🔑 API 인증 중',
+      '준비': '📋 요청 준비 중', 
+      '전송': '📤 AI에 전송 중',
+      '분석': '🤖 AI 분석 중',
+      '진위': '✅ 진위 판정 중',
+      '근거': '📊 근거 수집 중',
+      '의견': '📝 분석 완료 중'
+    };
+    
+    for (const [key, value] of Object.entries(progressMap)) {
+      if (progress.includes(key)) {
+        return value;
+      }
+    }
+    
+    return progress;
+  }
+
+  // 블록 내부 타이핑 영역 업데이트
+  updateBlockTypingArea(blockId, newText) {
+    const typingContent = document.getElementById(`typing-content-${blockId}`);
+    if (!typingContent) return;
+
+    // 처음 타이핑이 시작되면 "분석을 시작합니다..." 텍스트 제거
+    if (typingContent.textContent === '분석을 시작합니다...') {
+      typingContent.innerHTML = '';
+      this.typingBuffer = this.typingBuffer || new Map();
+      this.typingBuffer.set(blockId, '');
+      // 사용자 스크롤 상태 초기화
+      typingContent.setAttribute('data-user-scrolled', 'false');
+    }
+
+    // 기존 누적된 텍스트에 새 텍스트 추가
+    if (!this.typingBuffer) this.typingBuffer = new Map();
+    const currentBuffer = this.typingBuffer.get(blockId) || '';
+    const updatedBuffer = currentBuffer + newText;
+    this.typingBuffer.set(blockId, updatedBuffer);
+    
+    // 사용자가 수동으로 스크롤했는지 확인
+    const userScrolled = typingContent.getAttribute('data-user-scrolled') === 'true';
+    
+    // 커서와 함께 텍스트 업데이트 (일반 텍스트로, 줄바꿈은 자동)
+    typingContent.innerHTML = this.escapeHtml(updatedBuffer) + '<span class="typing-cursor" style="display: inline-block; width: 1px; height: 12px; background: #BF9780; margin-left: 2px; animation: blink 1.2s infinite;"></span>';
+    
+    // 사용자가 수동 스크롤하지 않았으면 자동으로 맨 아래로 스크롤
+    if (!userScrolled) {
+      typingContent.scrollTop = typingContent.scrollHeight;
+    }
   }
 
   // 현재 뉴스 설정
@@ -459,7 +740,7 @@ class AnalysisPanel {
     }
     
     const id = ++this.blockIdCounter;
-    this.newsBlocks.set(id, {
+    const newsData = {
       id,
       title,
       url,
@@ -468,12 +749,9 @@ class AnalysisPanel {
       result: null,
       progress: null,
       timestamp: Date.now()
-    });
+    };
     
-    // 데이터 저장
-    this.saveNewsBlocks();
-    
-    this.updatePanel();
+    this.addNewsBlock(newsData);
     return id;
   }
 
@@ -509,12 +787,7 @@ class AnalysisPanel {
 
   // 뉴스 블록 삭제
   deleteNews(id) {
-    this.newsBlocks.delete(id);
-    
-    // 데이터 저장
-    this.saveNewsBlocks();
-    
-    this.updatePanel();
+    this.removeNewsBlock(id);
   }
 
   // 패널 업데이트
@@ -585,14 +858,8 @@ class AnalysisPanel {
             console.log('완료된 뉴스 클릭, ID:', id);
             this.showAnalysisResult(id);
           });
-        } else if (newsData.status === 'analyzing') {
-          // 분석 중인 뉴스 - 실시간 보기
-          contentArea.addEventListener('click', (e) => {
-            e.stopPropagation();
-            console.log('분석 중인 뉴스 클릭, ID:', id);
-            this.showStreamingResult(id);
-          });
         }
+        // 분석 중인 뉴스는 클릭 이벤트 없음 (타이핑 효과만 표시)
       }
     });
   }
@@ -640,22 +907,17 @@ class AnalysisPanel {
     
     console.log('분석할 블록:', block);
     
-    this.updateNewsStatus(id, 'analyzing', null, 'API 키 확인 중...');
-    
-    // 분석 시작과 동시에 실시간 모달 표시
-    setTimeout(() => {
-      this.showStreamingResult(id);
-    }, 500);
+    this.updateNewsStatus(id, 'analyzing', null, '🔍 API 연결 및 인증 확인 중...');
     
     // API 키 확인
     setTimeout(() => {
-      this.updateNewsStatus(id, 'analyzing', null, '분석 요청 준비 중...');
+      this.updateNewsStatus(id, 'analyzing', null, '📝 기사 내용 파싱 및 분석 준비 중...');
       
       setTimeout(() => {
-        this.updateNewsStatus(id, 'analyzing', null, 'Gemini AI에 전송 중...');
+        this.updateNewsStatus(id, 'analyzing', null, '🤖 Gemini AI에 팩트체킹 요청 전송 중...');
         
         setTimeout(() => {
-          this.updateNewsStatus(id, 'analyzing', null, 'AI가 분석 중...');
+          this.updateNewsStatus(id, 'analyzing', null, '⚡ AI가 기사의 신뢰성을 검증하고 있습니다...');
           
           // Gemini 분석 요청
           const fullPrompt = this.generateAnalysisPrompt(block.title, block.content);
@@ -772,7 +1034,7 @@ ${articleContent}
     // 애니메이션
     setTimeout(() => {
       modal.style.opacity = '1';
-      modal.querySelector('.modal-content').style.transform = 'scale(1)';
+      modal.querySelector('.modal-content').style.transform = 'scale(1) translateY(0)';
     }, 10);
   }
 
@@ -787,7 +1049,7 @@ ${articleContent}
       left: 0;
       width: 100vw;
       height: 100vh;
-      background: rgba(13,13,13,0.6);
+      background: rgba(26, 26, 26, 0.5);
       z-index: 2147483649;
       display: flex;
       align-items: center;
@@ -799,68 +1061,193 @@ ${articleContent}
     const modalContent = document.createElement('div');
     modalContent.className = 'modal-content';
     modalContent.style.cssText = `
-      background: #F2F2F2;
-      border-radius: 12px;
-      padding: 32px;
+      background: #FAFAFA;
+      border-radius: 16px;
+      padding: 0;
       width: 90%;
-      max-width: 800px;
-      max-height: 90%;
+      max-width: 700px;
+      max-height: 85vh;
       position: relative;
       display: flex;
       flex-direction: column;
-      transform: scale(0.8);
+      transform: scale(0.95) translateY(10px);
       transition: all 0.3s ease;
       overflow: hidden;
+      border: 1px solid #BF9780;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
     `;
 
     const currentResult = this.streamingResults.get(blockId) || '';
     
     modalContent.innerHTML = `
-      <button class="close-modal" style="position: absolute; top: 12px; right: 12px; background: none; border: none; font-size: 24px; color: #737373; cursor: pointer; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: background-color 0.2s;">&times;</button>
-      
-      <div style="margin-bottom: 24px;">
-        <h2 style="font-size: 20px; font-weight: bold; margin-bottom: 12px; color: #0D0D0D;">실시간 분석 진행상황</h2>
-        <h3 style="font-size: 16px; font-weight: 500; color: #737373; margin: 0; line-height: 1.4; word-break: break-word;">${this.escapeHtml(block.title)}</h3>
+      <!-- 헤더 섹션 -->
+      <div style="
+        background: linear-gradient(135deg, #F2CEA2 0%, #BF9780 100%);
+        padding: 24px;
+        position: relative;
+      ">
+        <button class="close-modal" style="
+          position: absolute; 
+          top: 16px; 
+          right: 16px; 
+          background: rgba(26, 26, 26, 0.1); 
+          border: none; 
+          color: #1A1A1A;
+          cursor: pointer; 
+          width: 32px; 
+          height: 32px; 
+          display: flex; 
+          align-items: center; 
+          justify-content: center; 
+          border-radius: 50%; 
+          transition: all 0.2s ease;
+          font-size: 18px;
+          font-weight: 600;
+        " onmouseover="this.style.background='rgba(26, 26, 26, 0.2)'" onmouseout="this.style.background='rgba(26, 26, 26, 0.1)'">&times;</button>
+        
+        <div style="display: flex; align-items: center; margin-bottom: 16px;">
+          <div style="
+            width: 48px;
+            height: 48px;
+            background: rgba(255, 255, 255, 0.3);
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-right: 16px;
+          ">
+            <div style="
+              width: 20px;
+              height: 20px;
+              border: 2px solid #1A1A1A;
+              border-top: 2px solid transparent;
+              border-radius: 50%;
+              animation: spin 1.5s linear infinite;
+            "></div>
+          </div>
+          <div>
+            <h2 style="
+              font-size: 20px; 
+              font-weight: 600; 
+              margin: 0 0 4px 0; 
+              color: #1A1A1A;
+            ">실시간 분석 진행중</h2>
+            <p style="
+              font-size: 14px; 
+              color: #6B6B6B; 
+              margin: 0;
+            ">분석이 진행되고 있습니다</p>
+          </div>
+        </div>
+        
+        <div style="
+          background: rgba(255, 255, 255, 0.4);
+          padding: 16px;
+          border-radius: 12px;
+          border: 1px solid rgba(255, 255, 255, 0.6);
+        ">
+          <h3 style="
+            font-size: 12px; 
+            font-weight: 600; 
+            color: #6B6B6B; 
+            margin: 0 0 6px 0;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+          ">분석 대상</h3>
+          <p style="
+            font-size: 14px; 
+            color: #1A1A1A; 
+            margin: 0; 
+            line-height: 1.4; 
+            word-break: break-word;
+            font-weight: 500;
+          ">${this.escapeHtml(block.title)}</p>
+        </div>
       </div>
       
+      <!-- 진행 상황 -->
+      <div style="
+        padding: 20px 24px;
+        background: #F2F2F2;
+        border-bottom: 1px solid #E5E5E5;
+      ">
+        <div style="margin-bottom: 8px;">
+          <span style="
+            color: #1A1A1A;
+            font-size: 14px;
+            font-weight: 600;
+          ">현재 상황</span>
+        </div>
+        <p style="
+          color: #6B6B6B;
+          font-size: 13px;
+          margin: 0;
+        " id="live-progress">${block.progress || '분석을 준비하고 있습니다...'}</p>
+      </div>
+      
+      <!-- 분석 결과 영역 -->
       <div style="
         flex: 1;
+        padding: 24px;
         overflow-y: auto;
-        border: 2px solid #BF9780;
-        border-radius: 8px;
-        padding: 20px;
-        background: white;
-        margin-bottom: 16px;
       ">
+        <div style="
+          display: flex;
+          align-items: center;
+          margin-bottom: 20px;
+          padding-bottom: 16px;
+          border-bottom: 1px solid #E5E5E5;
+        ">
+          <div>
+            <h3 style="
+              font-size: 16px;
+              font-weight: 600;
+              color: #1A1A1A;
+              margin: 0 0 2px 0;
+            ">분석 결과</h3>
+            <p style="
+              font-size: 12px;
+              color: #6B6B6B;
+              margin: 0;
+            ">실시간으로 생성되는 분석 내용</p>
+          </div>
+        </div>
+        
         <div class="streaming-content" style="
           font-size: 14px;
           line-height: 1.6;
-          color: #0D0D0D;
+          color: #1A1A1A;
           white-space: pre-wrap;
           word-break: break-word;
+          min-height: 150px;
+          background: #FFFFFF;
+          padding: 20px;
+          border-radius: 12px;
+          border: 1px solid #E5E5E5;
         ">
-          ${this.getInitialStreamingMessage(block, currentResult)}
+          ${this.getSimpleStreamingMessage(block, currentResult)}
           <span class="typing-cursor" style="
             display: inline-block;
             width: 2px;
             height: 1.2em;
             background: #BF9780;
             margin-left: 2px;
-            animation: blink 1s infinite;
+            animation: blink 1.2s infinite;
           "></span>
         </div>
       </div>
-      
-      <div style="text-align: center;">
-        <span style="color: #737373; font-size: 12px;">분석이 완료되면 자동으로 결과가 저장됩니다</span>
-      </div>
     `;
 
-    // 깜빡이는 커서 애니메이션 스타일 추가
-    if (!document.getElementById('streaming-cursor-style')) {
+    // 심플한 애니메이션 스타일
+    if (!document.getElementById('simple-streaming-styles')) {
       const style = document.createElement('style');
-      style.id = 'streaming-cursor-style';
+      style.id = 'simple-streaming-styles';
       style.textContent = `
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+        
         @keyframes blink {
           0%, 50% { opacity: 1; }
           51%, 100% { opacity: 0; }
@@ -875,21 +1262,15 @@ ${articleContent}
     const closeBtn = modalContent.querySelector('.close-modal');
     closeBtn.addEventListener('click', () => {
       modal.style.opacity = '0';
+      modalContent.style.transform = 'scale(0.95) translateY(10px)';
       setTimeout(() => modal.remove(), 300);
-    });
-    
-    closeBtn.addEventListener('mouseenter', () => {
-      closeBtn.style.backgroundColor = '#BF9780';
-    });
-    
-    closeBtn.addEventListener('mouseleave', () => {
-      closeBtn.style.backgroundColor = 'transparent';
     });
 
     // 배경 클릭으로 닫기
     modal.addEventListener('click', (e) => {
       if (e.target === modal) {
         modal.style.opacity = '0';
+        modalContent.style.transform = 'scale(0.95) translateY(10px)';
         setTimeout(() => modal.remove(), 300);
       }
     });
@@ -897,9 +1278,20 @@ ${articleContent}
     return modal;
   }
 
+  // 간단한 스트리밍 메시지 생성 (분석 기록만 투명하게)
+  getSimpleStreamingMessage(block, currentResult) {
+    if (currentResult) {
+      return currentResult;
+    }
+    
+    return `분석을 시작합니다...\n\n기사 내용을 검토하고 있습니다.`;
+  }
+
   // 스트리밍 모달 내용 업데이트
-  updateStreamingModal(modal, newContent) {
+  updateStreamingModal(modal, newContent, progressText = null) {
     const contentDiv = modal.querySelector('.streaming-content');
+    const progressDiv = modal.querySelector('#live-progress');
+    
     if (contentDiv) {
       contentDiv.innerHTML = `
         ${newContent}
@@ -909,13 +1301,18 @@ ${articleContent}
           height: 1.2em;
           background: #BF9780;
           margin-left: 2px;
-          animation: blink 1s infinite;
+          animation: blink 1.2s infinite;
         "></span>
       `;
       
       // 스크롤을 맨 아래로
       const scrollContainer = contentDiv.parentElement;
       scrollContainer.scrollTop = scrollContainer.scrollHeight;
+    }
+    
+    // 진행 상황 업데이트
+    if (progressDiv && progressText) {
+      progressDiv.textContent = progressText;
     }
   }
 
@@ -928,23 +1325,38 @@ ${articleContent}
     // 진행상황에 따른 동적 메시지
     const progress = block.progress || 'AI가 분석을 시작하고 있습니다...';
     
-    const messages = [
-  '<span style="color: #BF9780; font-weight: bold;">Gemini AI</span>가 뉴스를 분석하고 있습니다...\n\n',
-  '기사 내용을 이해하고 있습니다...\n\n',
-  '논리적 구조를 파악 중입니다...\n\n',
-  '객관성과 근거를 검토하고 있습니다...\n\n',
-  '분석 결과를 작성 중입니다...\n\n'
-    ];
+    // 투명하고 상세한 진행상황 설명
+    const detailedProgress = `
+<span style="color: #BF9780; font-weight: bold; font-size: 16px;">🔍 실시간 팩트체킹 진행상황</span>
+
+<span style="color: #0D0D0D; font-weight: 600;">📋 분석 단계:</span>
+<span style="color: #737373;">1. 기사 내용 파싱 및 이해
+2. 핵심 주장 및 사실 추출
+3. 외부 신뢰 소스와 교차 검증
+4. 논리적 일관성 및 편향성 검토
+5. 종합적 진위 판단 및 근거 제시</span>
+
+<span style="color: #0D0D0D; font-weight: 600;">🤖 사용 AI 모델:</span>
+<span style="color: #737373;">Google Gemini Pro - 팩트체킹 전문 프롬프트</span>
+
+<span style="color: #0D0D0D; font-weight: 600;">⏱️ 현재 상태:</span>
+<span style="color: #D97706; font-weight: 500;">${progress}</span>
+
+<span style="color: #0D0D0D; font-weight: 600;">📊 분석 결과 구성:</span>
+<span style="color: #737373;">• 진위 판단 (참/거짓/불분명)
+• 신뢰도 점수 (0-100%)
+• 검증 근거 및 참고 자료
+• 상세 분석 의견</span>
+
+<div style="margin-top: 20px; padding: 12px; background: rgba(191, 151, 128, 0.1); border-radius: 6px; border-left: 3px solid #BF9780;">
+<span style="color: #8B4513; font-size: 13px; font-weight: 500;">💡 투명성 원칙: 모든 분석 과정과 판단 근거를 명확히 제시합니다</span>
+</div>
+
+---
+
+`;
     
-    if (progress.includes('API 키')) {
-      return `<span style="color: #737373;">${progress}</span>`;
-    } else if (progress.includes('준비')) {
-      return messages[0] + `<span style="color: #737373;">${progress}</span>`;
-    } else if (progress.includes('전송')) {
-      return messages[0] + messages[1] + `<span style="color: #737373;">${progress}</span>`;
-    } else {
-      return messages[0] + messages[1] + messages[2] + `<span style="color: #737373;">${progress}</span>`;
-    }
+    return detailedProgress;
   }
 
   // 결과 모달 생성
@@ -1208,7 +1620,10 @@ ${articleContent}
         <div style="background: #F2F2F2; border: 2px solid #BF9780; border-radius: 8px; padding: 16px 20px; margin-bottom: 24px; flex: 1; display: flex; align-items: center; justify-content: center;">
           <span style="font-family: monospace; font-size: 16px; color: #0D0D0D;">${maskedKey}</span>
         </div>
-        <button class="edit-key-btn" style="background: #BF9780; color: white; padding: 16px 32px; border-radius: 8px; font-weight: 600; border: none; cursor: pointer; width: 100%; transition: background-color 0.2s; font-size: 16px;">수정</button>
+        <div style="display: flex; gap: 12px;">
+          <button class="edit-key-btn" style="background: #BF9780; color: white; padding: 16px 32px; border-radius: 8px; font-weight: 600; border: none; cursor: pointer; flex: 1; transition: background-color 0.2s; font-size: 16px;">수정</button>
+          <button class="remove-key-btn" style="background: #E74C3C; color: white; padding: 16px 32px; border-radius: 8px; font-weight: 600; border: none; cursor: pointer; flex: 1; transition: background-color 0.2s; font-size: 16px;">해제</button>
+        </div>
       `;
     } else {
       modalContent.innerHTML = `
@@ -1268,6 +1683,25 @@ ${articleContent}
       });
       editBtn.addEventListener('mouseleave', () => {
         editBtn.style.backgroundColor = '#BF9780';
+      });
+    }
+
+    // 해제 버튼 (표시 모드)
+    const removeBtn = modalContent.querySelector('.remove-key-btn');
+    if (removeBtn) {
+      removeBtn.addEventListener('click', () => {
+        if (confirm('API 키를 정말 해제하시겠습니까?\n해제하면 팩트체킹 기능을 사용할 수 없습니다.')) {
+          this.removeApiKey();
+          closeModal();
+          alert('API 키가 해제되었습니다.');
+        }
+      });
+      
+      removeBtn.addEventListener('mouseenter', () => {
+        removeBtn.style.backgroundColor = '#C0392B';
+      });
+      removeBtn.addEventListener('mouseleave', () => {
+        removeBtn.style.backgroundColor = '#E74C3C';
       });
     }
     
@@ -1362,6 +1796,23 @@ ${articleContent}
     }
   }
 
+  // API 키 해제
+  async removeApiKey() {
+    try {
+      // Chrome 확장 프로그램 환경에서 storage API 사용
+      if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local) {
+        await chrome.storage.local.remove(['gemini_api_key']);
+        console.log('API 키가 Chrome Storage에서 제거되었습니다.');
+      } else {
+        localStorage.removeItem('gemini_api_key');
+        console.log('API 키가 localStorage에서 제거되었습니다.');
+      }
+    } catch (error) {
+      console.log('API 키 제거 오류:', error);
+      localStorage.removeItem('gemini_api_key');
+    }
+  }
+
   // 분석 진행 상황 업데이트 (외부에서 호출)
   updateAnalysisProgress(blockId, progress) {
     this.updateNewsStatus(blockId, 'analyzing', null, progress);
@@ -1369,14 +1820,162 @@ ${articleContent}
 
   // 스트리밍 결과 업데이트 (실시간 타이핑 효과)
   updateStreamingResult(blockId, partialResult) {
-    this.streamingResults.set(blockId, partialResult);
-    this.updateNewsStatus(blockId, 'analyzing', null, 'AI가 분석 중... (클릭하여 실시간 보기)');
+    console.log('updateStreamingResult 호출됨:', { blockId, partialResult });
     
-    // 현재 열려있는 실시간 모달이 있다면 업데이트
-    const existingModal = document.querySelector(`[data-streaming-modal="${blockId}"]`);
-    if (existingModal) {
-      this.updateStreamingModal(existingModal, partialResult);
+    this.streamingResults.set(blockId, partialResult);
+    
+    // 스트리밍 내용에 따라 진행상황 메시지 업데이트
+    let progressMessage = 'AI가 실시간으로 분석 중...';
+    
+    if (partialResult) {
+      if (partialResult.includes('진위') || partialResult.includes('참') || partialResult.includes('거짓')) {
+        progressMessage = '진위 판정 결과 작성 중...';
+      } else if (partialResult.includes('근거') || partialResult.includes('증거')) {
+        progressMessage = '검증 근거 정리 중...';
+      } else if (partialResult.includes('분석') || partialResult.includes('의견')) {
+        progressMessage = '상세 분석 의견 작성 중...';
+      }
     }
+    
+    this.updateNewsStatus(blockId, 'analyzing', null, progressMessage);
+    
+    // 새로운 인라인 타이핑 업데이트
+    if (partialResult) {
+      this.updateBlockTypingArea(blockId, partialResult);
+    }
+  }
+
+  // 기존 스트리밍 컨테이너 점진적 업데이트
+  updateExistingStreamingContainer(container, newData) {
+    console.log('기존 컨테이너 업데이트:', newData);
+    
+    Object.keys(newData).forEach(stepName => {
+      const content = newData[stepName];
+      
+      // 해당 단계의 기존 블록 찾기
+      const existingStepBlock = container.querySelector(`[data-step="${stepName}"]`);
+      
+      if (existingStepBlock) {
+        // 기존 단계 업데이트
+        const textElement = existingStepBlock.querySelector('.step-content');
+        if (textElement && content !== '분석 중...') {
+          // 타이핑 효과로 업데이트
+          this.updateStepContent(textElement, content);
+        }
+      } else {
+        // 새로운 단계 추가
+        this.createStepBlock(container, stepName, content, null);
+      }
+    });
+  }
+
+  // 단계 컨텐츠 업데이트
+  updateStepContent(element, newContent) {
+    // 기존 타이핑 효과 중단
+    const existingInterval = element.dataset.typingInterval;
+    if (existingInterval) {
+      clearInterval(parseInt(existingInterval));
+    }
+    
+    // 새로운 내용으로 타이핑 효과 시작
+    let index = 0;
+    element.textContent = '';
+    
+    const cursor = document.createElement('span');
+    cursor.textContent = '|';
+    cursor.style.cssText = `
+      animation: blink 1s infinite;
+      color: #BF9780;
+      font-weight: normal;
+      margin-left: 1px;
+    `;
+    element.appendChild(cursor);
+
+    const typeInterval = setInterval(() => {
+      if (index < newContent.length) {
+        element.textContent = newContent.substring(0, index + 1);
+        element.appendChild(cursor);
+        index++;
+      } else {
+        clearInterval(typeInterval);
+        cursor.remove();
+        delete element.dataset.typingInterval;
+      }
+    }, this.typingSpeed);
+    
+    element.dataset.typingInterval = typeInterval;
+  }
+
+  // 텍스트에서 진위, 근거, 분석 키워드 감지하여 파싱
+  parseAnalysisText(text) {
+    console.log('원본 텍스트:', text);
+    
+    const result = {};
+    
+    // 다양한 JSON 형식 처리
+    try {
+      // 완전한 JSON 객체 시도
+      const jsonData = JSON.parse(text);
+      if (jsonData['진위']) result['진위'] = jsonData['진위'];
+      if (jsonData['근거']) result['근거'] = jsonData['근거'];  
+      if (jsonData['분석']) result['분석'] = jsonData['분석'];
+      
+      console.log('JSON 파싱 성공:', result);
+      return Object.keys(result).length > 0 ? result : null;
+    } catch (e) {
+      // JSON 파싱 실패 시 텍스트 패턴 매칭
+    }
+    
+    // 개선된 패턴 매칭 - 다양한 형식 지원
+    const patterns = [
+      // "키": "값" 형식
+      /"(진위|근거|분석)"\s*:\s*"([^"]*)"?/g,
+      // '키': '값' 형식  
+      /'(진위|근거|분석)'\s*:\s*'([^']*)'?/g,
+      // 키: 값 형식 (따옴표 없음)
+      /(진위|근거|분석)\s*:\s*([^\n,}]*)/g,
+      // 키워드만 있는 경우
+      /(진위|근거|분석)\s*[:]?\s*([^"'\n,}]+)/g
+    ];
+    
+    patterns.forEach(pattern => {
+      let match;
+      while ((match = pattern.exec(text)) !== null) {
+        const key = match[1].trim();
+        let value = match[2].trim();
+        
+        // 불필요한 문자 제거
+        value = value.replace(/[",}]$/, '').trim();
+        
+        if (value && value.length > 0) {
+          result[key] = this.cleanAnalysisText(value);
+        }
+      }
+    });
+    
+    // 부분적 스트리밍 감지 - 키만 나온 경우
+    if (Object.keys(result).length === 0) {
+      const partialMatches = text.match(/"(진위|근거|분석)"\s*:/g);
+      if (partialMatches) {
+        partialMatches.forEach(match => {
+          const key = match.match(/"(진위|근거|분석)"/)[1];
+          result[key] = '분석 중...';
+        });
+      }
+    }
+    
+    console.log('개선된 파싱 결과:', result);
+    return Object.keys(result).length > 0 ? result : null;
+  }
+
+  // 분석 텍스트 정리
+  cleanAnalysisText(text) {
+    return text
+      .replace(/^["']|["']$/g, '') // 시작/끝 따옴표 제거
+      .replace(/\\n/g, '\n')       // 이스케이프된 줄바꿈 처리
+      .replace(/\\"/g, '"')        // 이스케이프된 따옴표 처리
+      .replace(/^\s+|\s+$/g, '')   // 앞뒤 공백 제거
+      .replace(/\s+/g, ' ');       // 연속된 공백을 하나로
   }
 
   // 분석 완료 (외부에서 호출)
@@ -1538,7 +2137,477 @@ ${articleContent}
       console.log('Restored', this.newsBlocks.size, 'news blocks');
     }
   }
+
+  // 분석 기록 개수 업데이트
+  updateAnalysisCount() {
+    const countElement = document.getElementById('analysis-count');
+    if (countElement) {
+      countElement.textContent = this.newsBlocks.size;
+      // 카운트 변경 애니메이션
+      countElement.style.transform = 'scale(1.2)';
+      countElement.style.background = '#10B981';
+      countElement.style.color = '#FFFFFF';
+      setTimeout(() => {
+        countElement.style.transform = 'scale(1)';
+        countElement.style.background = '#F2CEA2';
+        countElement.style.color = '#1A1A1A';
+      }, 200);
+    }
+  }
+
+  // 실시간 스트리밍 분석 시작
+  startStreamingAnalysis(newsId, analysisData) {
+    this.clearPreviousTyping(newsId);
+    
+    // 스트리밍 컨테이너 생성
+    const streamingContainer = this.createStreamingContainer(newsId);
+    
+    // 분석 단계별로 처리
+    let currentStepIndex = 0;
+    
+    const processNextStep = () => {
+      if (currentStepIndex >= this.analysisSteps.length) return;
+      
+      const step = this.analysisSteps[currentStepIndex];
+      const stepData = analysisData[step];
+      
+      if (stepData) {
+        this.createStepBlock(streamingContainer, step, stepData, () => {
+          currentStepIndex++;
+          setTimeout(processNextStep, 300); // 다음 단계까지 300ms 대기
+        });
+      } else {
+        currentStepIndex++;
+        setTimeout(processNextStep, 100);
+      }
+    };
+    
+    processNextStep();
+  }
+
+  // 이전 타이핑 효과 정리
+  clearPreviousTyping(newsId) {
+    if (this.currentTypingIntervals.has(newsId)) {
+      const intervals = this.currentTypingIntervals.get(newsId);
+      intervals.forEach(interval => clearInterval(interval));
+      this.currentTypingIntervals.delete(newsId);
+    }
+  }
+
+  // 스트리밍 컨테이너 생성
+  createStreamingContainer(newsId) {
+    const existingContainer = document.getElementById(`streaming-${newsId}`);
+    if (existingContainer) {
+      existingContainer.remove();
+    }
+
+    const container = document.createElement('div');
+    container.id = `streaming-${newsId}`;
+    container.style.cssText = `
+      margin-top: 16px;
+      padding: 20px;
+      background: linear-gradient(135deg, #FFFFFF, #FAFAFA);
+      border-radius: 16px;
+      border: 1px solid rgba(229, 229, 229, 0.6);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+      animation: fadeIn 0.5s ease-out;
+      position: relative;
+      overflow: hidden;
+    `;
+
+    // 분석 중임을 나타내는 헤더 추가
+    const analysisHeader = document.createElement('div');
+    analysisHeader.style.cssText = `
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid rgba(191, 151, 128, 0.2);
+    `;
+    
+    analysisHeader.innerHTML = `
+      <div style="
+        width: 8px;
+        height: 8px;
+        background: #10B981;
+        border-radius: 50%;
+        animation: pulse 2s infinite;
+      "></div>
+      <span style="
+        font-weight: 600;
+        color: #1A1A1A;
+        font-size: 16px;
+      ">실시간 분석 중</span>
+      <div style="
+        flex: 1;
+        height: 1px;
+        background: linear-gradient(to right, rgba(191, 151, 128, 0.3), transparent);
+        margin-left: 12px;
+      "></div>
+    `;
+    
+    container.appendChild(analysisHeader);
+
+    // 현재 뉴스인 경우 current-news-container에 추가
+    if (newsId === 'current' || newsId === this.currentNews?.id) {
+      const currentContainer = document.getElementById('current-news-container');
+      if (currentContainer) {
+        currentContainer.appendChild(container);
+      }
+    } else {
+      // 분석된 뉴스 블록에 추가
+      const newsBlock = document.querySelector(`[data-id="${newsId}"]`);
+      if (newsBlock) {
+        newsBlock.appendChild(container);
+      }
+    }
+
+    return container;
+  }
+
+  // 단계별 블록 생성 및 타이핑 효과
+  createStepBlock(container, stepName, content, onComplete) {
+    const stepBlock = document.createElement('div');
+    stepBlock.setAttribute('data-step', stepName);
+    stepBlock.style.cssText = `
+      margin-bottom: 20px;
+      opacity: 0;
+      transform: translateY(15px);
+      transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    `;
+
+    // 단계 헤더 생성
+    const header = this.createStepHeader(stepName);
+    stepBlock.appendChild(header);
+
+    // 컨텐츠 컨테이너 생성
+    const contentContainer = document.createElement('div');
+    contentContainer.style.cssText = `
+      margin-top: 12px;
+      padding: 16px;
+      background: ${this.getStepBackgroundColor(stepName)};
+      border-radius: 12px;
+      border-left: 4px solid ${this.getStepBorderColor(stepName)};
+      min-height: 24px;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    `;
+
+    const textElement = document.createElement('div');
+    textElement.className = 'step-content';
+    textElement.style.cssText = `
+      font-size: 14px;
+      line-height: 1.6;
+      color: #1A1A1A;
+      word-wrap: break-word;
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    `;
+
+    contentContainer.appendChild(textElement);
+    stepBlock.appendChild(contentContainer);
+    container.appendChild(stepBlock);
+
+    // 부드러운 애니메이션으로 블록 표시
+    requestAnimationFrame(() => {
+      stepBlock.style.opacity = '1';
+      stepBlock.style.transform = 'translateY(0)';
+    });
+
+    // "분석 중..." 이 아닌 경우에만 타이핑 효과 시작
+    if (content && content !== '분석 중...') {
+      setTimeout(() => {
+        this.startTypingEffect(textElement, content, onComplete);
+      }, 300);
+    } else {
+      // "분석 중..." 표시
+      textElement.innerHTML = `
+        <span style="color: #6B6B6B; font-style: italic;">
+          ${content || '분석 중...'}
+        </span>
+      `;
+    }
+  }
+
+  // 단계 헤더 생성
+  createStepHeader(stepName) {
+    const header = document.createElement('div');
+    header.style.cssText = `
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-weight: 600;
+      color: ${this.getStepColor(stepName)};
+      font-size: 16px;
+      margin-bottom: 4px;
+    `;
+
+    const icon = this.getStepIcon(stepName);
+    header.innerHTML = `
+      <div style="
+        width: 32px;
+        height: 32px;
+        background: linear-gradient(135deg, ${this.getStepColor(stepName)}, ${this.getStepColorSecondary(stepName)});
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 16px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      ">${icon}</div>
+      <div style="
+        font-weight: 600;
+        color: #1A1A1A;
+        font-size: 16px;
+      ">${stepName} 분석</div>
+      <div style="
+        flex: 1;
+        height: 1px;
+        background: linear-gradient(to right, ${this.getStepColor(stepName)}40, transparent);
+        margin-left: 8px;
+      "></div>
+    `;
+
+    return header;
+  }
+
+  // 타이핑 효과 구현
+  startTypingEffect(element, text, onComplete) {
+    let index = 0;
+    element.textContent = '';
+    
+    // 커서 추가
+    const cursor = document.createElement('span');
+    cursor.textContent = '|';
+    cursor.style.cssText = `
+      animation: blink 1s infinite;
+      color: #BF9780;
+      font-weight: normal;
+      margin-left: 1px;
+    `;
+    element.appendChild(cursor);
+
+    const typeInterval = setInterval(() => {
+      if (index < text.length) {
+        // 텍스트를 한 글자씩 추가
+        const currentText = text.substring(0, index + 1);
+        element.textContent = currentText;
+        element.appendChild(cursor);
+        index++;
+      } else {
+        clearInterval(typeInterval);
+        // 타이핑 완료 후 커서 제거
+        setTimeout(() => {
+          cursor.remove();
+          if (onComplete) onComplete();
+        }, 500);
+      }
+    }, this.typingSpeed);
+
+    return typeInterval;
+  }
+
+  // 단계별 색상/아이콘 설정
+  getStepColor(stepName) {
+    const colors = {
+      '진위': '#10B981',
+      '근거': '#3B82F6', 
+      '분석': '#8B5CF6'
+    };
+    return colors[stepName] || '#6B6B6B';
+  }
+
+  getStepColorSecondary(stepName) {
+    const colors = {
+      '진위': '#059669',
+      '근거': '#2563EB', 
+      '분석': '#7C3AED'
+    };
+    return colors[stepName] || '#4B5563';
+  }
+
+  getStepBackgroundColor(stepName) {
+    const colors = {
+      '진위': 'linear-gradient(135deg, #D1FAE5, #ECFDF5)',
+      '근거': 'linear-gradient(135deg, #DBEAFE, #EFF6FF)',
+      '분석': 'linear-gradient(135deg, #EDE9FE, #F5F3FF)'
+    };
+    return colors[stepName] || 'linear-gradient(135deg, #F9FAFB, #FFFFFF)';
+  }
+
+  getStepBorderColor(stepName) {
+    const colors = {
+      '진위': '#10B981',
+      '근거': '#3B82F6',
+      '분석': '#8B5CF6'
+    };
+    return colors[stepName] || '#D1D5DB';
+  }
+
+  getStepIcon(stepName) {
+    const icons = {
+      '진위': '⚖️',
+      '근거': '🔍',
+      '분석': '🧠'
+    };
+    return icons[stepName] || '📄';
+  }
+
+  // 뉴스 블록 추가할 때 카운트 업데이트
+  addNewsBlock(newsData) {
+    // 기존 로직...
+    this.newsBlocks.set(newsData.id, newsData);
+    this.updateAnalysisCount(); // 카운트 업데이트
+    this.saveNewsBlocks();
+    this.updatePanel();
+  }
+
+  // 뉴스 블록 제거할 때 카운트 업데이트  
+  removeNewsBlock(newsId) {
+    if (this.newsBlocks.has(newsId)) {
+      this.newsBlocks.delete(newsId);
+      this.updateAnalysisCount(); // 카운트 업데이트
+      this.saveNewsBlocks();
+      this.updatePanel();
+    }
+  }
+}
+
+// CSS 애니메이션 추가
+if (!document.getElementById('analysis-panel-animations')) {
+  const style = document.createElement('style');
+  style.id = 'analysis-panel-animations';
+  style.textContent = `
+    @keyframes fadeIn {
+      0% { opacity: 0; transform: translateY(20px); }
+      100% { opacity: 1; transform: translateY(0); }
+    }
+    
+    @keyframes blink {
+      0%, 50% { opacity: 1; }
+      51%, 100% { opacity: 0; }
+    }
+    
+    @keyframes pulse {
+      0% { 
+        transform: scale(1);
+        opacity: 1;
+      }
+      50% { 
+        transform: scale(1.2);
+        opacity: 0.7;
+      }
+      100% { 
+        transform: scale(1);
+        opacity: 1;
+      }
+    }
+    
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+    
+    /* 타이핑 영역 스크롤바 스타일 */
+    div[id^="typing-content-"]::-webkit-scrollbar {
+      width: 6px;
+    }
+    
+    div[id^="typing-content-"]::-webkit-scrollbar-track {
+      background: #F0F0F0;
+      border-radius: 3px;
+    }
+    
+    div[id^="typing-content-"]::-webkit-scrollbar-thumb {
+      background: #BF9780;
+      border-radius: 3px;
+    }
+    
+    div[id^="typing-content-"]::-webkit-scrollbar-thumb:hover {
+      background: #A67E69;
+    }
+  `;
+  document.head.appendChild(style);
 }
 
 // Export for use in content_script.js
 window.AnalysisPanel = AnalysisPanel;
+
+// 테스트용 함수들
+window.testStreamingAnalysis = function() {
+  const panel = window.analysisPanel || new AnalysisPanel();
+  
+  // 테스트 데이터
+  const testData = {
+    '진위': '이 뉴스는 사실로 확인되었습니다.',
+    '근거': '여러 신뢰할 만한 언론사에서 동일한 내용을 보도했으며, 공식 기관의 발표와 일치합니다.',
+    '분석': '종합적으로 검토한 결과, 해당 뉴스의 내용은 팩트체크를 통과했습니다.'
+  };
+  
+  console.log('스트리밍 분석 테스트 시작');
+  panel.startStreamingAnalysis('current', testData);
+};
+
+window.testStreamingText = function() {
+  const panel = window.analysisPanel || new AnalysisPanel();
+  
+  // 실제 스트리밍 형태의 텍스트 테스트
+  const streamingText = '"진위": "이 뉴스는 사실입니다"';
+  
+  console.log('스트리밍 텍스트 테스트 시작');
+  panel.updateStreamingResult('current', streamingText);
+};
+
+window.testProgressiveStreaming = function() {
+  const panel = window.analysisPanel || new AnalysisPanel();
+  
+  // 점진적 스트리밍 시뮬레이션
+  setTimeout(() => {
+    console.log('1단계: 진위 분석 시작');
+    panel.updateStreamingResult('current', '{"진위": ""}');
+  }, 500);
+  
+  setTimeout(() => {
+    console.log('2단계: 진위 결과');
+    panel.updateStreamingResult('current', '{"진위": "이 뉴스는 사실로 확인되었습니다."}');
+  }, 1500);
+  
+  setTimeout(() => {
+    console.log('3단계: 근거 분석 시작');
+    panel.updateStreamingResult('current', '{"진위": "이 뉴스는 사실로 확인되었습니다.", "근거": ""}');
+  }, 3000);
+  
+  setTimeout(() => {
+    console.log('4단계: 근거 결과');
+    panel.updateStreamingResult('current', '{"진위": "이 뉴스는 사실로 확인되었습니다.", "근거": "여러 신뢰할 만한 출처에서 확인되었습니다."}');
+  }, 4500);
+  
+  setTimeout(() => {
+    console.log('5단계: 분석 시작');
+    panel.updateStreamingResult('current', '{"진위": "이 뉴스는 사실로 확인되었습니다.", "근거": "여러 신뢰할 만한 출처에서 확인되었습니다.", "분석": ""}');
+  }, 6000);
+  
+  setTimeout(() => {
+    console.log('6단계: 최종 분석 완료');
+    panel.updateStreamingResult('current', '{"진위": "이 뉴스는 사실로 확인되었습니다.", "근거": "여러 신뢰할 만한 출처에서 확인되었습니다.", "분석": "종합적으로 검토한 결과 신뢰할 만한 뉴스입니다."}');
+  }, 7500);
+};
+
+window.testMessyJsonStreaming = function() {
+  const panel = window.analysisPanel || new AnalysisPanel();
+  
+  // 지저분한 JSON 형식들 테스트
+  const messyFormats = [
+    '"진위":"사실입니다",',
+    '{"진위": "사실입니다", "근거":',
+    '"근거": "출처가 확실합니다"}',
+    '진위: 사실입니다',
+    "'분석': '신뢰할 만합니다'"
+  ];
+  
+  messyFormats.forEach((format, index) => {
+    setTimeout(() => {
+      console.log(`지저분한 JSON 테스트 ${index + 1}:`, format);
+      panel.updateStreamingResult('current', format);
+    }, index * 2000);
+  });
+};
