@@ -1,5 +1,14 @@
 console.log('Content script loaded');
 
+// Chrome API 안전 확인 함수
+function isChromeApiAvailable() {
+  try {
+    return chrome && chrome.runtime && chrome.runtime.id;
+  } catch (error) {
+    return false;
+  }
+}
+
 // 전역 변수
 let extractedData = [];
 
@@ -9,12 +18,9 @@ let extractedData = [];
 function initialize() {
   console.log('초기화 시작');
   
-  // 이미 처리된 페이지인지 확인
-  if (document.querySelector('#news-analysis-panel')) {
-    console.log('이미 패널이 존재합니다.');
-    return;
-  }
-
+  // 이전 데이터 초기화
+  extractedData = [];
+  
   // 뉴스 데이터 추출 및 하이라이트
   extractNewsData();
   
@@ -112,7 +118,7 @@ function extractNewsData() {
  * 패널에 뉴스 블록 추가
  */
 function addNewsToPanel() {
-  console.log('패널에 뉴스 블록 추가 시작');
+  console.log('패널에 현재 뉴스 설정 시작');
   
   const title = extractedData.find(item => item.type === '제목')?.text || '제목 없음';
   const content = extractedData.filter(item => item.type === '내용').map(item => item.text).join('\n');
@@ -132,9 +138,9 @@ function addNewsToPanel() {
   }
   
   if (analysisPanel) {
-    // 뉴스 블록 추가 (content 포함)
-    analysisPanel.addNews(title, url, content);
-    console.log('뉴스 블록이 패널에 추가되었습니다.');
+    // 현재 뉴스로 설정 (분석된 뉴스 리스트에 추가하지 않음)
+    analysisPanel.setCurrentNews(title, url, content);
+    console.log('현재 뉴스가 패널에 설정되었습니다.');
   } else {
     console.error('AnalysisPanel 인스턴스를 찾을 수 없습니다.');
   }
@@ -231,37 +237,80 @@ ${articleContent}
 
   console.log('Gemini 프롬프트:', fullPrompt);
   console.log('Chrome runtime 메시지 전송 중...');
-  chrome.runtime.sendMessage({
-    action: "analyzeNewsWithGemini",
-    prompt: fullPrompt,
-    blockId: blockId
-  });
-  console.log('Chrome runtime 메시지 전송 완료');
+  
+  // Chrome API 안전 확인 후 메시지 전송
+  if (isChromeApiAvailable()) {
+    try {
+      chrome.runtime.sendMessage({
+        action: "analyzeNewsWithGemini",
+        prompt: fullPrompt,
+        blockId: blockId
+      }).then(response => {
+        console.log('Chrome runtime 메시지 전송 완료:', response);
+      }).catch(error => {
+        console.error('Chrome runtime 메시지 전송 오류:', error);
+        // 패널에 오류 표시
+        const panel = document.getElementById('news-analysis-panel');
+        if (panel && panel.__analysisPanel) {
+          panel.__analysisPanel.failAnalysis(blockId, '확장 연결 오류: ' + error.message);
+        }
+      });
+    } catch (error) {
+      console.error('Chrome API 호출 오류:', error);
+      // 패널에 오류 표시
+      const panel = document.getElementById('news-analysis-panel');
+      if (panel && panel.__analysisPanel) {
+        panel.__analysisPanel.failAnalysis(blockId, '확장 API 오류: ' + error.message);
+      }
+    }
+  } else {
+    console.error('Chrome extension context is not available');
+    // 패널에 오류 표시
+    const panel = document.getElementById('news-analysis-panel');
+    if (panel && panel.__analysisPanel) {
+      panel.__analysisPanel.failAnalysis(blockId, '확장 컨텍스트가 무효화되었습니다. 페이지를 새로고침해주세요.');
+    }
+  }
+  console.log('Chrome runtime 메시지 전송 처리 완료');
 }
 
 // service_worker로부터 메시지를 수신하는 리스너
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  console.log('메시지 수신:', message);
-  
-  if (message.action === "displayAnalysisResult" && message.result) {
-    // 결과를 패널에 표시
-    const panel = document.getElementById('news-analysis-panel');
-    if (panel && panel.__analysisPanel) {
-      console.log('분석 결과 표시:', message.blockId, message.result);
-      panel.__analysisPanel.updateNewsStatus(message.blockId, 'completed', message.result);
-    }
-  } else if (message.action === "displayError" && message.error) {
-    // 에러를 패널에 표시
-    const panel = document.getElementById('news-analysis-panel');
-    if (panel && panel.__analysisPanel) {
-      console.log('분석 에러 표시:', message.blockId, message.error);
-      panel.__analysisPanel.updateNewsStatus(message.blockId, 'error', null, null, message.error);
-    }
-  } else if (message.action === "startAnalysis") {
-    // 분석 시작 요청
-    sendToGeminiForAnalysis(message.blockId);
+if (isChromeApiAvailable()) {
+  try {
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+      console.log('메시지 수신:', message);
+      
+      if (message.action === "displayAnalysisResult" && message.result) {
+        // 결과를 패널에 표시
+        const panel = document.getElementById('news-analysis-panel');
+        if (panel && panel.__analysisPanel) {
+          console.log('분석 결과 표시:', message.blockId, message.result);
+          panel.__analysisPanel.completeAnalysis(message.blockId, message.result);
+        }
+      } else if (message.action === "displayError" && message.error) {
+        // 오류를 패널에 표시
+        const panel = document.getElementById('news-analysis-panel');
+        if (panel && panel.__analysisPanel) {
+          console.log('분석 오류 표시:', message.blockId, message.error);
+          panel.__analysisPanel.failAnalysis(message.blockId, message.error);
+        }
+      } else if (message.action === "updateStreamingResult" && message.partialResult) {
+        // 실시간 스트리밍 결과 업데이트
+        const panel = document.getElementById('news-analysis-panel');
+        if (panel && panel.__analysisPanel) {
+          console.log('스트리밍 결과 업데이트:', message.blockId, message.partialResult.length, '글자');
+          panel.__analysisPanel.updateStreamingResult(message.blockId, message.partialResult);
+        }
+      }
+      
+      sendResponse({ status: "메시지 처리 완료" });
+    });
+  } catch (error) {
+    console.error('메시지 리스너 등록 오류:', error);
   }
-});
+} else {
+  console.error('Chrome API를 사용할 수 없습니다. 메시지 리스너를 등록하지 않습니다.');
+}
 
 // 페이지 로딩 완료 후 초기화
 if (document.readyState === 'loading') {
@@ -269,5 +318,45 @@ if (document.readyState === 'loading') {
 } else {
   initialize();
 }
+
+// 페이지 변경 감지 (SPA 지원)
+let currentUrl = window.location.href;
+
+// History API 변경 감지
+const originalPushState = history.pushState;
+const originalReplaceState = history.replaceState;
+
+history.pushState = function() {
+  originalPushState.apply(history, arguments);
+  setTimeout(() => {
+    if (window.location.href !== currentUrl) {
+      currentUrl = window.location.href;
+      console.log('페이지 변경 감지 (pushState):', currentUrl);
+      setTimeout(initialize, 500); // 페이지 로딩 대기
+    }
+  }, 100);
+};
+
+history.replaceState = function() {
+  originalReplaceState.apply(history, arguments);
+  setTimeout(() => {
+    if (window.location.href !== currentUrl) {
+      currentUrl = window.location.href;
+      console.log('페이지 변경 감지 (replaceState):', currentUrl);
+      setTimeout(initialize, 500); // 페이지 로딩 대기
+    }
+  }, 100);
+};
+
+// popstate 이벤트 (뒤로가기/앞으로가기)
+window.addEventListener('popstate', () => {
+  setTimeout(() => {
+    if (window.location.href !== currentUrl) {
+      currentUrl = window.location.href;
+      console.log('페이지 변경 감지 (popstate):', currentUrl);
+      setTimeout(initialize, 500); // 페이지 로딩 대기
+    }
+  }, 100);
+});
 
 console.log('Content script 초기화 완료');
