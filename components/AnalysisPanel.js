@@ -564,10 +564,9 @@ class AnalysisPanel {
     const cursorStyle = isClickable ? 'cursor: pointer;' : '';
     const hoverStyle = isClickable ? 'onmouseover="this.style.background=\'#F2CEA2\'" onmouseout="this.style.background=\'#F2F2F2\'"' : '';
     
-    // 비교 모드일 때 어두운 스타일 적용
+    // 비교 모드일 때 어두운 스타일 적용 (pointer-events는 제거하여 버튼 클릭 가능하도록)
     const blockBackground = isCompareMode ? '#E5E5E5' : '#F2F2F2';
     const blockOpacity = isCompareMode ? '0.7' : '1';
-    const pointerEvents = isCompareMode ? 'pointer-events: none;' : '';
     
     return `
       <div class="news-block" data-id="${id}" style="
@@ -578,12 +577,12 @@ class AnalysisPanel {
         transition: all 0.3s ease;
         width: 100%;
         overflow: hidden;
-        ${pointerEvents}
       ">
         <!-- 뉴스 내용 영역 -->
         <div class="news-content-area" data-id="${id}" style="
           padding: 12px;
           ${cursorStyle}
+          ${isCompareMode ? 'pointer-events: none;' : ''}
         " ${isClickable ? hoverStyle : ''}>
           ${block.isComparison ? `
           <div style="
@@ -678,6 +677,45 @@ class AnalysisPanel {
     const div = document.createElement('div');
     div.textContent = text;
     return div.innerHTML;
+  }
+
+  // 간단한 마크다운 렌더링
+  renderMarkdown(text) {
+    if (!text) return '';
+    
+    let html = this.escapeHtml(text);
+    
+    // 마크다운 변환
+    html = html
+      // 제목 (## 제목)
+      .replace(/^## (.+)$/gm, '<h2 style="color: #0D0D0D; font-weight: 600; font-size: 16px; margin: 12px 0 6px 0; border-bottom: 1px solid #BF9780; padding-bottom: 4px;">$1</h2>')
+      // 강조 (**텍스트**)
+      .replace(/\*\*(.+?)\*\*/g, '<strong style="color: #BF9780; font-weight: 600;">$1</strong>')
+      // 숫자 리스트 (1. 항목, 2. 항목)
+      .replace(/^(\d+)\.\s*(.+)$/gm, '<li style="margin: 6px 0; padding-left: 8px; list-style: decimal;">$2</li>')
+      // 일반 리스트 (- 항목)
+      .replace(/^-\s*(.+)$/gm, '<li style="margin: 4px 0; padding-left: 8px; list-style: disc;">$1</li>')
+      // 인용 (> 텍스트)
+      .replace(/^>\s*(.+)$/gm, '<blockquote style="border-left: 3px solid #BF9780; margin: 8px 0; padding: 8px 12px; background: #F9F9F9; font-style: italic;">$1</blockquote>')
+      // 줄바꿈을 임시로 처리
+      .replace(/\n/g, '|||NEWLINE|||');
+    
+    // 연속된 li 태그를 ol/ul로 감싸기 (숫자 리스트 우선)
+    html = html.replace(/(<li[^>]*list-style: decimal;[^>]*>.*?<\/li>(?:\s*\|\|\|NEWLINE\|\|\|\s*<li[^>]*list-style: decimal;[^>]*>.*?<\/li>)*)/gs, 
+      '<ol style="margin: 8px 0; padding-left: 20px; counter-reset: item;">$1</ol>');
+    
+    // 일반 리스트 처리
+    html = html.replace(/(<li[^>]*list-style: disc;[^>]*>.*?<\/li>(?:\s*\|\|\|NEWLINE\|\|\|\s*<li[^>]*list-style: disc;[^>]*>.*?<\/li>)*)/gs, 
+      '<ul style="margin: 8px 0; padding-left: 20px;">$1</ul>');
+    
+    // ol/ul 내부의 NEWLINE 제거
+    html = html.replace(/(<[ou]l[^>]*>.*?)\|\|\|NEWLINE\|\|\|(?=\s*<li)/gs, '$1');
+    html = html.replace(/(<\/li>)\s*\|\|\|NEWLINE\|\|\|/g, '$1');
+    
+    // 남은 NEWLINE을 br 태그로 변환
+    html = html.replace(/\|\|\|NEWLINE\|\|\|/g, '<br>');
+    
+    return html;
   }
 
   // 분석 기록용 투명한 진행상황 텍스트 생성
@@ -873,6 +911,13 @@ class AnalysisPanel {
         e.stopPropagation();
         const id = parseInt(btn.dataset.id);
         console.log('삭제 버튼 클릭, ID:', id);
+        
+        // 비교 모드가 활성화되어 있고 현재 블록이 비교 모드가 아니면 클릭 방지
+        if (this.waitingForComparison && this.waitingForComparison !== id) {
+          console.log('비교 모드 활성화 중 - 삭제 버튼 비활성화');
+          return;
+        }
+        
         this.deleteNews(id);
       });
     });
@@ -1541,24 +1586,25 @@ ${comparisonContent}
         
         <div style="margin-bottom: 16px;">
           <h3 style="color: #0D0D0D; font-weight: 600; margin-bottom: 8px;">진위 판단</h3>
-          <p style="color: #0D0D0D; background: #BF9780; padding: 12px; border-radius: 8px; font-weight: 500;">${this.escapeHtml(verdict)}</p>
+          <div style="color: #0D0D0D; background: #BF9780; padding: 12px; border-radius: 8px; font-weight: 500;">${this.renderMarkdown(verdict)}</div>
         </div>
         
         <div style="margin-bottom: 16px;">
           <h3 style="color: #0D0D0D; font-weight: 600; margin-bottom: 8px;">근거</h3>
-          <p style="color: #737373; line-height: 1.5; background: #F2F2F2; border: 1px solid #BF9780; padding: 12px; border-radius: 8px;">${this.escapeHtml(evidence)}</p>
+          <div style="color: #737373; line-height: 1.5; background: #F2F2F2; border: 1px solid #BF9780; padding: 12px; border-radius: 8px;">${this.renderMarkdown(evidence)}</div>
         </div>
         
         <div style="margin-bottom: 16px;">
           <h3 style="color: #0D0D0D; font-weight: 600; margin-bottom: 8px;">상세 분석</h3>
-          <p style="color: #737373; line-height: 1.5; background: #F2F2F2; border: 1px solid #BF9780; padding: 12px; border-radius: 8px;">${this.escapeHtml(analysis)}</p>
+          <div style="color: #737373; line-height: 1.5; background: #F2F2F2; border: 1px solid #BF9780; padding: 12px; border-radius: 8px;">${this.renderMarkdown(analysis)}</div>
         </div>
         
         <div style="margin-bottom: 16px;">
           <h3 style="color: #0D0D0D; font-weight: 600; margin-bottom: 8px;">핵심 요약</h3>
-          <p style="color: #737373; line-height: 1.5; background: #F2CEA2; border: 1px solid #BF9780; padding: 12px; border-radius: 8px; font-weight: 500;">${this.escapeHtml(summary)}</p>
+          <div style="color: #737373; line-height: 1.5; background: #F2CEA2; border: 1px solid #BF9780; padding: 12px; border-radius: 8px; font-weight: 500;">${this.renderMarkdown(summary)}</div>
         </div>
         
+        ${block.title.includes('[비교분석]') ? `
         <div style="text-align: center; margin-top: 20px;">
           <button class="show-analysis-process" style="
             background: #BF9780;
@@ -1570,7 +1616,7 @@ ${comparisonContent}
             cursor: pointer;
             transition: all 0.2s;
           ">추론과정 확인</button>
-        </div>
+        </div>` : ''}
       </div>
     `;
     
@@ -1673,7 +1719,7 @@ ${comparisonContent}
           color: #0D0D0D;
           font-size: 14px;
           white-space: pre-wrap;
-        ">${this.escapeHtml(analysisProcess)}</div>
+        ">${this.renderMarkdown(analysisProcess)}</div>
       </div>
     `;
 
@@ -2185,7 +2231,8 @@ ${comparisonContent}
             <li>• 내용의 일치점과 차이점 분석</li>
             <li>• 각 뉴스의 신뢰도 비교</li>
           </ul>
-          <p style="color: #BF9780; font-weight: 500;">첫 번째 뉴스를 선택한 후, 비교할 두 번째 뉴스를 클릭하면 자동으로 비교분석이 시작됩니다.</p>
+          <p style="color: #BF9780; font-weight: 500; margin-bottom: 12px;">첫 번째 뉴스를 선택한 후, 비교할 두 번째 뉴스를 클릭하면 자동으로 비교분석이 시작됩니다.</p>
+          <p style="color: #DC2626; font-weight: 500; background: #FEE2E2; padding: 8px 12px; border-radius: 6px;">⏱️ 두 기사에 대한 분석을 진행하므로 평소보다 시간이 더 걸릴 수 있습니다.</p>
         </div>
         
         <div style="display: flex; gap: 12px;">
@@ -2260,10 +2307,10 @@ ${comparisonContent}
     });
   }
 
-  // 비교 안내 메시지 표시
+  // 비교 안내 메시지 표시 (alert 제거됨)
   showCompareInstructions(sourceId) {
-    const sourceBlock = this.newsBlocks.get(sourceId);
-    alert(`"${sourceBlock.title}" 뉴스와 비교할 다른 뉴스를 클릭하세요.\n\n취소하려면 취소 버튼을 클릭하세요.`);
+    // alert는 제거하고 패널에서만 안내
+    console.log('비교 모드 활성화됨. 다른 뉴스를 클릭하세요.');
   }
 
   // 비교 분석 실행
