@@ -174,6 +174,87 @@ async function simulateTypingEffect(text, tabId, blockId) {
 }
 
 /**
+ * Gemini API를 호출하는 비동기 함수 (기존 방식)
+ * @param {string} prompt - API에 전송할 전체 프롬프트
+ * @param {string} apiUrl - API URL (키 포함)
+ * @returns {Promise<string>} - API가 반환한 텍스트 결과
+ */
+async function callGeminiAPI(prompt, apiUrl) {
+  try {
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{
+            text: prompt
+          }]
+        }]
+      })
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.json();
+      throw new Error(`API 요청 실패: ${response.status} ${response.statusText} - ${JSON.stringify(errorBody)}`);
+    }
+
+    const data = await response.json();
+    return extractNewsContent(data);
+  } catch (error) {
+    console.error("fetch 또는 API 호출 오류:", error);
+    throw error; // 오류를 상위로 전파
+  }
+}
+
+/**
+ * 스트리밍으로 받은 텍스트에서 뉴스 콘텐츠를 추출하는 함수
+ * @param {string} text - 스트리밍으로 받은 전체 텍스트
+ * @returns {object|string} - 분석 결과 객체 또는 텍스트
+ */
+function extractNewsContentFromText(text) {
+  try {
+    // 코드블록 제거
+    const cleanText = text.replace(/```json|```/g, '').trim();
+    
+    // JSON 파싱 시도
+    let parsed;
+    try {
+      parsed = JSON.parse(cleanText);
+    } catch (e) {
+      // 배열이 아닌 경우 객체만 파싱 시도
+      const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        parsed = JSON.parse(jsonMatch[0]);
+      } else {
+        // JSON 파싱에 실패하면 텍스트 그대로 반환
+        return cleanText;
+      }
+    }
+    
+    // 배열이면 첫 번째 객체의 output 사용 (새로운 형식)
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      if (parsed[0].output) {
+        return parsed[0].output;
+      }
+      return parsed[0];
+    }
+    
+    // 객체면 output 프로퍼티 확인
+    if (parsed && typeof parsed === 'object' && parsed.output) {
+      return parsed.output;
+    }
+    
+    // 그 외의 경우 파싱된 객체 반환
+    return parsed || cleanText;
+  } catch (error) {
+    console.error("텍스트 파싱 오류:", error);
+    return text; // 파싱 실패 시 원본 텍스트 반환
+  }
+}
+
+/**
  * Gemini API 응답에서 뉴스 콘텐츠를 추출하는 함수
  * @param {object} data - Gemini API의 JSON 응답
  * @returns {object|string} - 분석 결과 객체 또는 오류 메시지
@@ -188,48 +269,88 @@ function extractNewsContent(data) {
         resultText = content.parts[0].text;
       }
     }
-    
     // 코드블록 제거
     resultText = resultText.replace(/```json|```/g, '').trim();
-    
-    // JSON 파싱 시도
+    // JSON 배열 또는 객체 파싱
     let parsed;
     try {
       parsed = JSON.parse(resultText);
     } catch (e) {
-      // 객체만 파싱 시도
+      // 배열이 아닌 경우 객체만 파싱 시도
       const jsonMatch = resultText.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         parsed = JSON.parse(jsonMatch[0]);
       }
     }
-    
     // 배열이면 첫 번째 객체의 output 사용
     if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].output) {
       return parsed[0].output;
     }
-    
+    // 배열 형식의 응답 처리 (새로운 형식)
+    if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].output) {
+      const output = parsed[0].output;
+      return {
+        분석진행: output.분석진행 || '',
+        진위: output.진위 || '',
+        근거: output.근거 || '',
+        분석: output.분석 || '',
+        요약: output.요약 || ''
+      };
+    }
     // 객체에 output 있으면 사용
     if (parsed && parsed.output) {
       return parsed.output;
     }
-    
-    // 객체에 진위/근거/분석 있으면 사용
+    // 객체에 진위/근거/분석 있으면 사용 (기존 형식)
     if (parsed && parsed.진위) {
       return {
+        분석진행: parsed.분석진행 || '',
         진위: parsed.진위,
         근거: parsed.근거 || '',
-        분석: parsed.분석 || ''
+        분석: parsed.분석 || '',
+        요약: parsed.요약 || parsed.핵심요약 || ''
       };
     }
-    
     // 파싱 실패 시 원본 텍스트 반환
     return resultText;
   } catch (error) {
     return {
+      분석진행: '',
       진위: '분석 오류',
       근거: '',
-      분석: 'JSON 파싱 오류: ' + error.message
+      분석: 'JSON 파싱 오류: ' + error.message,
+      요약: ''
     };
   }
+}
+
+/**
+ * 테스트용: extractNewsContent 함수가 정상적으로 동작하는지 확인하는 함수
+ */
+function extractNewsContentTest() {
+  // Gemini API의 응답을 흉내낸 샘플 데이터
+  const sampleData = {
+    candidates: [
+      {
+        content: {
+          parts: [
+            {
+              text: `[
+                {
+                  "instruction": "해당 기사는 진위 여부판단을 목적으로 수집되었습니다. 조건에 따라서 종합적으로 검토 후 판단 결과를 진위,근거,분석 항목으로 나누어 출력하세요.",
+                  "input": "주어진 텍스트 전체",
+                  "output": {
+                    "진위": "진짜 뉴스",
+                    "근거": "",
+                    "분석": "이 뉴스는 논리적 구조와 근거 제시 방식이 명확하며, 외부 정보 없이도 신뢰할 수 있습니다."
+                  }
+                }
+              ]`
+            }
+          ]
+        }
+      }
+    ]
+  };
+  return extractNewsContent(sampleData);
 }

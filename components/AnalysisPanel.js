@@ -11,7 +11,7 @@ class AnalysisPanel {
     // 실시간 타이핑 효과 관련 속성
     this.typingSpeed = 30; // 타이핑 속도 (ms)
     this.currentTypingIntervals = new Map(); // 현재 타이핑 중인 인터벌들
-    this.analysisSteps = ['진위', '근거', '분석']; // 분석 단계
+    this.analysisSteps = ['분석진행', '진위', '근거', '분석', '요약']; // 분석 단계
     
     // 저장된 뉴스 블록 데이터 로드
     this.loadSavedNewsBlocks();
@@ -42,8 +42,8 @@ class AnalysisPanel {
       ` : `
         bottom: 20px;
         right: 20px;
-        width: 400px;
-        height: 700px;
+        width: 560px;
+        height: 980px;
         border-radius: 20px;
       `}
       background: #FAFAFA;
@@ -83,13 +83,13 @@ class AnalysisPanel {
       
       if (isMobile) {
         panelContainer.style.cssText = panelContainer.style.cssText.replace(
-          /bottom: 20px; right: 20px; width: 400px; height: 700px; border-radius: 20px;/,
+          /bottom: 20px; right: 20px; width: 560px; height: 980px; border-radius: 20px;/,
           'bottom: 0; right: 0; left: 0; width: 100%; height: 70vh; border-radius: 20px 20px 0 0;'
         );
       } else {
         panelContainer.style.cssText = panelContainer.style.cssText.replace(
           /bottom: 0; right: 0; left: 0; width: 100%; height: 70vh; border-radius: 20px 20px 0 0;/,
-          'bottom: 20px; right: 20px; width: 400px; height: 700px; border-radius: 20px;'
+          'bottom: 20px; right: 20px; width: 560px; height: 980px; border-radius: 20px;'
         );
       }
     };
@@ -524,41 +524,79 @@ class AnalysisPanel {
           </div>
         `;
       } else {
-        // 분석 완료 또는 기타 상태일 때는 삭제 버튼 표시
+        // 분석 완료 또는 기타 상태일 때는 삭제 버튼과 비교하기 버튼 표시
+        const isCompareMode = block.compareMode || false;
+        const compareButtonText = isCompareMode ? '취소' : '비교';
+        const compareButtonStyle = isCompareMode ? 
+          'background: #6B7280; color: #F2F2F2;' : 
+          'background: #F2CEA2; color: #1A1A1A;';
+        
         actionButtons = `
-          <button class="delete-btn" data-id="${id}" style="
-            background: #dc2626;
-            color: #F2F2F2;
-            padding: 6px 16px;
-            border-radius: 4px;
-            font-size: 14px;
-            border: none;
-            cursor: pointer;
-            transition: opacity 0.2s;
-            width: 100%;
-          " onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">삭제</button>
+          <div style="display: flex; gap: 8px;">
+            <button class="delete-btn" data-id="${id}" style="
+              background: #dc2626;
+              color: #F2F2F2;
+              padding: 6px 16px;
+              border-radius: 4px;
+              font-size: 14px;
+              border: none;
+              cursor: pointer;
+              transition: opacity 0.2s;
+              flex: 1;
+            " onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">삭제</button>
+            <button class="compare-btn" data-id="${id}" style="
+              ${compareButtonStyle}
+              padding: 6px 16px;
+              border-radius: 4px;
+              font-size: 14px;
+              border: none;
+              cursor: pointer;
+              transition: opacity 0.2s;
+              flex: 1;
+            " onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">${compareButtonText}</button>
+          </div>
         `;
       }
     }
     
-    const isClickable = status === 'completed';
+    const isCompareMode = block.compareMode || false;
+    const isClickable = status === 'completed' && !isCompareMode;
     const cursorStyle = isClickable ? 'cursor: pointer;' : '';
     const hoverStyle = isClickable ? 'onmouseover="this.style.background=\'#F2CEA2\'" onmouseout="this.style.background=\'#F2F2F2\'"' : '';
+    
+    // 비교 모드일 때 어두운 스타일 적용
+    const blockBackground = isCompareMode ? '#E5E5E5' : '#F2F2F2';
+    const blockOpacity = isCompareMode ? '0.7' : '1';
+    const pointerEvents = isCompareMode ? 'pointer-events: none;' : '';
     
     return `
       <div class="news-block" data-id="${id}" style="
         border: 1px solid #BF9780;
         border-radius: 8px;
-        background: #F2F2F2;
+        background: ${blockBackground};
+        opacity: ${blockOpacity};
         transition: all 0.3s ease;
         width: 100%;
         overflow: hidden;
+        ${pointerEvents}
       ">
         <!-- 뉴스 내용 영역 -->
         <div class="news-content-area" data-id="${id}" style="
           padding: 12px;
           ${cursorStyle}
         " ${isClickable ? hoverStyle : ''}>
+          ${block.isComparison ? `
+          <div style="
+            background: #F2CEA2;
+            color: #1A1A1A;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 10px;
+            font-weight: 600;
+            margin-bottom: 6px;
+            display: inline-block;
+          ">비교분석</div>
+          ` : ''}
           <h3 style="
             color: #0D0D0D;
             font-weight: 500;
@@ -838,6 +876,16 @@ class AnalysisPanel {
         this.deleteNews(id);
       });
     });
+
+    // 비교하기 버튼
+    container.querySelectorAll('.compare-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = parseInt(btn.dataset.id);
+        console.log('비교하기 버튼 클릭, ID:', id, 'waitingForComparison:', this.waitingForComparison);
+        this.toggleCompareMode(id);
+      });
+    });
     
     // 뉴스 내용 영역 클릭 (완료된 것과 분석 중인 것)
     container.querySelectorAll('.news-content-area').forEach(contentArea => {
@@ -852,11 +900,21 @@ class AnalysisPanel {
       
       if (newsData) {
         if (newsData.status === 'completed') {
-          // 완료된 뉴스 - 결과 보기
+          // 완료된 뉴스 - 결과 보기 또는 비교 대상 선택
           contentArea.addEventListener('click', (e) => {
             e.stopPropagation();
-            console.log('완료된 뉴스 클릭, ID:', id);
-            this.showAnalysisResult(id);
+            console.log('완료된 뉴스 클릭, ID:', id, 'waitingForComparison:', this.waitingForComparison);
+            
+            // 비교 모드 대기 중인지 확인
+            if (this.waitingForComparison && parseInt(id) !== this.waitingForComparison) {
+              console.log('비교 분석 실행:', this.waitingForComparison, '->', parseInt(id));
+              // 비교 분석 실행
+              this.createComparisonAnalysis(this.waitingForComparison, parseInt(id));
+            } else {
+              console.log('일반 결과 보기:', id);
+              // 일반 결과 보기
+              this.showAnalysisResult(id);
+            }
           });
         }
         // 분석 중인 뉴스는 클릭 이벤트 없음 (타이핑 효과만 표시)
@@ -920,7 +978,7 @@ class AnalysisPanel {
           this.updateNewsStatus(id, 'analyzing', null, '⚡ AI가 기사의 신뢰성을 검증하고 있습니다...');
           
           // Gemini 분석 요청
-          const fullPrompt = this.generateAnalysisPrompt(block.title, block.content);
+          const fullPrompt = this.generateAnalysisPrompt(block.title, block.content, block.isComparison);
           
           console.log('Gemini로 분석 요청 전송, blockId:', id);
           chrome.runtime.sendMessage({
@@ -934,8 +992,12 @@ class AnalysisPanel {
   }
 
   // 분석 프롬프트 생성
-  generateAnalysisPrompt(title, content) {
+  generateAnalysisPrompt(title, content, isComparison = false) {
     const articleContent = `${title}\n${content}`;
+    
+    if (isComparison) {
+      return this.generateComparisonPrompt(articleContent);
+    }
     
     return `
 ## 역할
@@ -976,19 +1038,71 @@ class AnalysisPanel {
 ---
 
 ## 출력 형식
-반드시 다음 JSON 형식으로만 응답해주세요:
+반드시 다음 JSON 배열 형식으로만 응답해주세요:
 
-{
-  "진위": "판단 결과('가짜 뉴스' / '가짜일 가능성이 높은 뉴스' / '가짜일 가능성이 있는 뉴스' / '진짜 뉴스')",
-  "근거": "탐지된 조건 번호와 이름 (진짜 뉴스인 경우 빈 문자열)",
-  "분석": "위 근거들을 종합하여 기사의 어떤 부분이 왜 문제인지 혹은 신뢰할 수 있는지를 구체적으로 서술"
-}
+[
+  {
+    "instruction": "해당 기사는 진위 여부판단을 목적으로 수집되었습니다. 조건에 따라서 종합적으로 검토 후 판단 결과를 진위,근거,분석 항목으로 나누어 출력하세요.",
+    "input": "주어진 텍스트 전체",
+    "output": {
+      "진위": "판단 결과('가짜 뉴스' / '가짜일 가능성이 높은 뉴스' / '가짜일 가능성이 있는 뉴스' / '진짜 뉴스')가 여기에 위치합니다.",
+      "근거": "탐지된 중요도의 조건 번호와 이름이 위치합니다. 여러 개일 경우 번호를 붙여서 한 줄의 문자열로 나열합니다. 예시: 2-2. 근거 없는 의혹 제기",
+      "분석": "위 근거들을 종합하여 기사의 어떤 부분이 왜 문제인지 혹은 신뢰할 수 있는지를 구체적으로 서술",
+      "요약": "기사의 핵심 내용을 간결하면서 정확하게 요약합니다. 비교분석을 대비하여 핵심 내용 / 단어를 최대한 많이 포함합니다."
+    }
+  }
+]
 
 ---
 [뉴스 기사 본문]
 ${articleContent}
 ---`;
   }
+
+  // 비교분석용 프롬프트 생성
+  generateComparisonPrompt(comparisonContent) {
+    return `
+## 역할
+당신은 두 개의 뉴스 기사를 비교분석하는 **'뉴스 비교분석 전문가'**입니다. 주어진 두 뉴스의 관점, 내용, 신뢰도를 객관적으로 비교하여 분석해주세요.
+
+---
+
+### **비교분석 원칙**
+1. **내용 일치성 분석**: 두 뉴스가 같은 사실을 다루는지, 핵심 내용이 일치하는지 분석
+2. **관점 차이 분석**: 같은 사건을 다른 시각에서 보는지, 편향된 시각이 있는지 분석  
+3. **정보 정확성 비교**: 제시된 사실, 수치, 인용문 등이 서로 일치하는지 분석
+4. **종합 신뢰도 판단**: 두 뉴스를 종합했을 때의 전체적인 신뢰도 평가
+
+## 비교분석 방법론
+- 두 기사의 핵심 주장을 명확히 파악
+- 서로 상충하는 내용이나 일치하는 내용 식별
+- 각 기사의 근거와 출처의 신뢰성 비교
+- 감정적 표현이나 편향성 차이 분석
+- 정보의 완전성과 정확성 평가
+
+---
+
+## 출력 형식
+[
+  {
+    "instruction": "해당 기사들은 비교분석을 목적으로 수집되었습니다. 두 기사의 내용 일치성, 관점 차이, 신뢰도를 종합적으로 검토 후 판단 결과를 출력하세요.",
+    "input": "주어진 두 뉴스 텍스트 전체",
+    "output": {
+      "분석진행": "비교분석을 위한 단계별 추론 과정을 투명하게 작성하세요. 1단계: 두 기사의 핵심 주장 파악, 2단계: 내용 일치성 분석, 3단계: 관점 및 편향성 분석, 4단계: 신뢰도 종합 평가 등 최소 4개 단계로 체계적으로 분석하세요.",
+      "진위": "두 뉴스의 비교분석 결과 ('일치하는 진짜 뉴스' / '일부 차이가 있지만 신뢰할 수 있는 뉴스' / '상당한 차이가 있어 주의가 필요한 뉴스' / '상충되는 내용으로 추가 검증 필요')",
+      "근거": "두 뉴스 간의 일치점과 차이점, 신뢰도 차이의 구체적인 근거",
+      "분석": "두 뉴스의 비교분석 결과를 상세히 서술. 어떤 부분이 일치하고 어떤 부분이 다른지, 왜 그런 차이가 발생했는지 구체적으로 설명",
+      "요약": "두 뉴스의 핵심 내용과 주요 차이점을 간결하게 요약"
+    }
+  }
+]
+
+---
+[비교분석 대상 뉴스]
+${comparisonContent}
+---`;
+  }
+
 
   // 분석 결과 보기 모달
   showAnalysisResult(id) {
@@ -1379,9 +1493,11 @@ ${articleContent}
     `;
     
     const result = block.result;
+    const analysisProcess = result.분석진행 || 'N/A';
     const verdict = result.진위 || 'N/A';
     const evidence = result.근거 || 'N/A';
     const analysis = result.분석 || 'N/A';
+    const summary = result.요약 || 'N/A';
     
     modal.innerHTML = `
       <div class="modal-content" style="
@@ -1433,24 +1549,53 @@ ${articleContent}
           <p style="color: #737373; line-height: 1.5; background: #F2F2F2; border: 1px solid #BF9780; padding: 12px; border-radius: 8px;">${this.escapeHtml(evidence)}</p>
         </div>
         
-        <div>
+        <div style="margin-bottom: 16px;">
           <h3 style="color: #0D0D0D; font-weight: 600; margin-bottom: 8px;">상세 분석</h3>
           <p style="color: #737373; line-height: 1.5; background: #F2F2F2; border: 1px solid #BF9780; padding: 12px; border-radius: 8px;">${this.escapeHtml(analysis)}</p>
+        </div>
+        
+        <div style="margin-bottom: 16px;">
+          <h3 style="color: #0D0D0D; font-weight: 600; margin-bottom: 8px;">핵심 요약</h3>
+          <p style="color: #737373; line-height: 1.5; background: #F2CEA2; border: 1px solid #BF9780; padding: 12px; border-radius: 8px; font-weight: 500;">${this.escapeHtml(summary)}</p>
+        </div>
+        
+        <div style="text-align: center; margin-top: 20px;">
+          <button class="show-analysis-process" style="
+            background: #BF9780;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+          ">추론과정 확인</button>
         </div>
       </div>
     `;
     
-    // 닫기 이벤트
+    // 이벤트 리스너들
     const closeBtn = modal.querySelector('.close-modal');
+    const analysisProcessBtn = modal.querySelector('.show-analysis-process');
+    
     const closeModal = () => {
       modal.style.opacity = '0';
       setTimeout(() => modal.remove(), 300);
     };
     
+    // 닫기 이벤트
     closeBtn.addEventListener('click', closeModal);
     modal.addEventListener('click', (e) => {
       if (e.target === modal) closeModal();
     });
+
+    // 추론과정 확인 버튼 이벤트
+    if (analysisProcessBtn) {
+      analysisProcessBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.showAnalysisProcessModal(analysisProcess);
+      });
+    }
     
     // 호버 효과
     closeBtn.addEventListener('mouseenter', () => {
@@ -1461,6 +1606,104 @@ ${articleContent}
     });
     
     return modal;
+  }
+
+  // 분석진행 모달 표시
+  showAnalysisProcessModal(analysisProcess) {
+    const modal = document.createElement('div');
+    modal.className = 'analysis-process-modal';
+    modal.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(13,13,13,0.6);
+      z-index: 2147483649;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    `;
+
+    modal.innerHTML = `
+      <div class="modal-content" style="
+        background: #FAFAFA;
+        border-radius: 12px;
+        padding: 32px;
+        width: 90%;
+        max-width: 700px;
+        max-height: 85vh;
+        overflow-y: auto;
+        position: relative;
+        transform: scale(0.8);
+        transition: transform 0.3s ease;
+        border: 1px solid #BF9780;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+      ">
+        <button class="close-modal" style="
+          position: absolute;
+          top: 16px;
+          right: 16px;
+          background: none;
+          border: none;
+          font-size: 24px;
+          color: #737373;
+          cursor: pointer;
+          width: 32px;
+          height: 32px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 50%;
+          transition: background-color 0.2s;
+        ">&times;</button>
+        
+        <h2 style="color: #0D0D0D; font-size: 20px; font-weight: bold; margin-bottom: 20px; padding-right: 40px;">
+          🧠 AI 추론과정
+        </h2>
+        
+        <div style="
+          background: #F2F2F2;
+          border: 1px solid #BF9780;
+          border-radius: 8px;
+          padding: 20px;
+          line-height: 1.6;
+          color: #0D0D0D;
+          font-size: 14px;
+          white-space: pre-wrap;
+        ">${this.escapeHtml(analysisProcess)}</div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    // 애니메이션
+    setTimeout(() => {
+      modal.style.opacity = '1';
+      modal.querySelector('.modal-content').style.transform = 'scale(1)';
+    }, 10);
+
+    // 이벤트 리스너
+    const closeBtn = modal.querySelector('.close-modal');
+    const closeModal = () => {
+      modal.style.opacity = '0';
+      setTimeout(() => modal.remove(), 300);
+    };
+
+    closeBtn.addEventListener('click', closeModal);
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) closeModal();
+    });
+
+    // 호버 효과
+    closeBtn.addEventListener('mouseenter', () => {
+      closeBtn.style.backgroundColor = '#BF9780';
+    });
+    closeBtn.addEventListener('mouseleave', () => {
+      closeBtn.style.backgroundColor = 'transparent';
+    });
   }
 
   // 닫기 이벤트
@@ -1811,6 +2054,263 @@ ${articleContent}
       console.log('API 키 제거 오류:', error);
       localStorage.removeItem('gemini_api_key');
     }
+  }
+
+  // 비교 모드 토글
+  toggleCompareMode(id) {
+    const block = this.newsBlocks.get(id);
+    if (!block) return;
+
+    if (block.compareMode) {
+      // 비교 모드 해제
+      block.compareMode = false;
+      this.waitingForComparison = null; // 대기 상태도 초기화
+      this.updatePanel();
+    } else {
+      // 첫 사용 시 경고 메시지 표시
+      if (!this.hasShownComparisonWarning()) {
+        this.showComparisonWarning(() => {
+          // 경고 확인 후 비교 모드 활성화
+          this.activateCompareMode(id);
+        });
+        return;
+      }
+      
+      this.activateCompareMode(id);
+    }
+    
+    this.saveNewsBlocks();
+  }
+
+  // 비교 모드 활성화
+  activateCompareMode(id) {
+    const block = this.newsBlocks.get(id);
+    if (!block) return;
+    
+    block.compareMode = true;
+    this.updatePanel();
+    
+    // 다른 뉴스 블록들 중에서 선택할 수 있도록 안내
+    this.showCompareSelection(id);
+  }
+
+  // 비교할 뉴스 선택 안내
+  showCompareSelection(sourceId) {
+    const availableBlocks = Array.from(this.newsBlocks.values())
+      .filter(block => block.id !== sourceId && block.status === 'completed');
+    
+    if (availableBlocks.length === 0) {
+      alert('비교할 수 있는 다른 뉴스가 없습니다. 먼저 다른 뉴스를 분석해주세요.');
+      // 비교 모드 해제
+      const block = this.newsBlocks.get(sourceId);
+      if (block) {
+        block.compareMode = false;
+        this.updatePanel();
+        this.saveNewsBlocks();
+      }
+      return;
+    }
+    
+    // 비교 대기 상태 설정
+    this.waitingForComparison = sourceId;
+    
+    // 사용자에게 다른 뉴스 블록을 클릭하라고 안내
+    this.showCompareInstructions(sourceId);
+  }
+
+  // 비교 경고를 표시했는지 확인
+  hasShownComparisonWarning() {
+    return localStorage.getItem('factcheck_comparison_warning_shown') === 'true';
+  }
+
+  // 비교 경고 표시 상태 저장
+  setComparisonWarningShown() {
+    localStorage.setItem('factcheck_comparison_warning_shown', 'true');
+  }
+
+  // 비교 분석 첫 사용 경고 모달
+  showComparisonWarning(onConfirm) {
+    const modal = document.createElement('div');
+    modal.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(13,13,13,0.6);
+      z-index: 2147483649;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    `;
+
+    modal.innerHTML = `
+      <div style="
+        background: #FAFAFA;
+        border-radius: 16px;
+        padding: 32px;
+        width: 90%;
+        max-width: 500px;
+        position: relative;
+        transform: scale(0.95);
+        transition: all 0.3s ease;
+        border: 1px solid #BF9780;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+      ">
+        <div style="
+          background: #F2CEA2;
+          color: #1A1A1A;
+          padding: 8px 16px;
+          border-radius: 8px;
+          font-size: 14px;
+          font-weight: 600;
+          margin-bottom: 20px;
+          text-align: center;
+        ">⚠️ 비교분석 기능 안내</div>
+        
+        <h3 style="
+          color: #0D0D0D;
+          font-size: 18px;
+          font-weight: 600;
+          margin-bottom: 16px;
+          text-align: center;
+        ">비교분석을 처음 사용하시는군요!</h3>
+        
+        <div style="color: #737373; line-height: 1.6; margin-bottom: 24px;">
+          <p style="margin-bottom: 12px;">비교분석 기능은 두 개의 뉴스를 선택하여 다음과 같은 분석을 제공합니다:</p>
+          <ul style="margin-left: 20px; margin-bottom: 12px;">
+            <li>• 서로 다른 관점의 비교</li>
+            <li>• 내용의 일치점과 차이점 분석</li>
+            <li>• 각 뉴스의 신뢰도 비교</li>
+          </ul>
+          <p style="color: #BF9780; font-weight: 500;">첫 번째 뉴스를 선택한 후, 비교할 두 번째 뉴스를 클릭하면 자동으로 비교분석이 시작됩니다.</p>
+        </div>
+        
+        <div style="display: flex; gap: 12px;">
+          <button id="cancel-comparison" style="
+            flex: 1;
+            padding: 12px 24px;
+            border: 1px solid #BF9780;
+            background: transparent;
+            color: #BF9780;
+            border-radius: 8px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+          ">취소</button>
+          <button id="confirm-comparison" style="
+            flex: 1;
+            padding: 12px 24px;
+            background: #BF9780;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+          ">확인</button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    // 애니메이션
+    setTimeout(() => {
+      modal.style.opacity = '1';
+      modal.querySelector('div').style.transform = 'scale(1)';
+    }, 10);
+
+    // 이벤트 리스너
+    const confirmBtn = modal.querySelector('#confirm-comparison');
+    const cancelBtn = modal.querySelector('#cancel-comparison');
+
+    const closeModal = () => {
+      modal.style.opacity = '0';
+      setTimeout(() => modal.remove(), 300);
+    };
+
+    confirmBtn.addEventListener('click', () => {
+      this.setComparisonWarningShown();
+      closeModal();
+      onConfirm();
+    });
+
+    cancelBtn.addEventListener('click', () => {
+      closeModal();
+    });
+
+    // 호버 효과
+    confirmBtn.addEventListener('mouseenter', () => {
+      confirmBtn.style.background = '#A67B5B';
+    });
+    confirmBtn.addEventListener('mouseleave', () => {
+      confirmBtn.style.background = '#BF9780';
+    });
+
+    cancelBtn.addEventListener('mouseenter', () => {
+      cancelBtn.style.background = '#BF9780';
+      cancelBtn.style.color = 'white';
+    });
+    cancelBtn.addEventListener('mouseleave', () => {
+      cancelBtn.style.background = 'transparent';
+      cancelBtn.style.color = '#BF9780';
+    });
+  }
+
+  // 비교 안내 메시지 표시
+  showCompareInstructions(sourceId) {
+    const sourceBlock = this.newsBlocks.get(sourceId);
+    alert(`"${sourceBlock.title}" 뉴스와 비교할 다른 뉴스를 클릭하세요.\n\n취소하려면 취소 버튼을 클릭하세요.`);
+  }
+
+  // 비교 분석 실행
+  createComparisonAnalysis(sourceId, targetId) {
+    const sourceBlock = this.newsBlocks.get(sourceId);
+    const targetBlock = this.newsBlocks.get(targetId);
+    
+    if (!sourceBlock || !targetBlock) return;
+
+    // 비교 분석 블록 생성
+    const comparisonId = Date.now();
+    const comparisonBlock = {
+      id: comparisonId,
+      title: `[비교분석] ${sourceBlock.title} vs ${targetBlock.title}`,
+      url: '',
+      content: `비교 대상 1: ${sourceBlock.title}\n${sourceBlock.content || ''}\n\n비교 대상 2: ${targetBlock.title}\n${targetBlock.content || ''}`,
+      status: 'pending',
+      result: null,
+      progress: '',
+      isComparison: true,
+      sourceNews: {
+        id: sourceId,
+        title: sourceBlock.title,
+        content: sourceBlock.content || '',
+        result: sourceBlock.result
+      },
+      targetNews: {
+        id: targetId,
+        title: targetBlock.title,
+        content: targetBlock.content || '',
+        result: targetBlock.result
+      }
+    };
+
+    // 비교 모드 해제 및 대기 상태 초기화
+    sourceBlock.compareMode = false;
+    this.waitingForComparison = null;
+
+    // 비교 분석 블록 추가
+    this.newsBlocks.set(comparisonId, comparisonBlock);
+    this.saveNewsBlocks();
+    this.updatePanel();
+
+    console.log('비교 분석 블록 생성됨:', comparisonBlock);
+    
+    // 비교 분석 바로 시작
+    this.startAnalysis(comparisonId);
   }
 
   // 분석 진행 상황 업데이트 (외부에서 호출)
