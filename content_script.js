@@ -24,9 +24,14 @@ function initialize() {
   // 뉴스 데이터 추출 및 하이라이트
   extractNewsData();
   
-  // 추출된 데이터가 있다면 패널에 뉴스 블록 추가
+  // 추출된 데이터가 있다면 패널에 추가
   if (extractedData.length > 0) {
     addNewsToPanel();
+  } else {
+    // 뉴스 데이터가 없어도 플로팅 버튼 항상 표시 설정이 켜져있다면 빈 패널과 플로팅 버튼 생성
+    if (getAlwaysShowFloatingButtonSetting()) {
+      createEmptyPanelWithFloatingButton();
+    }
   }
 }
 
@@ -115,6 +120,32 @@ function extractNewsData() {
 }
 
 /**
+ * 자동 열기 설정 확인
+ */
+function getAutoOpenSetting() {
+  try {
+    const setting = localStorage.getItem('factcheck_auto_open');
+    return setting !== null ? JSON.parse(setting) : true; // 기본값: true
+  } catch (error) {
+    console.error('Failed to get auto open setting:', error);
+    return true;
+  }
+}
+
+/**
+ * 플로팅 버튼 항상 표시 설정 확인
+ */
+function getAlwaysShowFloatingButtonSetting() {
+  try {
+    const setting = localStorage.getItem('factcheck_always_show_floating_button');
+    return setting !== null ? JSON.parse(setting) : false; // 기본값: false
+  } catch (error) {
+    console.error('Failed to get always show floating button setting:', error);
+    return false;
+  }
+}
+
+/**
  * 패널에 뉴스 블록 추가
  */
 function addNewsToPanel() {
@@ -153,10 +184,98 @@ function addNewsToPanel() {
     // 현재 뉴스로 설정 (분석된 뉴스 리스트에 추가하지 않음)
     analysisPanel.setCurrentNews(title, url, content);
     console.log('현재 뉴스가 패널에 설정되었습니다.');
+    
+    // 자동 열기 설정 확인 후 패널 표시
+    if (getAutoOpenSetting()) {
+      console.log('자동 열기 설정이 활성화되어 패널을 표시합니다.');
+      analysisPanel.show();
+    } else {
+      console.log('자동 열기 설정이 비활성화되어 패널을 숨김 상태로 유지합니다.');
+      
+      // "항상 플로팅 버튼 표시" 설정이 켜져있으면 플로팅 버튼 생성
+      if (getAlwaysShowFloatingButtonSetting()) {
+        console.log('항상 플로팅 버튼 표시 설정이 활성화되어 플로팅 버튼을 생성합니다.');
+        analysisPanel.createFloatingButton();
+      }
+    }
   } else {
     console.error('AnalysisPanel 인스턴스를 찾을 수 없습니다.');
   }
 }
+
+
+
+/**
+ * 빈 패널 생성 (뉴스 데이터가 없을 때)
+ */
+function createEmptyPanel() {
+  // AnalysisPanel 클래스가 로드되었는지 확인
+  if (typeof window.AnalysisPanel === 'undefined') {
+    console.error('AnalysisPanel 클래스가 로드되지 않았습니다.');
+    return null;
+  }
+  
+  const analysisPanel = new window.AnalysisPanel();
+  const panel = analysisPanel.create();
+  
+  // 패널에 인스턴스 참조 저장
+  if (panel) {
+    panel.__analysisPanel = analysisPanel;
+    // 빈 상태로 설정 (뉴스 데이터 없음)
+    analysisPanel.setCurrentNews('뉴스를 찾을 수 없음', window.location.href, '이 페이지에서 분석할 수 있는 뉴스 콘텐츠를 찾을 수 없습니다.');
+  }
+  
+  return panel;
+}
+
+/**
+ * 빈 패널과 플로팅 버튼 생성 (뉴스 데이터 없이 항상 표시 설정이 켜진 경우)
+ */
+function createEmptyPanelWithFloatingButton() {
+  const panel = createEmptyPanel();
+  if (panel && panel.__analysisPanel) {
+    // 패널은 숨긴 상태로 생성하고 플로팅 버튼만 표시
+    panel.__analysisPanel.hide();
+    // AnalysisPanel의 기존 플로팅 버튼 생성 메서드 사용
+    panel.__analysisPanel.createFloatingButton();
+    console.log('뉴스 데이터가 없지만 항상 표시 설정에 따라 플로팅 버튼을 생성했습니다.');
+  }
+}
+
+/**
+ * 플로팅 버튼 가시성 업데이트 (설정 변경 시 호출)
+ */
+function updateFloatingButtonVisibility() {
+  const hasNewsData = extractedData.length > 0;
+  const alwaysShow = getAlwaysShowFloatingButtonSetting();
+  const shouldShow = hasNewsData || alwaysShow;
+  
+  // AnalysisPanel의 플로팅 버튼 확인
+  const existingButton = document.getElementById('floating-news-analysis-btn');
+  const existingPanel = document.getElementById('news-analysis-panel');
+  
+  if (shouldShow && !existingButton) {
+    // 표시해야 하는데 버튼이 없으면 생성
+    if (hasNewsData) {
+      // 뉴스 데이터가 있으면 패널과 함께 생성
+      if (!existingPanel) {
+        addNewsToPanel();
+      }
+    } else {
+      // 뉴스 데이터가 없으면 빈 패널과 플로팅 버튼 생성
+      createEmptyPanelWithFloatingButton();
+    }
+    console.log('설정 변경으로 플로팅 버튼을 표시합니다.');
+  } else if (!shouldShow && existingButton) {
+    // 숨겨야 하는데 버튼이 있으면 제거
+    existingButton.remove();
+    console.log('설정 변경으로 플로팅 버튼을 숨깁니다.');
+  }
+}
+
+// 전역 함수로 설정하여 AnalysisPanel에서 접근 가능하도록
+window.updateFloatingButtonVisibility = updateFloatingButtonVisibility;
+window.createEmptyPanel = createEmptyPanel;
 
 /**
  * Gemini로 분석 요청을 보내는 함수

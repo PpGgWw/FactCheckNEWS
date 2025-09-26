@@ -46,8 +46,8 @@ class AnalysisPanel {
         height: 980px;
         border-radius: 20px;
       `}
-      background: #FAFAFA;
-      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(191, 151, 128, 0.1);
+      background: #E8E8E8;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(191, 151, 128, 0.15);
       z-index: 2147483646;
       border: 1px solid rgba(191, 151, 128, 0.3);
       transform: ${isMobile ? 'translateY(100%)' : 'translateX(120%)'};
@@ -67,13 +67,33 @@ class AnalysisPanel {
     // 초기 컨텐츠 렌더링
     this.renderPanel(panelContainer);
     
-    // 부드러운 애니메이션 시작
-    requestAnimationFrame(() => {
-      panelContainer.style.transform = 'translateX(0) translateY(0)';
-      panelContainer.style.opacity = '1';
-    });
+    // 패널을 숨겨진 상태로 유지 (플로팅 버튼 클릭시에만 표시)
     
     return panelContainer;
+  }
+
+  // 패널 표시
+  show() {
+    const panel = document.getElementById(this.panelId);
+    if (panel) {
+      // display: none 상태에서 display: flex로 변경
+      panel.style.display = 'flex';
+      
+      requestAnimationFrame(() => {
+        panel.style.transform = 'translateX(0) translateY(0)';
+        panel.style.opacity = '1';
+      });
+    }
+  }
+
+  // 패널 숨기기
+  hide() {
+    const panel = document.getElementById(this.panelId);
+    if (panel) {
+      const isMobile = window.innerWidth <= 768;
+      panel.style.transform = isMobile ? 'translateY(100%)' : 'translateX(120%)';
+      panel.style.opacity = '0';
+    }
   }
 
   // 반응형 리사이즈 리스너 추가
@@ -132,7 +152,7 @@ class AnalysisPanel {
       <!-- 현재 뉴스 블록 (고정) -->
       <div id="current-news-section" style="
         padding: 20px;
-        background: linear-gradient(to bottom, #FAFAFA, #F5F5F5);
+        background: linear-gradient(to bottom, #E8E8E8, #DCDCDC);
         border-bottom: 1px solid rgba(229, 229, 229, 0.8);
         flex-shrink: 0;
       ">
@@ -163,12 +183,12 @@ class AnalysisPanel {
         display: flex;
         flex-direction: column;
         overflow: hidden;
-        background: #FAFAFA;
+        background: #E8E8E8;
       ">
         <div style="
           padding: 20px 20px 12px 20px;
           flex-shrink: 0;
-          background: linear-gradient(to bottom, #FAFAFA, rgba(250, 250, 250, 0.95));
+          background: linear-gradient(to bottom, #E8E8E8, rgba(232, 232, 232, 0.95));
           border-bottom: 1px solid rgba(229, 229, 229, 0.3);
         ">
           <div style="display: flex; align-items: center; justify-content: space-between;">
@@ -197,7 +217,7 @@ class AnalysisPanel {
           overflow-y: auto;
           overflow-x: hidden;
           padding: 16px 20px 20px 20px;
-          background: #FAFAFA;
+          background: #E8E8E8;
         ">
           <div id="analyzed-news-container" style="
             display: flex; 
@@ -278,7 +298,7 @@ class AnalysisPanel {
               </div>
               
               <!-- Action Buttons -->
-              <button id="Settings" style="
+              <button id="settings-btn" style="
                 width: 36px;
                 height: 36px;
                 background: rgba(255, 255, 255, 0.15);
@@ -292,7 +312,12 @@ class AnalysisPanel {
                 font-size: 16px;
                 backdrop-filter: blur(10px);
               " onmouseover="this.style.background='rgba(255, 255, 255, 0.25)'; this.style.transform='scale(1.05)';" 
-                 onmouseout="this.style.background='rgba(255, 255, 255, 0.15)'; this.style.transform='scale(1)';">⚙️</button>
+                 onmouseout="this.style.background='rgba(255, 255, 255, 0.15)'; this.style.transform='scale(1)';">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
+                  <circle cx="12" cy="12" r="3"/>
+                </svg>
+              </button>
               
               <button id="close-panel" style="
                 width: 36px;
@@ -646,7 +671,7 @@ class AnalysisPanel {
             border: 1px solid #E5E5E5;
             border-radius: 4px;
             padding: 6px;
-            background: #FAFAFA;
+            background: #F0F0F0;
             scrollbar-width: thin;
             scrollbar-color: #BF9780 #F0F0F0;
           " onscroll="this.setAttribute('data-user-scrolled', this.scrollTop < this.scrollHeight - this.offsetHeight ? 'true' : 'false')">분석을 시작합니다...</div>
@@ -1220,7 +1245,7 @@ ${comparisonContent}
     const modalContent = document.createElement('div');
     modalContent.className = 'modal-content';
     modalContent.style.cssText = `
-      background: #FAFAFA;
+      background: #E8E8E8;
       border-radius: 16px;
       padding: 0;
       width: 90%;
@@ -1675,7 +1700,7 @@ ${comparisonContent}
 
     modal.innerHTML = `
       <div class="modal-content" style="
-        background: #FAFAFA;
+        background: #E8E8E8;
         border-radius: 12px;
         padding: 32px;
         width: 90%;
@@ -1776,23 +1801,44 @@ ${comparisonContent}
 
     const floatingBtn = document.createElement('button');
     floatingBtn.id = 'floating-news-analysis-btn';
-    floatingBtn.innerHTML = '🔍';
+    floatingBtn.innerHTML = `
+      <div style="
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 100%;
+        height: 100%;
+        position: relative;
+      ">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8"></circle>
+          <path d="m21 21-4.35-4.35"></path>
+        </svg>
+      </div>
+    `;
     floatingBtn.style.cssText = `
       position: fixed;
       bottom: 20px;
       right: 20px;
-      width: 60px;
-      height: 60px;
+      width: 64px;
+      height: 64px;
       border-radius: 50%;
-      background: linear-gradient(135deg, #BF9780, #BF9780);
+      background: linear-gradient(135deg, #BF9780 0%, #A67F66 50%, #8B6B52 100%);
       color: white;
       border: none;
-      font-size: 24px;
       cursor: pointer;
-      box-shadow: 0 4px 12px #BF9780;
+      box-shadow: 
+        0 8px 25px rgba(191, 151, 128, 0.4),
+        0 4px 12px rgba(0, 0, 0, 0.15),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
       z-index: 999998;
       transform: scale(0);
-      transition: all 0.3s ease;
+      transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      backdrop-filter: blur(10px);
+      border: 2px solid rgba(255, 255, 255, 0.1);
     `;
 
     document.body.appendChild(floatingBtn);
@@ -1803,33 +1849,95 @@ ${comparisonContent}
 
     // 호버 효과
     floatingBtn.addEventListener('mouseenter', () => {
-      floatingBtn.style.transform = 'scale(1.1)';
-      floatingBtn.style.boxShadow = '0 6px 20px #BF9780';
+      floatingBtn.style.transform = 'scale(1.15)';
+      floatingBtn.style.boxShadow = `
+        0 12px 35px rgba(191, 151, 128, 0.6),
+        0 8px 20px rgba(0, 0, 0, 0.2),
+        inset 0 1px 0 rgba(255, 255, 255, 0.3)
+      `;
+      floatingBtn.style.background = 'linear-gradient(135deg, #D4B29A 0%, #BF9780 50%, #A67F66 100%)';
     });
 
     floatingBtn.addEventListener('mouseleave', () => {
       floatingBtn.style.transform = 'scale(1)';
-      floatingBtn.style.boxShadow = '0 4px 12px #BF9780';
+      floatingBtn.style.boxShadow = `
+        0 8px 25px rgba(191, 151, 128, 0.4),
+        0 4px 12px rgba(0, 0, 0, 0.15),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2)
+      `;
+      floatingBtn.style.background = 'linear-gradient(135deg, #BF9780 0%, #A67F66 50%, #8B6B52 100%)';
+    });
+
+    // 클릭 효과
+    floatingBtn.addEventListener('mousedown', () => {
+      floatingBtn.style.transform = 'scale(1.05)';
+    });
+
+    floatingBtn.addEventListener('mouseup', () => {
+      floatingBtn.style.transform = 'scale(1.15)';
     });
 
     // 클릭 시 패널 다시 열기
     floatingBtn.addEventListener('click', () => {
+      console.log('플로팅 버튼 클릭됨');
       const panel = document.getElementById('news-analysis-panel');
+      
       if (panel) {
-        panel.style.display = 'block';
-        panel.style.transform = 'translateX(0)';
-        panel.style.opacity = '1';
-        floatingBtn.style.transform = 'scale(0)';
-        setTimeout(() => {
-          floatingBtn.remove();
-        }, 300);
+        console.log('패널 발견:', panel);
+        console.log('패널 __analysisPanel:', panel.__analysisPanel);
+        
+        if (panel.__analysisPanel) {
+          // 기존 패널이 있고 인스턴스도 정상인 경우
+          console.log('기존 패널 표시 시도');
+          panel.__analysisPanel.show();
+          floatingBtn.style.transform = 'scale(0)';
+          setTimeout(() => {
+            floatingBtn.remove();
+          }, 300);
+        } else {
+          // 패널은 있지만 인스턴스가 손상된 경우, 패널을 제거하고 새로 생성
+          console.log('패널 인스턴스가 손상됨, 패널 제거 후 새로 생성');
+          panel.remove();
+          
+          if (typeof window.createEmptyPanel === 'function') {
+            const newPanel = window.createEmptyPanel();
+            if (newPanel && newPanel.__analysisPanel) {
+              newPanel.__analysisPanel.show();
+              floatingBtn.style.transform = 'scale(0)';
+              setTimeout(() => {
+                floatingBtn.remove();
+              }, 300);
+            } else {
+              console.error('새 패널 생성 실패');
+            }
+          } else {
+            console.error('createEmptyPanel 함수를 찾을 수 없음');
+          }
+        }
+      } else {
+        // 패널이 없는 경우 (뉴스 데이터가 없을 때)
+        console.log('플로팅 버튼 클릭: 패널이 없어서 빈 패널을 생성합니다.');
+        if (typeof window.createEmptyPanel === 'function') {
+          const newPanel = window.createEmptyPanel();
+          if (newPanel && newPanel.__analysisPanel) {
+            newPanel.__analysisPanel.show();
+            floatingBtn.style.transform = 'scale(0)';
+            setTimeout(() => {
+              floatingBtn.remove();
+            }, 300);
+          } else {
+            console.error('새 패널 생성 실패');
+          }
+        } else {
+          console.error('createEmptyPanel 함수를 찾을 수 없음');
+        }
       }
     });
   }
 
   // 설정 이벤트 (API 키 관리)
   attachSettingsEvent(panel) {
-    const settingsBtn = panel.querySelector('#Settings');
+    const settingsBtn = panel.querySelector('#settings-btn');
     
     if (settingsBtn) {
       settingsBtn.addEventListener('click', (e) => {
@@ -1838,14 +1946,14 @@ ${comparisonContent}
         
         console.log('Settings button clicked'); // 디버깅용
         
-        if (document.getElementById('api-key-input-modal')) {
-          console.log('Modal already exists'); // 디버깅용
+        if (document.getElementById('settings-panel-modal')) {
+          console.log('Settings panel already exists'); // 디버깅용
           return;
         }
         
         this.checkSavedApiKey().then((savedApiKey) => {
-          console.log('Creating settings modal with API key:', savedApiKey ? 'exists' : 'none'); // 디버깅용
-          const modal = this.createSettingsModal(savedApiKey);
+          console.log('Creating settings panel with API key:', savedApiKey ? 'exists' : 'none'); // 디버깅용
+          const modal = this.createSettingsPanel(savedApiKey);
           document.body.appendChild(modal);
           
           // 강제로 스타일 적용
@@ -1854,15 +1962,185 @@ ${comparisonContent}
           
           setTimeout(() => {
             modal.style.opacity = '1';
-            const modalContent = modal.querySelector('.modal-content');
+            const modalContent = modal.querySelector('.settings-panel-content');
             if (modalContent) {
               modalContent.style.transform = 'scale(1)';
             }
-            console.log('Modal animation completed'); // 디버깅용
+            console.log('Settings panel animation completed'); // 디버깅용
           }, 10);
         });
       });
     }
+  }
+
+  // 새로운 설정 패널 생성
+  createSettingsPanel(savedApiKey) {
+    const modal = document.createElement('div');
+    modal.id = 'settings-panel-modal';
+    modal.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(13,13,13,0.6);
+      z-index: 2147483648;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    `;
+    
+    const isApiKeySet = !!savedApiKey;
+    const maskedKey = savedApiKey ? `${savedApiKey.substring(0, 8)}...${savedApiKey.substring(savedApiKey.length - 4)}` : '';
+    
+    const modalContent = document.createElement('div');
+    modalContent.className = 'settings-panel-content';
+    modalContent.style.cssText = `
+      background: #F2F2F2;
+      border-radius: 12px;
+      padding: 32px;
+      width: 480px;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      transform: scale(0.8);
+      transition: all 0.3s ease;
+    `;
+    
+    modalContent.innerHTML = `
+      <button class="close-modal" style="
+        position: absolute; 
+        top: 12px; 
+        right: 12px; 
+        background: none; 
+        border: none; 
+        font-size: 24px; 
+        color: #737373; 
+        cursor: pointer; 
+        width: 32px; 
+        height: 32px; 
+        display: flex; 
+        align-items: center; 
+        justify-content: center; 
+        border-radius: 50%; 
+        transition: background-color 0.2s;
+      ">&times;</button>
+      
+      <h2 style="
+        font-size: 24px; 
+        font-weight: bold; 
+        margin-bottom: 32px; 
+        text-align: center; 
+        color: #0D0D0D;
+      ">설정</h2>
+      
+      <!-- API 키 설정 -->
+      <div style="
+        display: flex; 
+        align-items: center; 
+        justify-content: space-between; 
+        padding: 16px 0; 
+        border-bottom: 1px solid #E5E5E5;
+      ">
+        <div>
+          <div style="
+            font-size: 16px; 
+            font-weight: 600; 
+            color: #0D0D0D; 
+            margin-bottom: 4px;
+          ">API 키 설정</div>
+          <div style="
+            font-size: 13px; 
+            color: #737373;
+          ">${isApiKeySet ? `설정됨: ${maskedKey}` : '설정되지 않음'}</div>
+        </div>
+        <button class="api-key-btn" style="
+          background: #BF9780; 
+          color: white; 
+          padding: 8px 16px; 
+          border-radius: 6px; 
+          font-weight: 600; 
+          border: none; 
+          cursor: pointer; 
+          transition: background-color 0.2s; 
+          font-size: 14px;
+        ">${isApiKeySet ? '수정' : '설정'}</button>
+      </div>
+      
+      <!-- 패널 자동 열기 -->
+      <div style="
+        display: flex; 
+        align-items: center; 
+        justify-content: space-between; 
+        padding: 16px 0;
+        border-bottom: 1px solid #E5E5E5;
+      ">
+        <div>
+          <div style="
+            font-size: 16px; 
+            font-weight: 600; 
+            color: #0D0D0D; 
+            margin-bottom: 4px;
+          ">패널 자동 열기</div>
+          <div style="
+            font-size: 13px; 
+            color: #737373;
+          ">뉴스 페이지 방문 시 자동으로 패널 표시</div>
+        </div>
+        <button class="auto-open-btn" style="
+          background: ${this.getAutoOpenSetting() ? '#10B981' : '#9CA3AF'}; 
+          color: white; 
+          padding: 8px 16px; 
+          border-radius: 6px; 
+          font-weight: 600; 
+          border: none; 
+          cursor: pointer; 
+          transition: background-color 0.2s; 
+          font-size: 14px;
+        ">${this.getAutoOpenSetting() ? '켜짐' : '꺼짐'}</button>
+      </div>
+      
+      <!-- 플로팅 버튼 항상 표시 -->
+      <div style="
+        display: flex; 
+        align-items: center; 
+        justify-content: space-between; 
+        padding: 16px 0;
+      ">
+        <div>
+          <div style="
+            font-size: 16px; 
+            font-weight: 600; 
+            color: #0D0D0D; 
+            margin-bottom: 4px;
+          ">플로팅 버튼 항상 표시</div>
+          <div style="
+            font-size: 13px; 
+            color: #737373;
+          ">뉴스 페이지가 아니어도 플로팅 버튼 표시</div>
+        </div>
+        <button class="always-show-floating-btn" style="
+          background: ${this.getAlwaysShowFloatingButtonSetting() ? '#10B981' : '#9CA3AF'}; 
+          color: white; 
+          padding: 8px 16px; 
+          border-radius: 6px; 
+          font-weight: 600; 
+          border: none; 
+          cursor: pointer; 
+          transition: background-color 0.2s; 
+          font-size: 14px;
+        ">${this.getAlwaysShowFloatingButtonSetting() ? '켜짐' : '꺼짐'}</button>
+      </div>
+    `;
+    
+    modal.appendChild(modalContent);
+    
+    // 이벤트 연결
+    this.attachSettingsPanelEvents(modal, modalContent, savedApiKey);
+    
+    return modal;
   }
 
   // 설정 모달 생성
@@ -1929,6 +2207,223 @@ ${comparisonContent}
     this.attachModalEvents(modal, modalContent, savedApiKey);
     
     return modal;
+  }
+
+  // 설정 패널 이벤트 연결
+  attachSettingsPanelEvents(modal, modalContent, savedApiKey) {
+    const closeModal = () => {
+      modal.style.opacity = '0';
+      setTimeout(() => modal.remove(), 300);
+    };
+    
+    // 닫기 버튼
+    const closeBtn = modalContent.querySelector('.close-modal');
+    closeBtn.addEventListener('click', closeModal);
+    closeBtn.addEventListener('mouseenter', () => {
+      closeBtn.style.backgroundColor = '#BF9780';
+    });
+    closeBtn.addEventListener('mouseleave', () => {
+      closeBtn.style.backgroundColor = 'transparent';
+    });
+    
+    // 배경 클릭으로 닫기
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) closeModal();
+    });
+    
+    // API 키 설정 버튼
+    const apiKeyBtn = modalContent.querySelector('.api-key-btn');
+    if (apiKeyBtn) {
+      apiKeyBtn.addEventListener('click', () => {
+        closeModal();
+        // API 키 모달 열기
+        setTimeout(() => {
+          if (document.getElementById('api-key-input-modal')) {
+            return;
+          }
+          
+          const apiModal = this.createApiKeyModal(savedApiKey);
+          document.body.appendChild(apiModal);
+          
+          apiModal.style.display = 'flex';
+          apiModal.style.visibility = 'visible';
+          
+          setTimeout(() => {
+            apiModal.style.opacity = '1';
+            const apiModalContent = apiModal.querySelector('.modal-content');
+            if (apiModalContent) {
+              apiModalContent.style.transform = 'scale(1)';
+            }
+          }, 10);
+        }, 100);
+      });
+      
+      apiKeyBtn.addEventListener('mouseenter', () => {
+        apiKeyBtn.style.backgroundColor = '#A68570';
+      });
+      apiKeyBtn.addEventListener('mouseleave', () => {
+        apiKeyBtn.style.backgroundColor = '#BF9780';
+      });
+    }
+    
+    // 패널 자동 열기 토글 버튼
+    const autoOpenBtn = modalContent.querySelector('.auto-open-btn');
+    if (autoOpenBtn) {
+      autoOpenBtn.addEventListener('click', () => {
+        const currentSetting = this.getAutoOpenSetting();
+        const newSetting = !currentSetting;
+        this.setAutoOpenSetting(newSetting);
+        
+        // 버튼 상태 업데이트
+        autoOpenBtn.style.backgroundColor = newSetting ? '#10B981' : '#9CA3AF';
+        autoOpenBtn.textContent = newSetting ? '켜짐' : '꺼짐';
+      });
+      
+      autoOpenBtn.addEventListener('mouseenter', () => {
+        const currentSetting = this.getAutoOpenSetting();
+        autoOpenBtn.style.backgroundColor = currentSetting ? '#0EA16F' : '#6B7280';
+      });
+      autoOpenBtn.addEventListener('mouseleave', () => {
+        const currentSetting = this.getAutoOpenSetting();
+        autoOpenBtn.style.backgroundColor = currentSetting ? '#10B981' : '#9CA3AF';
+      });
+    }
+    
+    // 플로팅 버튼 항상 표시 토글 버튼
+    const alwaysShowFloatingBtn = modalContent.querySelector('.always-show-floating-btn');
+    if (alwaysShowFloatingBtn) {
+      alwaysShowFloatingBtn.addEventListener('click', () => {
+        const currentSetting = this.getAlwaysShowFloatingButtonSetting();
+        const newSetting = !currentSetting;
+        this.setAlwaysShowFloatingButtonSetting(newSetting);
+        
+        // 버튼 상태 업데이트
+        alwaysShowFloatingBtn.style.backgroundColor = newSetting ? '#10B981' : '#9CA3AF';
+        alwaysShowFloatingBtn.textContent = newSetting ? '켜짐' : '꺼짐';
+        
+        // 플로팅 버튼 즉시 반영
+        if (typeof window.updateFloatingButtonVisibility === 'function') {
+          window.updateFloatingButtonVisibility();
+        }
+      });
+      
+      alwaysShowFloatingBtn.addEventListener('mouseenter', () => {
+        const currentSetting = this.getAlwaysShowFloatingButtonSetting();
+        alwaysShowFloatingBtn.style.backgroundColor = currentSetting ? '#0EA16F' : '#6B7280';
+      });
+      alwaysShowFloatingBtn.addEventListener('mouseleave', () => {
+        const currentSetting = this.getAlwaysShowFloatingButtonSetting();
+        alwaysShowFloatingBtn.style.backgroundColor = currentSetting ? '#10B981' : '#9CA3AF';
+      });
+    }
+  }
+
+  // API 키 모달 생성 (별도)
+  createApiKeyModal(savedApiKey) {
+    const modal = document.createElement('div');
+    modal.id = 'api-key-input-modal';
+    modal.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(13,13,13,0.6);
+      z-index: 2147483648;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    `;
+    
+    const isEdit = !!savedApiKey;
+    const maskedKey = savedApiKey ? `${savedApiKey.substring(0, 8)}...${savedApiKey.substring(savedApiKey.length - 4)}` : '';
+    
+    const modalContent = document.createElement('div');
+    modalContent.className = 'modal-content';
+    modalContent.style.cssText = `
+      background: #F2F2F2;
+      border-radius: 12px;
+      padding: 32px;
+      width: 560px;
+      height: 270px;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      transform: scale(0.8);
+      transition: all 0.3s ease;
+    `;
+    
+    if (isEdit) {
+      modalContent.innerHTML = `
+        <button class="close-modal" style="position: absolute; top: 12px; right: 12px; background: none; border: none; font-size: 24px; color: #737373; cursor: pointer; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: background-color 0.2s;">&times;</button>
+        <h2 style="font-size: 24px; font-weight: bold; margin-bottom: 32px; text-align: center; color: #0D0D0D;">API 키 설정</h2>
+        <div style="background: #F2F2F2; border: 2px solid #BF9780; border-radius: 8px; padding: 16px 20px; margin-bottom: 24px; flex: 1; display: flex; align-items: center; justify-content: center;">
+          <span style="font-family: monospace; font-size: 16px; color: #0D0D0D;">${maskedKey}</span>
+        </div>
+        <div style="display: flex; gap: 12px;">
+          <button class="edit-key-btn" style="background: #BF9780; color: white; padding: 16px 32px; border-radius: 8px; font-weight: 600; border: none; cursor: pointer; flex: 1; transition: background-color 0.2s; font-size: 16px;">수정</button>
+          <button class="remove-key-btn" style="background: #E74C3C; color: white; padding: 16px 32px; border-radius: 8px; font-weight: 600; border: none; cursor: pointer; flex: 1; transition: background-color 0.2s; font-size: 16px;">해제</button>
+        </div>
+      `;
+    } else {
+      modalContent.innerHTML = `
+        <button class="close-modal" style="position: absolute; top: 12px; right: 12px; background: none; border: none; font-size: 24px; color: #737373; cursor: pointer; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: background-color 0.2s;">&times;</button>
+        <h2 style="font-size: 24px; font-weight: bold; margin-bottom: 32px; text-align: center; color: #0D0D0D;">API 키를 입력하세요</h2>
+        <input class="api-key-input" type="text" placeholder="Gemini API Key" style="border: 2px solid #BF9780; border-radius: 8px; padding: 16px 20px; margin-bottom: 24px; width: 100%; font-size: 16px; box-sizing: border-box; flex: 1; outline: none; transition: border-color 0.2s;" />
+        <button class="submit-key-btn" style="background: #F2CEA2; color: #0D0D0D; padding: 16px 32px; border-radius: 8px; font-weight: 600; border: none; cursor: pointer; width: 100%; transition: background-color 0.2s; font-size: 16px;">확인</button>
+      `;
+    }
+    
+    modal.appendChild(modalContent);
+    
+    // 이벤트 연결
+    this.attachModalEvents(modal, modalContent, savedApiKey);
+    
+    return modal;
+  }
+
+  // 자동 열기 설정 가져오기
+  getAutoOpenSetting() {
+    try {
+      const setting = localStorage.getItem('factcheck_auto_open');
+      return setting !== null ? JSON.parse(setting) : true; // 기본값: true
+    } catch (error) {
+      console.error('Failed to get auto open setting:', error);
+      return true;
+    }
+  }
+
+  // 자동 열기 설정 저장
+  setAutoOpenSetting(value) {
+    try {
+      localStorage.setItem('factcheck_auto_open', JSON.stringify(value));
+      console.log('Auto open setting updated:', value);
+    } catch (error) {
+      console.error('Failed to save auto open setting:', error);
+    }
+  }
+
+  // 플로팅 버튼 항상 표시 설정 가져오기
+  getAlwaysShowFloatingButtonSetting() {
+    try {
+      const setting = localStorage.getItem('factcheck_always_show_floating_button');
+      return setting !== null ? JSON.parse(setting) : false; // 기본값: false
+    } catch (error) {
+      console.error('Failed to get always show floating button setting:', error);
+      return false;
+    }
+  }
+
+  // 플로팅 버튼 항상 표시 설정 저장
+  setAlwaysShowFloatingButtonSetting(value) {
+    try {
+      localStorage.setItem('factcheck_always_show_floating_button', JSON.stringify(value));
+      console.log('Always show floating button setting updated:', value);
+    } catch (error) {
+      console.error('Failed to save always show floating button setting:', error);
+    }
   }
 
   // 모달 이벤트 연결
@@ -2194,7 +2689,7 @@ ${comparisonContent}
 
     modal.innerHTML = `
       <div style="
-        background: #FAFAFA;
+        background: #E8E8E8;
         border-radius: 16px;
         padding: 32px;
         width: 90%;
@@ -2753,7 +3248,7 @@ ${comparisonContent}
     container.style.cssText = `
       margin-top: 16px;
       padding: 20px;
-      background: linear-gradient(135deg, #FFFFFF, #FAFAFA);
+      background: linear-gradient(135deg, #FFFFFF, #F0F0F0);
       border-radius: 16px;
       border: 1px solid rgba(229, 229, 229, 0.6);
       box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);

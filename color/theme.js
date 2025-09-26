@@ -10,6 +10,7 @@ const colors = {
   
   'background': '#FAFAFA',     // 메인 배경색 (더 밝게)
   'background-dark': '#F2F2F2', // 배경색 어두운 버전
+  'background-panel': '#E8E8E8', // 패널 배경색 (더 어둡게)
   'background-card': '#FFFFFF', // 카드 배경색
   
   'text-primary': '#1A1A1A',   // 주요 텍스트 (더 진하게)
