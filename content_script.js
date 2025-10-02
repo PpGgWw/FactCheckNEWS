@@ -273,9 +273,71 @@ function updateFloatingButtonVisibility() {
   }
 }
 
+/**
+ * 진위 여부에 따라 하이라이트 색상 변경
+ */
+function updateHighlightColors(verdict) {
+  console.log('하이라이트 색상 업데이트:', verdict);
+  
+  // 진위 여부에 따른 색상 정의
+  const colors = {
+    '진짜 뉴스': {
+      background: '#E8F5E8', // 연한 초록
+      border: '#4CAF50'      // 진한 초록
+    },
+    '가짜일 가능성이 있는 뉴스': {
+      background: '#F2CEA2', // 기존 색상 (주황)
+      border: '#BF9780'      // 기존 색상
+    },
+    '가짜일 가능성이 높은 뉴스': {
+      background: '#FFEBEE', // 연한 빨강
+      border: '#F44336'      // 진한 빨강
+    },
+    '가짜 뉴스': {
+      background: '#FFEBEE', // 연한 빨강
+      border: '#D32F2F'      // 더 진한 빨강
+    }
+  };
+  
+  const colorScheme = colors[verdict] || colors['가짜일 가능성이 있는 뉴스']; // 기본값
+  
+  // 제목 하이라이트 색상 변경
+  const titleSelector = 'h2.media_end_head_headline';
+  const titleElement = document.querySelector(titleSelector);
+  if (titleElement) {
+    titleElement.style.backgroundColor = colorScheme.background;
+    titleElement.style.borderColor = colorScheme.border;
+  }
+  
+  // 내용 하이라이트 색상 변경
+  const contentSelectors = [
+    '#dic_area',
+    '.go_trans._article_content',
+    '#articeBody'
+  ];
+  
+  for (const selector of contentSelectors) {
+    const contentElements = document.querySelectorAll(selector);
+    contentElements.forEach(element => {
+      if (element.style.backgroundColor) { // 이미 하이라이트된 요소만
+        element.style.backgroundColor = colorScheme.background;
+        element.style.borderColor = colorScheme.border;
+      }
+    });
+  }
+  
+  // 시간 정보 하이라이트 색상 변경
+  const subtitleSelector = '.media_end_head_info_datestamp_bunch .media_end_head_info_datestamp_time';
+  const subtitleElement = document.querySelector(subtitleSelector);
+  if (subtitleElement) {
+    subtitleElement.style.backgroundColor = colorScheme.border; // 조금 더 진한 색상 사용
+  }
+}
+
 // 전역 함수로 설정하여 AnalysisPanel에서 접근 가능하도록
 window.updateFloatingButtonVisibility = updateFloatingButtonVisibility;
 window.createEmptyPanel = createEmptyPanel;
+window.updateHighlightColors = updateHighlightColors;
 
 /**
  * Gemini로 분석 요청을 보내는 함수

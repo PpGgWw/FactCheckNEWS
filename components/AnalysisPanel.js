@@ -72,6 +72,59 @@ class AnalysisPanel {
     return panelContainer;
   }
 
+  // 두 색상을 블렌딩하는 헬퍼 함수
+  blendColors(color1, color2, ratio) {
+    // hex 색상을 RGB로 변환
+    const hex2rgb = (hex) => {
+      const r = parseInt(hex.slice(1, 3), 16);
+      const g = parseInt(hex.slice(3, 5), 16);
+      const b = parseInt(hex.slice(5, 7), 16);
+      return [r, g, b];
+    };
+    
+    // RGB를 hex로 변환
+    const rgb2hex = (r, g, b) => {
+      return "#" + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+    };
+    
+    const [r1, g1, b1] = hex2rgb(color1);
+    const [r2, g2, b2] = hex2rgb(color2);
+    
+    const r = Math.round(r1 * (1 - ratio) + r2 * ratio);
+    const g = Math.round(g1 * (1 - ratio) + g2 * ratio);
+    const b = Math.round(b1 * (1 - ratio) + b2 * ratio);
+    
+    return rgb2hex(r, g, b);
+  }
+
+  // 진위 여부에 따른 색상 반환
+  getVerdictColors(verdict) {
+    const colors = {
+      '진짜 뉴스': {
+        background: '#E8F5E8',
+        text: '#2E7D32',
+        border: '#4CAF50'
+      },
+      '가짜일 가능성이 있는 뉴스': {
+        background: '#FFF3E0',
+        text: '#E65100',
+        border: '#FF9800'
+      },
+      '가짜일 가능성이 높은 뉴스': {
+        background: '#FFEBEE',
+        text: '#C62828',
+        border: '#F44336'
+      },
+      '가짜 뉴스': {
+        background: '#FFEBEE',
+        text: '#B71C1C',
+        border: '#D32F2F'
+      }
+    };
+    
+    return colors[verdict] || colors['가짜일 가능성이 있는 뉴스']; // 기본값
+  }
+
   // 패널 표시
   show() {
     const panel = document.getElementById(this.panelId);
@@ -441,6 +494,8 @@ class AnalysisPanel {
   renderNewsBlock(block, isCurrent = false) {
     const { id, title, url, status, result, progress } = block;
     
+    // 진위 여부 표시 배지는 하단 버튼 영역에서 생성
+    
     let actionButtons = '';
     
     if (isCurrent) {
@@ -498,17 +553,31 @@ class AnalysisPanel {
         case 'completed':
         case 'error':
           actionButtons = `
-            <button class="analyze-current-btn" data-id="${id}" style="
-              background: #F2CEA2;
-              color: #0D0D0D;
-              padding: 6px 16px;
-              border-radius: 4px;
-              font-size: 14px;
-              border: none;
-              cursor: pointer;
-              transition: all 0.2s;
-              width: 100%;
-            " onmouseover="this.style.background='#BF9780'" onmouseout="this.style.background='#F2CEA2'">다시 분석</button>
+            <div style="display: flex; align-items: center; gap: 8px; width: 100%;">
+              <button class="analyze-current-btn" data-id="${id}" style="
+                background: #F2CEA2;
+                color: #0D0D0D;
+                padding: 6px 16px;
+                border-radius: 4px;
+                font-size: 14px;
+                border: none;
+                cursor: pointer;
+                transition: all 0.2s;
+                flex: 1;
+              " onmouseover="this.style.background='#BF9780'" onmouseout="this.style.background='#F2CEA2'">다시 분석</button>
+              ${status === 'completed' && result && result.진위 ? `
+              <div style="
+                background: ${this.getVerdictColors(result.진위).background};
+                color: ${this.getVerdictColors(result.진위).text};
+                border: 1px solid ${this.getVerdictColors(result.진위).border};
+                padding: 4px 8px;
+                border-radius: 12px;
+                font-size: 11px;
+                font-weight: 600;
+                white-space: nowrap;
+              ">${result.진위}</div>
+              ` : ''}
+            </div>
           `;
           break;
       }
@@ -579,6 +648,19 @@ class AnalysisPanel {
               transition: opacity 0.2s;
               flex: 1;
             " onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">${compareButtonText}</button>
+            ${status === 'completed' && result && result.진위 ? `
+            <div style="
+              background: ${this.getVerdictColors(result.진위).background};
+              color: ${this.getVerdictColors(result.진위).text};
+              border: 1px solid ${this.getVerdictColors(result.진위).border};
+              padding: 4px 8px;
+              border-radius: 12px;
+              font-size: 11px;
+              font-weight: 600;
+              margin-left: 8px;
+              white-space: nowrap;
+            ">${result.진위}</div>
+            ` : ''}
           </div>
         `;
       }
@@ -590,18 +672,29 @@ class AnalysisPanel {
     const hoverStyle = isClickable ? 'onmouseover="this.style.background=\'#F2CEA2\'" onmouseout="this.style.background=\'#F2F2F2\'"' : '';
     
     // 비교 모드일 때 어두운 스타일 적용 (pointer-events는 제거하여 버튼 클릭 가능하도록)
-    const blockBackground = isCompareMode ? '#E5E5E5' : '#F2F2F2';
+    let blockBackground = isCompareMode ? '#E5E5E5' : '#F2F2F2';
+    let borderColor = '#BF9780';
+    
+    // 완료된 블록의 경우 진위 여부에 따른 배경색 적용
+    if (status === 'completed' && result && result.진위 && !isCompareMode) {
+      const verdictColors = this.getVerdictColors(result.진위);
+      // 매우 연한 배경색 사용 (기존 배경색에 10% 투명도로 오버레이)
+      blockBackground = this.blendColors('#F2F2F2', verdictColors.background, 0.15);
+      borderColor = verdictColors.border;
+    }
+    
     const blockOpacity = isCompareMode ? '0.7' : '1';
     
     return `
       <div class="news-block" data-id="${id}" style="
-        border: 1px solid #BF9780;
+        border: 2px solid ${borderColor};
         border-radius: 8px;
         background: ${blockBackground};
         opacity: ${blockOpacity};
         transition: all 0.3s ease;
         width: 100%;
         overflow: hidden;
+        position: relative;
       ">
         <!-- 뉴스 내용 영역 -->
         <div class="news-content-area" data-id="${id}" style="
@@ -673,16 +766,16 @@ class AnalysisPanel {
             padding: 6px;
             background: #F0F0F0;
             scrollbar-width: thin;
-            scrollbar-color: #BF9780 #F0F0F0;
+            scrollbar-color: ${borderColor} #F0F0F0;
           " onscroll="this.setAttribute('data-user-scrolled', this.scrollTop < this.scrollHeight - this.offsetHeight ? 'true' : 'false')">분석을 시작합니다...</div>
         </div>
         ` : ''}
         
         <!-- 상태 표시 또는 버튼 영역 -->
         <div style="
-          border-top: 1px solid #BF9780;
+          border-top: 1px solid ${borderColor};
           padding: 8px 12px;
-          background: rgba(191, 151, 128, 0.1);
+          background: ${blockBackground};
         ">
           <div style="
             display: flex;
@@ -1569,6 +1662,9 @@ ${comparisonContent}
     const analysis = result.분석 || 'N/A';
     const summary = result.요약 || 'N/A';
     
+    // 진위 여부에 따른 색상 가져오기
+    const verdictColors = this.getVerdictColors(verdict);
+    
     modal.innerHTML = `
       <div class="modal-content" style="
         background: #F2F2F2;
@@ -1611,7 +1707,17 @@ ${comparisonContent}
         
         <div style="margin-bottom: 16px;">
           <h3 style="color: #0D0D0D; font-weight: 600; margin-bottom: 8px;">진위 판단</h3>
-          <div style="color: #0D0D0D; background: #BF9780; padding: 12px; border-radius: 8px; font-weight: 500;">${this.renderMarkdown(verdict)}</div>
+          <div style="
+            color: ${verdictColors.text}; 
+            background: ${verdictColors.background}; 
+            border: 2px solid ${verdictColors.border};
+            padding: 12px; 
+            border-radius: 8px; 
+            font-weight: 600;
+            font-size: 16px;
+            text-align: center;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+          ">${this.renderMarkdown(verdict)}</div>
         </div>
         
         <div style="margin-bottom: 16px;">
@@ -3054,6 +3160,19 @@ ${comparisonContent}
     
     this.streamingResults.delete(blockId); // 스트리밍 결과 정리
     this.updateNewsStatus(blockId, 'completed', result);
+    
+    // 분석 결과에 따라 하이라이트 색상 변경
+    try {
+      const parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
+      if (parsedResult && parsedResult[0] && parsedResult[0].output && parsedResult[0].output.진위) {
+        const verdict = parsedResult[0].output.진위;
+        if (typeof window.updateHighlightColors === 'function') {
+          window.updateHighlightColors(verdict);
+        }
+      }
+    } catch (error) {
+      console.error('진위 여부 파싱 오류:', error);
+    }
   }
 
   // 완료된 블록 강조 표시
