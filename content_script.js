@@ -27,6 +27,9 @@ function initialize() {
   // 추출된 데이터가 있다면 패널에 추가
   if (extractedData.length > 0) {
     addNewsToPanel();
+    
+    // 이미 분석된 뉴스인지 확인하고 하이라이트 색상 적용
+    checkAndApplyExistingAnalysis();
   } else {
     // 뉴스 데이터가 없어도 플로팅 버튼 항상 표시 설정이 켜져있다면 빈 패널과 플로팅 버튼 생성
     if (getAlwaysShowFloatingButtonSetting()) {
@@ -50,6 +53,7 @@ function extractNewsData() {
     titleElement.style.backgroundColor = '#F2CEA2'; // 테마 primary 색상
     titleElement.style.padding = '5px';
     titleElement.style.borderRadius = '5px';
+    titleElement.style.border = '2px solid #BF9780'; // 테두리 추가
 
     // 데이터 수집
     const titleText = titleElement.textContent?.trim();
@@ -277,7 +281,7 @@ function updateFloatingButtonVisibility() {
  * 진위 여부에 따라 하이라이트 색상 변경
  */
 function updateHighlightColors(verdict) {
-  console.log('하이라이트 색상 업데이트:', verdict);
+  console.log('하이라이트 색상 업데이트 시작:', verdict);
   
   // 진위 여부에 따른 색상 정의
   const colors = {
@@ -300,13 +304,27 @@ function updateHighlightColors(verdict) {
   };
   
   const colorScheme = colors[verdict] || colors['가짜일 가능성이 있는 뉴스']; // 기본값
+  console.log('적용할 색상 스키마:', colorScheme);
+  
+  let elementsUpdated = 0;
   
   // 제목 하이라이트 색상 변경
   const titleSelector = 'h2.media_end_head_headline';
   const titleElement = document.querySelector(titleSelector);
+  console.log('제목 요소 확인:', !!titleElement, titleElement?.style.backgroundColor);
+  
   if (titleElement) {
+    const wasHighlighted = !!titleElement.style.backgroundColor;
     titleElement.style.backgroundColor = colorScheme.background;
     titleElement.style.borderColor = colorScheme.border;
+    titleElement.style.border = `2px solid ${colorScheme.border}`;
+    
+    console.log('제목 하이라이트 색상 변경 완료:', {
+      wasHighlighted,
+      newBackground: colorScheme.background,
+      newBorder: colorScheme.border
+    });
+    elementsUpdated++;
   }
   
   // 내용 하이라이트 색상 변경
@@ -318,26 +336,136 @@ function updateHighlightColors(verdict) {
   
   for (const selector of contentSelectors) {
     const contentElements = document.querySelectorAll(selector);
-    contentElements.forEach(element => {
-      if (element.style.backgroundColor) { // 이미 하이라이트된 요소만
-        element.style.backgroundColor = colorScheme.background;
-        element.style.borderColor = colorScheme.border;
-      }
+    console.log(`${selector} 요소 확인:`, contentElements.length, '개');
+    
+    contentElements.forEach((element, index) => {
+      const wasHighlighted = !!element.style.backgroundColor;
+      element.style.backgroundColor = colorScheme.background;
+      element.style.borderColor = colorScheme.border;
+      element.style.border = `2px solid ${colorScheme.border}`;
+      
+      console.log(`${selector}[${index}] 하이라이트 색상 변경:`, {
+        wasHighlighted,
+        newBackground: colorScheme.background,
+        newBorder: colorScheme.border
+      });
+      elementsUpdated++;
     });
   }
   
   // 시간 정보 하이라이트 색상 변경
   const subtitleSelector = '.media_end_head_info_datestamp_bunch .media_end_head_info_datestamp_time';
   const subtitleElement = document.querySelector(subtitleSelector);
+  console.log('시간 요소 확인:', !!subtitleElement, subtitleElement?.style.backgroundColor);
+  
   if (subtitleElement) {
+    const wasHighlighted = !!subtitleElement.style.backgroundColor;
     subtitleElement.style.backgroundColor = colorScheme.border; // 조금 더 진한 색상 사용
+    
+    console.log('시간 정보 하이라이트 색상 변경 완료:', {
+      wasHighlighted,
+      newBackground: colorScheme.border
+    });
+    elementsUpdated++;
   }
+  
+  console.log(`전체 하이라이트 색상 업데이트 완료 - 판정: ${verdict}, 업데이트된 요소: ${elementsUpdated}개`);
+  
+  if (elementsUpdated === 0) {
+    console.warn('업데이트된 요소가 없습니다. 하이라이트가 되지 않았거나 셀렉터가 잘못되었을 수 있습니다.');
+  }
+}
+
+/**
+ * 이미 분석된 뉴스인지 확인하고 하이라이트 색상 적용
+ */
+function checkAndApplyExistingAnalysis() {
+  console.log('기존 분석 결과 확인 시작');
+  
+  const currentUrl = window.location.href;
+  console.log('현재 URL:', currentUrl);
+  
+  // 패널이 생성될 때까지 여러 번 시도
+  let attempts = 0;
+  const maxAttempts = 10;
+  
+  function tryCheckAnalysis() {
+    attempts++;
+    console.log(`분석 결과 확인 시도 ${attempts}/${maxAttempts}`);
+    
+    const panel = document.getElementById('news-analysis-panel');
+    if (!panel || !panel.__analysisPanel) {
+      if (attempts < maxAttempts) {
+        setTimeout(tryCheckAnalysis, 200);
+        return;
+      } else {
+        console.log('패널을 찾을 수 없어 기존 분석 결과 확인을 중단합니다.');
+        return;
+      }
+    }
+    
+    const analysisPanel = panel.__analysisPanel;
+    console.log('패널 발견, 데이터 확인 중...');
+    console.log('현재 뉴스:', analysisPanel.currentNews);
+    console.log('분석된 블록들:', analysisPanel.analysisBlocks);
+    
+    // 현재 뉴스 블록 확인
+    if (analysisPanel.currentNews && analysisPanel.currentNews.url === currentUrl) {
+      console.log('현재 뉴스 블록 확인:', analysisPanel.currentNews.status, analysisPanel.currentNews.result);
+      if (analysisPanel.currentNews.status === 'completed' && analysisPanel.currentNews.result && analysisPanel.currentNews.result.진위) {
+        console.log('현재 뉴스에 분석 결과 있음:', analysisPanel.currentNews.result.진위);
+        console.log('하이라이트 색상 적용 시작...');
+        updateHighlightColors(analysisPanel.currentNews.result.진위);
+        return;
+      }
+    }
+    
+    // 분석된 뉴스 리스트에서 확인
+    if (analysisPanel.analysisBlocks && analysisPanel.analysisBlocks.length > 0) {
+      console.log('분석된 뉴스 리스트 확인:', analysisPanel.analysisBlocks.length, '개');
+      
+      for (const block of analysisPanel.analysisBlocks) {
+        console.log('블록 상세:', {
+          url: block.url,
+          currentUrl: currentUrl,
+          urlMatch: block.url === currentUrl,
+          status: block.status,
+          hasResult: !!block.result,
+          verdict: block.result?.진위
+        });
+        
+        if (block.url === currentUrl && block.status === 'completed' && block.result && block.result.진위) {
+          console.log('매칭되는 분석 결과 발견:', block.result.진위);
+          console.log('하이라이트 색상 적용 시작...');
+          updateHighlightColors(block.result.진위);
+          return;
+        }
+      }
+    }
+    
+    console.log('기존 분석 결과 없음 - 기본 색상 유지');
+  }
+  
+  // 즉시 시도 및 지연 시도
+  tryCheckAnalysis();
 }
 
 // 전역 함수로 설정하여 AnalysisPanel에서 접근 가능하도록
 window.updateFloatingButtonVisibility = updateFloatingButtonVisibility;
 window.createEmptyPanel = createEmptyPanel;
 window.updateHighlightColors = updateHighlightColors;
+window.checkAndApplyExistingAnalysis = checkAndApplyExistingAnalysis;
+
+// 테스트용 함수들
+window.testHighlightColors = function(verdict) {
+  console.log('테스트: 하이라이트 색상 변경 -', verdict);
+  updateHighlightColors(verdict || '진짜 뉴스');
+};
+
+window.forceCheckAnalysis = function() {
+  console.log('강제 분석 결과 확인 실행');
+  checkAndApplyExistingAnalysis();
+};
 
 /**
  * Gemini로 분석 요청을 보내는 함수
@@ -491,6 +619,12 @@ if (isChromeApiAvailable()) {
         if (panel && panel.__analysisPanel) {
           console.log('분석 결과 표시:', message.blockId, message.result);
           panel.__analysisPanel.completeAnalysis(message.blockId, message.result);
+          
+          // 분석 결과에 따라 페이지 하이라이트 색상 업데이트
+          if (message.result && message.result.진위) {
+            console.log('하이라이트 색상 업데이트 시작:', message.result.진위);
+            updateHighlightColors(message.result.진위);
+          }
         }
       } else if (message.action === "displayError" && message.error) {
         // 오류를 패널에 표시
