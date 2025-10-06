@@ -188,19 +188,24 @@ function addNewsToPanel() {
     // 현재 뉴스로 설정 (분석된 뉴스 리스트에 추가하지 않음)
     analysisPanel.setCurrentNews(title, url, content);
     console.log('현재 뉴스가 패널에 설정되었습니다.');
-    
+
+    const autoOpenEnabled = getAutoOpenSetting();
+
     // 자동 열기 설정 확인 후 패널 표시
-    if (getAutoOpenSetting()) {
+    if (autoOpenEnabled) {
       console.log('자동 열기 설정이 활성화되어 패널을 표시합니다.');
       analysisPanel.show();
+
+      // 패널이 열린 상태에서는 기존 플로팅 버튼 제거
+      const existingButton = document.getElementById('floating-news-analysis-btn');
+      if (existingButton) {
+        existingButton.remove();
+      }
     } else {
       console.log('자동 열기 설정이 비활성화되어 패널을 숨김 상태로 유지합니다.');
-      
-      // "항상 플로팅 버튼 표시" 설정이 켜져있으면 플로팅 버튼 생성
-      if (getAlwaysShowFloatingButtonSetting()) {
-        console.log('항상 플로팅 버튼 표시 설정이 활성화되어 플로팅 버튼을 생성합니다.');
-        analysisPanel.createFloatingButton();
-      }
+
+      // 뉴스 페이지 접근 시 항상 플로팅 버튼을 제공
+      analysisPanel.createFloatingButton();
     }
   } else {
     console.error('AnalysisPanel 인스턴스를 찾을 수 없습니다.');
@@ -258,19 +263,24 @@ function updateFloatingButtonVisibility() {
   const existingButton = document.getElementById('floating-news-analysis-btn');
   const existingPanel = document.getElementById('news-analysis-panel');
   
-  if (shouldShow && !existingButton) {
-    // 표시해야 하는데 버튼이 없으면 생성
-    if (hasNewsData) {
-      // 뉴스 데이터가 있으면 패널과 함께 생성
-      if (!existingPanel) {
+  if (shouldShow) {
+    if (!existingButton) {
+      console.log('플로팅 버튼이 없어 새로 생성합니다. hasNewsData:', hasNewsData, 'existingPanel:', !!existingPanel);
+
+      if (existingPanel && existingPanel.__analysisPanel) {
+        const isPanelHidden = existingPanel.style.display === 'none' || existingPanel.style.opacity === '0' || existingPanel.style.opacity === '';
+        if (isPanelHidden) {
+          existingPanel.__analysisPanel.createFloatingButton();
+        } else {
+          console.log('패널이 표시 중이라 플로팅 버튼 생성은 보류합니다.');
+        }
+      } else if (hasNewsData) {
         addNewsToPanel();
+      } else {
+        createEmptyPanelWithFloatingButton();
       }
-    } else {
-      // 뉴스 데이터가 없으면 빈 패널과 플로팅 버튼 생성
-      createEmptyPanelWithFloatingButton();
     }
-    console.log('설정 변경으로 플로팅 버튼을 표시합니다.');
-  } else if (!shouldShow && existingButton) {
+  } else if (existingButton) {
     // 숨겨야 하는데 버튼이 있으면 제거
     existingButton.remove();
     console.log('설정 변경으로 플로팅 버튼을 숨깁니다.');
@@ -377,6 +387,127 @@ function updateHighlightColors(verdict) {
 }
 
 /**
+ * 수상한 문장 하이라이트 적용
+ */
+function highlightSuspiciousSentences(suspiciousSentences) {
+  console.log('수상한 문장 하이라이트 시작:', suspiciousSentences);
+  
+  if (!suspiciousSentences || Object.keys(suspiciousSentences).length === 0) {
+    console.log('수상한 문장이 없습니다.');
+    return;
+  }
+  
+  // 이전 하이라이트 제거
+  document.querySelectorAll('.suspicious-sentence-highlight').forEach(el => {
+    const parent = el.parentNode;
+    parent.replaceChild(document.createTextNode(el.textContent), el);
+    parent.normalize();
+  });
+  
+  // 툴팁 스타일 추가 (한 번만)
+  if (!document.getElementById('suspicious-tooltip-style')) {
+    const style = document.createElement('style');
+    style.id = 'suspicious-tooltip-style';
+    style.textContent = `
+      .suspicious-sentence-highlight {
+        background: linear-gradient(180deg, transparent 60%, #FFD700 60%);
+        cursor: help;
+        position: relative;
+        border-bottom: 2px dotted #FF6B6B;
+        font-weight: 500;
+      }
+      
+      .suspicious-sentence-highlight:hover {
+        background: linear-gradient(180deg, transparent 50%, #FFA500 50%);
+      }
+      
+      .suspicious-tooltip {
+        visibility: hidden;
+        position: absolute;
+        bottom: 125%;
+        left: 50%;
+        transform: translateX(-50%);
+        background-color: #2C3E50;
+        color: white;
+        padding: 8px 12px;
+        border-radius: 6px;
+        font-size: 13px;
+        white-space: normal;
+        max-width: 300px;
+        z-index: 10000;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        line-height: 1.4;
+        opacity: 0;
+        transition: opacity 0.3s, visibility 0.3s;
+      }
+      
+      .suspicious-tooltip::after {
+        content: "";
+        position: absolute;
+        top: 100%;
+        left: 50%;
+        transform: translateX(-50%);
+        border-width: 6px;
+        border-style: solid;
+        border-color: #2C3E50 transparent transparent transparent;
+      }
+      
+      .suspicious-sentence-highlight:hover .suspicious-tooltip {
+        visibility: visible;
+        opacity: 1;
+      }
+    `;
+    document.head.appendChild(style);
+  }
+  
+  // 내용 영역에서 수상한 문장 찾기
+  const contentSelectors = [
+    '#dic_area',
+    '.go_trans._article_content',
+    '#articeBody'
+  ];
+  
+  let highlightedCount = 0;
+  
+  for (const selector of contentSelectors) {
+    const contentElements = document.querySelectorAll(selector);
+    
+    contentElements.forEach(element => {
+      let html = element.innerHTML;
+      
+      // 각 수상한 문장에 대해 하이라이트 적용
+      Object.entries(suspiciousSentences).forEach(([sentence, reason]) => {
+        // HTML 태그를 제외한 텍스트에서 문장 찾기
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = html;
+        const text = tempDiv.textContent || tempDiv.innerText;
+        
+        if (text.includes(sentence)) {
+          // 이스케이프 처리
+          const escapedSentence = sentence.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+          const regex = new RegExp(`(${escapedSentence})`, 'gi');
+          
+          // 하이라이트 적용 (기존 태그 보존)
+          html = html.replace(regex, (match) => {
+            highlightedCount++;
+            return `<span class="suspicious-sentence-highlight">
+              ${match}
+              <span class="suspicious-tooltip">⚠️ ${reason}</span>
+            </span>`;
+          });
+        }
+      });
+      
+      if (html !== element.innerHTML) {
+        element.innerHTML = html;
+      }
+    });
+  }
+  
+  console.log(`수상한 문장 하이라이트 완료: ${highlightedCount}개 문장 처리`);
+}
+
+/**
  * 이미 분석된 뉴스인지 확인하고 하이라이트 색상 적용
  */
 function checkAndApplyExistingAnalysis() {
@@ -416,6 +547,12 @@ function checkAndApplyExistingAnalysis() {
         console.log('현재 뉴스에 분석 결과 있음:', analysisPanel.currentNews.result.진위);
         console.log('하이라이트 색상 적용 시작...');
         updateHighlightColors(analysisPanel.currentNews.result.진위);
+        
+        // 수상한 문장 하이라이트 적용
+        if (analysisPanel.currentNews.result.수상한문장) {
+          console.log('수상한 문장 하이라이트 적용...');
+          highlightSuspiciousSentences(analysisPanel.currentNews.result.수상한문장);
+        }
         return;
       }
     }
@@ -438,6 +575,12 @@ function checkAndApplyExistingAnalysis() {
           console.log('매칭되는 분석 결과 발견:', block.result.진위);
           console.log('하이라이트 색상 적용 시작...');
           updateHighlightColors(block.result.진위);
+          
+          // 수상한 문장 하이라이트 적용
+          if (block.result.수상한문장) {
+            console.log('수상한 문장 하이라이트 적용...');
+            highlightSuspiciousSentences(block.result.수상한문장);
+          }
           return;
         }
       }
@@ -455,6 +598,7 @@ window.updateFloatingButtonVisibility = updateFloatingButtonVisibility;
 window.createEmptyPanel = createEmptyPanel;
 window.updateHighlightColors = updateHighlightColors;
 window.checkAndApplyExistingAnalysis = checkAndApplyExistingAnalysis;
+window.highlightSuspiciousSentences = highlightSuspiciousSentences;
 
 // 테스트용 함수들
 window.testHighlightColors = function(verdict) {
@@ -465,6 +609,15 @@ window.testHighlightColors = function(verdict) {
 window.forceCheckAnalysis = function() {
   console.log('강제 분석 결과 확인 실행');
   checkAndApplyExistingAnalysis();
+};
+
+window.testSuspiciousSentences = function() {
+  console.log('테스트: 수상한 문장 하이라이트');
+  const testData = {
+    "익명의 관계자에 따르면": "출처가 불분명하여 신뢰도 낮음",
+    "전문가들은 입을 모아 말한다": "구체적인 전문가 명시 없음"
+  };
+  highlightSuspiciousSentences(testData);
 };
 
 /**
@@ -484,6 +637,8 @@ function sendToGeminiForAnalysis(blockId) {
   const articleContent = `${title}\n${content}`;
 
   const fullPrompt = `
+## **이 기사를 가짜뉴스로 가정하고 분석 결과를 작성하세요. 수상한문장도 2-3개 찾아서 포함하세요.**
+
 ## 역할
 당신은 주어진 기사 텍스트의 **논리적 구조, 근거 제시 방식, 표현의 적절성**만을 분석하는 **'뉴스 텍스트 분석가'** 입니다. 당신의 유일한 임무는 아래의 '절대적 분석 원칙'과 '판단 조건'에 따라, 외부 세계의 사실이나 당신의 사전 지식과 비교하지 않고 오직 **주어진 텍스트 자체**만을 평가하는 것입니다.
 
@@ -543,22 +698,25 @@ function sendToGeminiForAnalysis(blockId) {
 "
 [
   {
-    "instruction": "해당 기사는 진위 여부판단을 목적으로 수집되었습니다. 조건에 따라서 종합적으로 검토 후 판단 결과를 진위,근거,분석 항목으로 나누어 출력하세요.",
+    "instruction": "해당 기사는 진위 여부판단을 목적으로 수집되었습니다. 조건에 따라서 종합적으로 검토 후 판단 결과를 진위,근거,분석,수상한문장 항목으로 나누어 출력하세요.",
     "input": "주어진 텍스트 전체",
     "output": {
       "분석진행": "분석을 위한 당신의 추론 내용을 투명하게 꼼꼼히 적으세요. 추론은 반드시 어떻게 분석할 것인지, 어떤 분석을 해야 할지를 순서를 정하여 순서대로 하나씩 분석합니다. (정확한 분석을 위하여 최소 4개 이상의 분석 단계를 만드세요. 정말 필요 없을 정도로 간단한 경우만 2개까지 허용합니다.) 모든 단계별 분석이 끝나면 그 분석된 내용들을 전부 합치고 정리하여 최종 진위, 근거, 분석, 요약을 도출합니다. 비교분석의 경우 진위/근거는 두 기사 내용의 일치성과 신뢰도를 기준으로 판단하세요. **이 내용은 반드시 마크다운 문법으로 작성하세요 (## 제목, **강조**, - 리스트 등 사용).**",
       "진위": "판단 결과('가짜 뉴스' / '가짜일 가능성이 높은 뉴스' / '가짜일 가능성이 있는 뉴스' / '진짜 뉴스')가 여기에 위치합니다.",
       "근거": "탐지된 중요도의 조건 번호와 이름이 위치합니다. 여러 개일 경우 '1. 첫 번째 근거\\n2. 두 번째 근거\\n' 형식으로 숫자 리스트로 나열하세요. 예시: 1. 2-2. 근거 없는 의혹 제기\\n2. 3-1. 단정적·선동적 어조\\n",
       "분석": "위 근거들을 종합하여 기사의 어떤 부분이 왜 문제인지 혹은 신뢰할 수 있는지를 구체적으로 서술합니다. 여러 항목이 있는 경우 '1. 첫 번째 분석 내용\\n2. 두 번째 분석 내용\\n' 형식으로 숫자 리스트로 작성하세요.",
-      "요약": "기사의 핵심 내용을 간결하면서 정확하게 요약합니다. 비교분석을 대비하여 핵심 내용 / 단어를 최대한 많이 포함합니다. 여러 항목이 있는 경우 '1. 첫 번째 요약 내용\\n2. 두 번째 요약 내용\\n' 형식으로 숫자 리스트로 작성하세요."
+      "요약": "기사의 핵심 내용을 간결하면서 정확하게 요약합니다. 비교분석을 대비하여 핵심 내용 / 단어를 최대한 많이 포함합니다. 여러 항목이 있는 경우 '1. 첫 번째 요약 내용\\n2. 두 번째 요약 내용\\n' 형식으로 숫자 리스트로 작성하세요.",
+      "수상한문장": "기사에서 발견된 논리적 결함, 근거 없는 주장, 모호한 표현 등의 문제가 있는 문장을 **원문 그대로** 키로 사용하고, 왜 수상한지 그 이유를 값으로 하는 JSON 객체입니다. 문장은 기사에서 추출한 원본 텍스트를 그대로 복사해야 합니다. 예시: { \"익명의 관계자에 따르면\": \"출처가 불분명하여 신뢰도 낮음\", \"전문가들은 입을 모아 말한다\": \"구체적인 전문가 명시 없음\" }. '진짜 뉴스'인 경우 빈 객체 {}를 반환하세요."
     }
   }
 ]
 "
 ### 다음은 **반드시 지켜야 할** 출력 형식에 대한 설명입니다.
-- 반드시 명시된 키("진위", "근거", "분석")를 가진 유효한(valid) JSON 형식으로만 응답해주세요.
+- 반드시 명시된 키("진위", "근거", "분석", "요약", "수상한문장")를 가진 유효한(valid) JSON 형식으로만 응답해주세요.
 - 다른 설명이나 부가적인 텍스트 없이 JSON 객체만 출력해야 합니다.
-- '진짜 뉴스'라면 '근거'란이 비어있어야 합니다.(예시: "근거": "",) 그리고 진짜 뉴스 '분석'란은 왜 진짜인지를 뉴스 기사의 적힌 텍스트를 최대한 인용해서 작성하세요.
+- '진짜 뉴스'라면 '근거'란이 비어있어야 합니다.(예시: "근거": "",) 그리고 '수상한문장'은 빈 객체여야 합니다.(예시: "수상한문장": {})
+- 진짜 뉴스 '분석'란은 왜 진짜인지를 뉴스 기사의 적힌 텍스트를 최대한 인용해서 작성하세요.
+- **'수상한문장' 필드의 키는 반드시 기사 원문에서 그대로 복사한 문장이어야 합니다.** 요약하거나 변경하지 마세요.
 - 출력 텍스트는 **한국어**여야 합니다. 특정 사람 이름이나, 기사에서 따로 표시해둔 명사 형태의 언어는 원본 언어 그대로 유지해도 됩니다.
 - instruction 필드는 예시에 **주어진 내용과 동일하게 고정**됩니다.
 - input 필드에는 당신에게 **입력으로 주어진 기사 원문**을 그대로 넣어야 합니다.
@@ -624,6 +782,12 @@ if (isChromeApiAvailable()) {
           if (message.result && message.result.진위) {
             console.log('하이라이트 색상 업데이트 시작:', message.result.진위);
             updateHighlightColors(message.result.진위);
+          }
+          
+          // 수상한 문장 하이라이트 적용
+          if (message.result && message.result.수상한문장) {
+            console.log('수상한 문장 하이라이트 적용 시작:', message.result.수상한문장);
+            highlightSuspiciousSentences(message.result.수상한문장);
           }
         }
       } else if (message.action === "displayError" && message.error) {

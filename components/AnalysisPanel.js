@@ -12,6 +12,12 @@ class AnalysisPanel {
     this.typingSpeed = 30; // 타이핑 속도 (ms)
     this.currentTypingIntervals = new Map(); // 현재 타이핑 중인 인터벌들
     this.analysisSteps = ['분석진행', '진위', '근거', '분석', '요약']; // 분석 단계
+    this.panelOpacity = this.getPanelOpacitySetting();
+    this.isHistoryCollapsed = false;
+    this.expandedPanelWidth = null;
+    this.expandedPanelWidthValue = '';
+    this.expandedPanelMinWidthValue = '';
+    this.expandedPanelMaxWidthValue = '';
     
     // 저장된 뉴스 블록 데이터 로드
     this.loadSavedNewsBlocks();
@@ -60,6 +66,9 @@ class AnalysisPanel {
     `;
     
     document.body.appendChild(panelContainer);
+
+  panelContainer.dataset.userOpacity = String(this.panelOpacity);
+  this.applyPanelOpacity(this.panelOpacity);
     
     // 반응형 리사이즈 이벤트 추가
     this.addResponsiveListener(panelContainer);
@@ -130,11 +139,14 @@ class AnalysisPanel {
     const panel = document.getElementById(this.panelId);
     if (panel) {
       // display: none 상태에서 display: flex로 변경
+      const targetOpacity = this.panelOpacity ?? this.getPanelOpacitySetting();
+      panel.dataset.userOpacity = String(targetOpacity);
+      this.applyPanelOpacity(targetOpacity);
       panel.style.display = 'flex';
-      
+
       requestAnimationFrame(() => {
         panel.style.transform = 'translateX(0) translateY(0)';
-        panel.style.opacity = '1';
+        panel.style.opacity = String(targetOpacity);
       });
     }
   }
@@ -203,7 +215,7 @@ class AnalysisPanel {
       ${this.renderHeader()}
       
       <!-- 현재 뉴스 블록 (고정) -->
-      <div id="current-news-section" style="
+      <div id="current-news-section" class="analysis-panel-collapsible" style="
         padding: 20px;
         background: linear-gradient(to bottom, #E8E8E8, #DCDCDC);
         border-bottom: 1px solid rgba(229, 229, 229, 0.8);
@@ -231,7 +243,7 @@ class AnalysisPanel {
       </div>
       
       <!-- 분석된 뉴스 리스트 (스크롤) -->
-      <div style="
+      <div class="analysis-panel-list-wrapper" style="
         flex: 1;
         display: flex;
         flex-direction: column;
@@ -245,15 +257,36 @@ class AnalysisPanel {
           border-bottom: 1px solid rgba(229, 229, 229, 0.3);
         ">
           <div style="display: flex; align-items: center; justify-content: space-between;">
-            <h3 style="
-              font-size: 16px;
-              font-weight: 600;
-              color: #1A1A1A;
-              margin: 0;
-            ">
-              분석 기록
-            </h3>
-            <span id="analysis-count" style="
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <button id="collapse-history-btn" style="
+                width: 32px;
+                height: 32px;
+                background: rgba(255, 255, 255, 0.15);
+                border: 1px solid rgba(255, 255, 255, 0.2);
+                border-radius: 6px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                backdrop-filter: blur(10px);
+                flex-shrink: 0;
+              " onmouseover="this.style.background='rgba(255, 255, 255, 0.25)'; this.style.transform='scale(1.05)';" 
+                 onmouseout="this.style.background='rgba(255, 255, 255, 0.15)'; this.style.transform='scale(1)';">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M9 18l6-6-6-6"></path>
+                </svg>
+              </button>
+              <h3 class="analysis-panel-collapsible" style="
+                font-size: 16px;
+                font-weight: 600;
+                color: #1A1A1A;
+                margin: 0;
+              ">
+                분석 기록
+              </h3>
+            </div>
+            <span id="analysis-count" class="analysis-panel-collapsible" style="
               background: #F2CEA2;
               color: #1A1A1A;
               padding: 4px 8px;
@@ -265,7 +298,7 @@ class AnalysisPanel {
             ">${this.newsBlocks.size}</span>
           </div>
         </div>
-        <div style="
+        <div class="analysis-panel-collapsible" style="
           flex: 1;
           overflow-y: auto;
           overflow-x: hidden;
@@ -288,12 +321,16 @@ class AnalysisPanel {
     panel.__analysisPanel = this;
     
     this.attachEvents(panel);
+
+    if (this.isHistoryCollapsed) {
+      this.togglePanelCollapse(true);
+    }
   }
 
   // 헤더 렌더링
   renderHeader() {
     return `
-      <div style="
+      <div class="analysis-panel-collapsible" style="
         background: linear-gradient(135deg, #F2CEA2 0%, #BF9780 100%);
         padding: 20px;
         border-bottom: none;
@@ -493,6 +530,8 @@ class AnalysisPanel {
   // 개별 뉴스 블록 렌더링
   renderNewsBlock(block, isCurrent = false) {
     const { id, title, url, status, result, progress } = block;
+    const encodedUrl = encodeURIComponent(url || '');
+    const isCompleted = status === 'completed';
     
     // 진위 여부 표시 배지는 하단 버튼 영역에서 생성
     
@@ -565,7 +604,21 @@ class AnalysisPanel {
                 transition: all 0.2s;
                 flex: 1;
               " onmouseover="this.style.background='#BF9780'" onmouseout="this.style.background='#F2CEA2'">다시 분석</button>
-              ${status === 'completed' && result && result.진위 ? `
+              ${isCompleted ? `
+              <button class="open-site-btn" data-id="${id}" data-url="${encodedUrl}" style="
+                background: #BF9780;
+                color: #FFFFFF;
+                padding: 6px 20px;
+                border-radius: 4px;
+                font-size: 14px;
+                border: none;
+                cursor: pointer;
+                transition: opacity 0.2s;
+                flex: 1.3;
+                white-space: nowrap;
+              " onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">사이트 이동</button>
+              ` : ''}
+              ${isCompleted && result && result.진위 ? `
               <div style="
                 background: ${this.getVerdictColors(result.진위).background};
                 color: ${this.getVerdictColors(result.진위).text};
@@ -626,7 +679,7 @@ class AnalysisPanel {
           'background: #F2CEA2; color: #1A1A1A;';
         
         actionButtons = `
-          <div style="display: flex; gap: 8px;">
+          <div style="display: flex; gap: 8px; align-items: center;">
             <button class="delete-btn" data-id="${id}" style="
               background: #dc2626;
               color: #F2F2F2;
@@ -648,7 +701,21 @@ class AnalysisPanel {
               transition: opacity 0.2s;
               flex: 1;
             " onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">${compareButtonText}</button>
-            ${status === 'completed' && result && result.진위 ? `
+            ${isCompleted ? `
+            <button class="open-site-btn" data-id="${id}" data-url="${encodedUrl}" style="
+              background: #BF9780;
+              color: #FFFFFF;
+              padding: 6px 20px;
+              border-radius: 4px;
+              font-size: 14px;
+              border: none;
+              cursor: pointer;
+              transition: opacity 0.2s;
+              flex: 1.3;
+              white-space: nowrap;
+            " onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">사이트 이동</button>
+            ` : ''}
+            ${isCompleted && result && result.진위 ? `
             <div style="
               background: ${this.getVerdictColors(result.진위).background};
               color: ${this.getVerdictColors(result.진위).text};
@@ -657,7 +724,6 @@ class AnalysisPanel {
               border-radius: 12px;
               font-size: 11px;
               font-weight: 600;
-              margin-left: 8px;
               white-space: nowrap;
             ">${result.진위}</div>
             ` : ''}
@@ -1002,6 +1068,10 @@ class AnalysisPanel {
       
       // 이벤트 다시 연결
       this.attachBlockEvents(panel);
+
+      if (this.isHistoryCollapsed) {
+        this.togglePanelCollapse(true);
+      }
     }
   }
 
@@ -1010,6 +1080,141 @@ class AnalysisPanel {
     this.attachCloseEvent(panel);
     this.attachSettingsEvent(panel);
     this.attachBlockEvents(panel);
+    this.attachCollapseToggle(panel);
+  }
+
+  // 패널 축소 토글 버튼 이벤트
+  attachCollapseToggle(panel) {
+    const collapseBtn = panel.querySelector('#collapse-history-btn');
+    if (collapseBtn) {
+      collapseBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        this.togglePanelCollapse();
+      });
+    }
+  }
+
+  // 패널 축소/확장 처리
+  togglePanelCollapse(forceState = null) {
+    const panel = document.getElementById(this.panelId);
+    if (!panel) return;
+
+    const collapseBtn = panel.querySelector('#collapse-history-btn');
+    if (!collapseBtn) return;
+
+    const shouldCollapse = forceState !== null ? forceState : !this.isHistoryCollapsed;
+    const collapsibleElements = panel.querySelectorAll('.analysis-panel-collapsible');
+
+    if (shouldCollapse) {
+      if (!this.isHistoryCollapsed) {
+        this.expandedPanelWidth = panel.getBoundingClientRect().width || this.expandedPanelWidth || 560;
+        this.expandedPanelWidthValue = panel.style.width;
+        this.expandedPanelMinWidthValue = panel.style.minWidth;
+        this.expandedPanelMaxWidthValue = panel.style.maxWidth;
+      }
+
+      const collapsedWidth = Math.max(Math.round((this.expandedPanelWidth || 560) / 8), 64);
+      panel.style.width = `${collapsedWidth}px`;
+      panel.style.minWidth = `${collapsedWidth}px`;
+      panel.style.maxWidth = `${collapsedWidth}px`;
+      panel.classList.add('analysis-panel-collapsed');
+      
+      // 패널 배경 투명도 증가
+      const currentOpacity = this.getPanelOpacitySetting();
+      panel.style.opacity = Math.max(currentOpacity * 0.7, 0.3);
+
+      // 버튼을 세로 탭 형태로 변경
+      collapseBtn.style.cssText = `
+        position: absolute;
+        right: 8px;
+        top: 50%;
+        transform: translateY(-50%);
+        width: 32px;
+        height: 80px;
+        background: linear-gradient(135deg, #F2CEA2, #BF9780);
+        border: 1px solid rgba(191, 151, 128, 0.3);
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        backdrop-filter: blur(10px);
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+        z-index: 10;
+      `;
+      
+      collapseBtn.onmouseover = function() {
+        this.style.transform = 'translateY(-50%) scale(1.05)';
+        this.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.2)';
+      };
+      collapseBtn.onmouseout = function() {
+        this.style.transform = 'translateY(-50%)';
+        this.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.15)';
+      };
+
+      // Update button icon to left arrow
+      const icon = collapseBtn.querySelector('svg path');
+      if (icon) {
+        icon.setAttribute('d', 'M15 18l-6-6 6-6');
+      }
+
+      collapsibleElements.forEach((element) => {
+        if (!element.dataset.prevDisplay) {
+          element.dataset.prevDisplay = element.style.display || '';
+        }
+        element.style.display = 'none';
+      });
+    } else {
+      const widthToRestore = this.expandedPanelWidthValue || `${this.expandedPanelWidth || 560}px`;
+      panel.style.width = widthToRestore;
+      panel.style.minWidth = this.expandedPanelMinWidthValue || '';
+      panel.style.maxWidth = this.expandedPanelMaxWidthValue || '';
+      panel.classList.remove('analysis-panel-collapsed');
+      
+      // 패널 투명도 원래대로 복원
+      panel.style.opacity = this.getPanelOpacitySetting();
+
+      // 버튼을 원래 스타일로 복원
+      collapseBtn.style.cssText = `
+        width: 32px;
+        height: 32px;
+        background: rgba(255, 255, 255, 0.15);
+        border: 1px solid rgba(255, 255, 255, 0.2);
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        backdrop-filter: blur(10px);
+        flex-shrink: 0;
+      `;
+      
+      collapseBtn.onmouseover = function() {
+        this.style.background = 'rgba(255, 255, 255, 0.25)';
+        this.style.transform = 'scale(1.05)';
+      };
+      collapseBtn.onmouseout = function() {
+        this.style.background = 'rgba(255, 255, 255, 0.15)';
+        this.style.transform = 'scale(1)';
+      };
+
+      // Update button icon to right arrow
+      const icon = collapseBtn.querySelector('svg path');
+      if (icon) {
+        icon.setAttribute('d', 'M9 18l6-6-6-6');
+      }
+
+      collapsibleElements.forEach((element) => {
+        const prev = element.dataset.prevDisplay !== undefined ? element.dataset.prevDisplay : '';
+        element.style.display = prev;
+        delete element.dataset.prevDisplay;
+      });
+    }
+
+    this.isHistoryCollapsed = shouldCollapse;
   }
 
   // 블록 이벤트 연결
@@ -1047,6 +1252,24 @@ class AnalysisPanel {
         const id = parseInt(btn.dataset.id);
         console.log('비교하기 버튼 클릭, ID:', id, 'waitingForComparison:', this.waitingForComparison);
         this.toggleCompareMode(id);
+      });
+    });
+
+    // 사이트 이동 버튼
+    container.querySelectorAll('.open-site-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        try {
+          const encoded = btn.dataset.url || '';
+          const targetUrl = encoded ? decodeURIComponent(encoded) : '';
+          if (targetUrl) {
+            window.open(targetUrl, '_blank', 'noopener,noreferrer');
+          } else {
+            console.warn('사이트 이동 URL이 비어 있습니다.');
+          }
+        } catch (error) {
+          console.error('사이트 이동 중 오류 발생:', error);
+        }
       });
     });
     
@@ -1735,6 +1958,38 @@ ${comparisonContent}
           <div style="color: #737373; line-height: 1.5; background: #F2CEA2; border: 1px solid #BF9780; padding: 12px; border-radius: 8px; font-weight: 500;">${this.renderMarkdown(summary)}</div>
         </div>
         
+        ${result.수상한문장 && Object.keys(result.수상한문장).length > 0 ? `
+        <div style="margin-bottom: 16px;">
+          <h3 style="color: #0D0D0D; font-weight: 600; margin-bottom: 8px;">⚠️ 수상한 문장</h3>
+          <div style="background: #FFF4E6; border: 2px solid #FFA726; padding: 12px; border-radius: 8px;">
+            ${Object.entries(result.수상한문장).map(([sentence, reason]) => `
+              <div style="
+                margin-bottom: 12px;
+                padding: 10px;
+                background: white;
+                border-left: 3px solid #FF9800;
+                border-radius: 4px;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+              ">
+                <div style="
+                  color: #0D0D0D;
+                  font-weight: 600;
+                  margin-bottom: 6px;
+                  font-size: 14px;
+                  line-height: 1.5;
+                ">"${this.escapeHtml(sentence)}"</div>
+                <div style="
+                  color: #737373;
+                  font-size: 13px;
+                  line-height: 1.5;
+                  padding-left: 8px;
+                  border-left: 2px solid #FFE0B2;
+                ">→ ${this.escapeHtml(reason)}</div>
+              </div>
+            `).join('')}
+          </div>
+        </div>` : ''}
+        
         ${block.title.includes('[비교분석]') ? `
         <div style="text-align: center; margin-top: 20px;">
           <button class="show-analysis-process" style="
@@ -2239,6 +2494,37 @@ ${comparisonContent}
           font-size: 14px;
         ">${this.getAlwaysShowFloatingButtonSetting() ? '켜짐' : '꺼짐'}</button>
       </div>
+
+      <!-- 패널 투명도 조절 -->
+      <div style="
+        display: flex;
+        flex-direction: column;
+        gap: 12px;
+        padding-top: 16px;
+      ">
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+          <div>
+            <div style="
+              font-size: 16px;
+              font-weight: 600;
+              color: #0D0D0D;
+              margin-bottom: 4px;
+            ">패널 투명도</div>
+            <div style="font-size: 13px; color: #737373;">UI를 더 밝거나 더 투명하게 조절합니다</div>
+          </div>
+          <span class="panel-opacity-value" style="
+            font-size: 14px;
+            font-weight: 600;
+            color: #0D0D0D;
+            min-width: 48px;
+            text-align: right;
+          ">${Math.round(this.getPanelOpacitySetting() * 100)}%</span>
+        </div>
+        <input type="range" class="panel-opacity-slider" min="0.4" max="1" step="0.05" value="${this.getPanelOpacitySetting()}" style="
+          width: 100%;
+          accent-color: #BF9780;
+        " />
+      </div>
     `;
     
     modal.appendChild(modalContent);
@@ -2422,6 +2708,31 @@ ${comparisonContent}
         alwaysShowFloatingBtn.style.backgroundColor = currentSetting ? '#10B981' : '#9CA3AF';
       });
     }
+
+    // 패널 투명도 슬라이더
+    const opacitySlider = modalContent.querySelector('.panel-opacity-slider');
+    const opacityValueLabel = modalContent.querySelector('.panel-opacity-value');
+    if (opacitySlider && opacityValueLabel) {
+      const updateOpacity = (rawValue, persist = false) => {
+        const parsed = parseFloat(rawValue);
+        const numeric = Math.min(Math.max(Number.isNaN(parsed) ? this.panelOpacity : parsed, 0.4), 1);
+        opacityValueLabel.textContent = `${Math.round(numeric * 100)}%`;
+        opacitySlider.value = numeric;
+        if (persist) {
+          this.setPanelOpacitySetting(numeric);
+        } else {
+          this.applyPanelOpacity(numeric);
+        }
+      };
+
+      opacitySlider.addEventListener('input', (event) => {
+        updateOpacity(event.target.value, false);
+      });
+
+      opacitySlider.addEventListener('change', (event) => {
+        updateOpacity(event.target.value, true);
+      });
+    }
   }
 
   // API 키 모달 생성 (별도)
@@ -2529,6 +2840,51 @@ ${comparisonContent}
       console.log('Always show floating button setting updated:', value);
     } catch (error) {
       console.error('Failed to save always show floating button setting:', error);
+    }
+  }
+
+  // 패널 투명도 설정 가져오기
+  getPanelOpacitySetting() {
+    try {
+      const stored = localStorage.getItem('factcheck_panel_opacity');
+      const parsed = stored !== null ? parseFloat(stored) : 0.95;
+      if (Number.isNaN(parsed)) {
+        return 0.95;
+      }
+      return Math.min(Math.max(parsed, 0.4), 1);
+    } catch (error) {
+      console.error('Failed to get panel opacity setting:', error);
+      return 0.95;
+    }
+  }
+
+  // 패널 투명도 설정 저장 및 적용
+  setPanelOpacitySetting(value) {
+    const clamped = Math.min(Math.max(value, 0.4), 1);
+    try {
+      localStorage.setItem('factcheck_panel_opacity', String(clamped));
+      console.log('Panel opacity setting updated:', clamped);
+    } catch (error) {
+      console.error('Failed to save panel opacity setting:', error);
+    }
+
+    this.panelOpacity = clamped;
+    this.applyPanelOpacity(clamped);
+  }
+
+  // 패널에 투명도 적용
+  applyPanelOpacity(value) {
+    const panel = document.getElementById(this.panelId);
+    if (!panel) return;
+
+    const clamped = Math.min(Math.max(value, 0.4), 1);
+    this.panelOpacity = clamped;
+    panel.dataset.userOpacity = String(clamped);
+    panel.style.background = `rgba(232, 232, 232, ${Math.min(clamped + 0.05, 1)})`;
+    panel.style.backdropFilter = 'blur(10px)';
+
+    if (panel.style.opacity !== '0') {
+      panel.style.opacity = String(clamped);
     }
   }
 
