@@ -125,7 +125,7 @@ class EvidenceBlock {
               </div>
             </div>
             <div class="flex space-x-1">
-              <button class="icon-btn" onclick="this.toggleExpand('${this.id}')" title="펼치기/접기">
+              <button class="icon-btn" onclick="window.toggleExpand('${this.id}')" title="펼치기/접기">
                 <span class="text-xs">📖</span>
               </button>
               <button class="icon-btn" onclick="navigator.clipboard.writeText('${this.content.replace(/'/g, "\\'")}')">

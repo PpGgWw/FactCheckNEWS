@@ -189,23 +189,17 @@ function addNewsToPanel() {
     analysisPanel.setCurrentNews(title, url, content);
     console.log('현재 뉴스가 패널에 설정되었습니다.');
 
+    // 항상 플로팅 버튼 먼저 생성
+    analysisPanel.createFloatingButton();
+
     const autoOpenEnabled = getAutoOpenSetting();
 
-    // 자동 열기 설정 확인 후 패널 표시
+    // 자동 열기가 활성화된 경우에만 패널 표시
     if (autoOpenEnabled) {
       console.log('자동 열기 설정이 활성화되어 패널을 표시합니다.');
       analysisPanel.show();
-
-      // 패널이 열린 상태에서는 기존 플로팅 버튼 제거
-      const existingButton = document.getElementById('floating-news-analysis-btn');
-      if (existingButton) {
-        existingButton.remove();
-      }
     } else {
       console.log('자동 열기 설정이 비활성화되어 패널을 숨김 상태로 유지합니다.');
-
-      // 뉴스 페이지 접근 시 항상 플로팅 버튼을 제공
-      analysisPanel.createFloatingButton();
     }
   } else {
     console.error('AnalysisPanel 인스턴스를 찾을 수 없습니다.');

@@ -176,10 +176,10 @@ class VerdictBlock {
               })} 분석 완료
             </div>
             <div class="flex space-x-2">
-              <button class="icon-btn" onclick="this.shareVerdict('${this.id}')" title="공유하기">
+              <button class="icon-btn" onclick="window.shareVerdict('${this.id}')" title="공유하기">
                 <span class="text-xs">📤</span>
               </button>
-              <button class="icon-btn" onclick="this.saveVerdict('${this.id}')" title="저장하기">
+              <button class="icon-btn" onclick="window.saveVerdict('${this.id}')" title="저장하기">
                 <span class="text-xs">💾</span>
               </button>
             </div>

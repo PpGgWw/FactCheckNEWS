@@ -113,9 +113,7 @@ class AnalysisBlock {
                 ${this.formatContent(this.content)}
               </div>
               <button class="mt-3 text-sm text-primary hover:text-primary-dark transition-colors expand-btn" 
-                      onclick="this.closest('.expandable-content').querySelector('.content-preview').classList.add('hidden');
-                               this.closest('.expandable-content').querySelector('.content-full').classList.remove('hidden');
-                               this.style.display = 'none';">
+                      onclick="const btn = this; btn.closest('.expandable-content').querySelector('.content-preview').classList.add('hidden'); btn.closest('.expandable-content').querySelector('.content-full').classList.remove('hidden'); btn.style.display = 'none';">
                 더 보기 →
               </button>
             ` : ''}
