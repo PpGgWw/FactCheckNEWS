@@ -15,21 +15,20 @@ let extractedData = [];
 /**
  * 초기화 함수
  */
-function initialize() {
+async function initialize() {
   console.log('초기화 시작');
   
   // 이전 데이터 초기화
   extractedData = [];
   
-  // 뉴스 데이터 추출 및 하이라이트
-  extractNewsData();
+  // 저장된 분석 결과 확인 후 하이라이트 적용
+  const savedAnalysis = await getSavedVerdict();
+
+  extractNewsData(savedAnalysis);
   
   // 추출된 데이터가 있다면 패널에 추가
   if (extractedData.length > 0) {
     addNewsToPanel();
-    
-    // 이미 분석된 뉴스인지 확인하고 하이라이트 색상 적용
-    checkAndApplyExistingAnalysis();
   } else {
     // 뉴스 데이터가 없어도 플로팅 버튼 항상 표시 설정이 켜져있다면 빈 패널과 플로팅 버튼 생성
     if (getAlwaysShowFloatingButtonSetting()) {
@@ -39,21 +38,97 @@ function initialize() {
 }
 
 /**
+ * 저장된 분석 결과에서 현재 URL의 진위 여부 가져오기
+ */
+async function getSavedVerdict() {
+  const currentUrl = window.location.href;
+  const normalizeUrl = (urlString) => {
+    try {
+      const urlObj = new URL(urlString);
+      return urlObj.origin + urlObj.pathname;
+    } catch {
+      return urlString;
+    }
+  };
+  
+  const normalizedCurrentUrl = normalizeUrl(currentUrl);
+  console.log('[getSavedVerdict] 현재 URL:', currentUrl);
+  console.log('[getSavedVerdict] 정규화된 URL:', normalizedCurrentUrl);
+  
+  // chrome.storage에서 조회
+  try {
+    const data = await new Promise((resolve) => {
+      chrome.storage.local.get(['factcheck_verdicts'], resolve);
+    });
+    
+    const verdicts = data.factcheck_verdicts || {};
+    console.log('[getSavedVerdict] 저장된 모든 URL:', Object.keys(verdicts));
+    
+    const savedData = verdicts[normalizedCurrentUrl];
+    
+    if (savedData && savedData.verdict) {
+      console.log('[getSavedVerdict] ✅ 저장된 진위 결과 발견:', savedData.verdict);
+      return savedData;
+    } else {
+      console.log('[getSavedVerdict] ❌ 해당 URL의 진위 결과 없음');
+    }
+  } catch (error) {
+    console.error('[getSavedVerdict] 에러:', error);
+  }
+  
+  return null;
+}
+
+/**
+ * 진위 여부에 따른 색상 가져오기
+ */
+function getColorScheme(verdict) {
+  const colors = {
+    '진짜 뉴스': {
+      background: 'rgba(232, 245, 232, 0.4)', // 연한 초록 (투명도 60%)
+      border: '#4CAF50'
+    },
+    '가짜일 가능성이 있는 뉴스': {
+      background: 'rgba(242, 206, 162, 0.4)', // 주황 (투명도 60%)
+      border: '#BF9780'
+    },
+    '가짜일 가능성이 높은 뉴스': {
+      background: 'rgba(255, 235, 238, 0.5)', // 연한 빨강 (투명도 50%)
+      border: '#F44336'
+    },
+    '가짜 뉴스': {
+      background: 'rgba(255, 235, 238, 0.6)', // 연한 빨강 (투명도 40%)
+      border: '#D32F2F'
+    }
+  };
+  
+  return colors[verdict] || colors['가짜일 가능성이 있는 뉴스'];
+}
+
+/**
  * 뉴스 데이터 추출 및 하이라이트
  */
-function extractNewsData() {
+function extractNewsData(savedAnalysis = null) {
   console.log('뉴스 데이터 추출 시작');
+  
+  const verdict = savedAnalysis?.verdict || null;
+  const colorScheme = getColorScheme(verdict);
+  if (verdict) {
+    console.log('[extractNewsData] 저장된 분석 결과로 하이라이트 적용:', verdict);
+  } else {
+    console.log('[extractNewsData] 저장된 분석 결과 없음, 기본 색상 적용');
+  }
   
   // 제목 처리
   const titleSelector = 'h2.media_end_head_headline';
   const titleElement = document.querySelector(titleSelector);
 
   if (titleElement) {
-    // 하이라이트
-    titleElement.style.backgroundColor = '#F2CEA2'; // 테마 primary 색상
+    // 하이라이트 (저장된 분석 결과에 따른 색상)
+    titleElement.style.backgroundColor = colorScheme.background;
     titleElement.style.padding = '5px';
     titleElement.style.borderRadius = '5px';
-    titleElement.style.border = '2px solid #BF9780'; // 테두리 추가
+    titleElement.style.border = `2px solid ${colorScheme.border}`;
 
     // 데이터 수집
     const titleText = titleElement.textContent?.trim();
@@ -79,11 +154,11 @@ function extractNewsData() {
     
     if (contentElements.length > 0) {
       contentElements.forEach((element, index) => {
-        // 하이라이트
-        element.style.backgroundColor = '#F2CEA2'; // 테마 primary 색상
+        // 하이라이트 (저장된 분석 결과에 따른 색상)
+        element.style.backgroundColor = colorScheme.background;
         element.style.padding = '10px';
         element.style.borderRadius = '5px';
-        element.style.border = '2px solid #BF9780';
+        element.style.border = `2px solid ${colorScheme.border}`;
 
         // 데이터 수집
         const contentText = element.textContent?.trim();
@@ -108,7 +183,7 @@ function extractNewsData() {
 
   if (subtitleElement) {
     // 하이라이트
-    subtitleElement.style.backgroundColor = '#BF9780';
+    subtitleElement.style.backgroundColor = colorScheme.border; // 테두리 색상 사용
     subtitleElement.style.padding = '3px';
     subtitleElement.style.borderRadius = '3px';
 
@@ -120,6 +195,11 @@ function extractNewsData() {
     console.log('네이버 뉴스 시간 정보를 성공적으로 하이라이트하고 데이터를 수집했습니다.');
   } else {
     console.log('하이라이트할 네이버 뉴스 시간 정보를 찾지 못했습니다.');
+  }
+
+  // 저장된 수상한 문장 하이라이트도 적용
+  if (savedAnalysis?.suspicious) {
+    highlightSuspiciousSentences(savedAnalysis.suspicious);
   }
 }
 
@@ -285,49 +365,22 @@ function updateFloatingButtonVisibility() {
  * 진위 여부에 따라 하이라이트 색상 변경
  */
 function updateHighlightColors(verdict) {
-  console.log('하이라이트 색상 업데이트 시작:', verdict);
+  console.log('[updateHighlightColors] 시작 - 진위:', verdict);
   
-  // 진위 여부에 따른 색상 정의
-  const colors = {
-    '진짜 뉴스': {
-      background: '#E8F5E8', // 연한 초록
-      border: '#4CAF50'      // 진한 초록
-    },
-    '가짜일 가능성이 있는 뉴스': {
-      background: '#F2CEA2', // 기존 색상 (주황)
-      border: '#BF9780'      // 기존 색상
-    },
-    '가짜일 가능성이 높은 뉴스': {
-      background: '#FFEBEE', // 연한 빨강
-      border: '#F44336'      // 진한 빨강
-    },
-    '가짜 뉴스': {
-      background: '#FFEBEE', // 연한 빨강
-      border: '#D32F2F'      // 더 진한 빨강
-    }
-  };
-  
-  const colorScheme = colors[verdict] || colors['가짜일 가능성이 있는 뉴스']; // 기본값
-  console.log('적용할 색상 스키마:', colorScheme);
+  const colorScheme = getColorScheme(verdict);
+  console.log('[updateHighlightColors] 적용할 색상:', colorScheme);
   
   let elementsUpdated = 0;
   
   // 제목 하이라이트 색상 변경
   const titleSelector = 'h2.media_end_head_headline';
   const titleElement = document.querySelector(titleSelector);
-  console.log('제목 요소 확인:', !!titleElement, titleElement?.style.backgroundColor);
   
   if (titleElement) {
-    const wasHighlighted = !!titleElement.style.backgroundColor;
     titleElement.style.backgroundColor = colorScheme.background;
     titleElement.style.borderColor = colorScheme.border;
     titleElement.style.border = `2px solid ${colorScheme.border}`;
-    
-    console.log('제목 하이라이트 색상 변경 완료:', {
-      wasHighlighted,
-      newBackground: colorScheme.background,
-      newBorder: colorScheme.border
-    });
+    console.log('[updateHighlightColors] 제목 색상 변경:', colorScheme.background);
     elementsUpdated++;
   }
   
@@ -340,19 +393,12 @@ function updateHighlightColors(verdict) {
   
   for (const selector of contentSelectors) {
     const contentElements = document.querySelectorAll(selector);
-    console.log(`${selector} 요소 확인:`, contentElements.length, '개');
     
     contentElements.forEach((element, index) => {
-      const wasHighlighted = !!element.style.backgroundColor;
       element.style.backgroundColor = colorScheme.background;
       element.style.borderColor = colorScheme.border;
       element.style.border = `2px solid ${colorScheme.border}`;
-      
-      console.log(`${selector}[${index}] 하이라이트 색상 변경:`, {
-        wasHighlighted,
-        newBackground: colorScheme.background,
-        newBorder: colorScheme.border
-      });
+      console.log(`[updateHighlightColors] ${selector}[${index}] 색상 변경`);
       elementsUpdated++;
     });
   }
@@ -360,23 +406,17 @@ function updateHighlightColors(verdict) {
   // 시간 정보 하이라이트 색상 변경
   const subtitleSelector = '.media_end_head_info_datestamp_bunch .media_end_head_info_datestamp_time';
   const subtitleElement = document.querySelector(subtitleSelector);
-  console.log('시간 요소 확인:', !!subtitleElement, subtitleElement?.style.backgroundColor);
   
   if (subtitleElement) {
-    const wasHighlighted = !!subtitleElement.style.backgroundColor;
-    subtitleElement.style.backgroundColor = colorScheme.border; // 조금 더 진한 색상 사용
-    
-    console.log('시간 정보 하이라이트 색상 변경 완료:', {
-      wasHighlighted,
-      newBackground: colorScheme.border
-    });
+    subtitleElement.style.backgroundColor = colorScheme.border;
+    console.log('[updateHighlightColors] 시간 정보 색상 변경:', colorScheme.border);
     elementsUpdated++;
   }
   
-  console.log(`전체 하이라이트 색상 업데이트 완료 - 판정: ${verdict}, 업데이트된 요소: ${elementsUpdated}개`);
+  console.log(`[updateHighlightColors] 완료 - 판정: ${verdict}, 업데이트: ${elementsUpdated}개`);
   
   if (elementsUpdated === 0) {
-    console.warn('업데이트된 요소가 없습니다. 하이라이트가 되지 않았거나 셀렉터가 잘못되었을 수 있습니다.');
+    console.warn('[updateHighlightColors] 업데이트된 요소가 없습니다!');
   }
 }
 
@@ -510,6 +550,19 @@ function checkAndApplyExistingAnalysis() {
   const currentUrl = window.location.href;
   console.log('현재 URL:', currentUrl);
   
+  // URL 정규화 함수
+  const normalizeUrl = (urlString) => {
+    try {
+      const urlObj = new URL(urlString);
+      return urlObj.origin + urlObj.pathname;
+    } catch {
+      return urlString;
+    }
+  };
+  
+  const normalizedCurrentUrl = normalizeUrl(currentUrl);
+  console.log('정규화된 현재 URL:', normalizedCurrentUrl);
+  
   // 패널이 생성될 때까지 여러 번 시도
   let attempts = 0;
   const maxAttempts = 10;
@@ -532,50 +585,64 @@ function checkAndApplyExistingAnalysis() {
     const analysisPanel = panel.__analysisPanel;
     console.log('패널 발견, 데이터 확인 중...');
     console.log('현재 뉴스:', analysisPanel.currentNews);
-    console.log('분석된 블록들:', analysisPanel.analysisBlocks);
+    console.log('분석된 블록들:', Array.from(analysisPanel.newsBlocks.values()));
     
     // 현재 뉴스 블록 확인
-    if (analysisPanel.currentNews && analysisPanel.currentNews.url === currentUrl) {
+    if (analysisPanel.currentNews && normalizeUrl(analysisPanel.currentNews.url) === normalizedCurrentUrl) {
       console.log('현재 뉴스 블록 확인:', analysisPanel.currentNews.status, analysisPanel.currentNews.result);
-      if (analysisPanel.currentNews.status === 'completed' && analysisPanel.currentNews.result && analysisPanel.currentNews.result.진위) {
-        console.log('현재 뉴스에 분석 결과 있음:', analysisPanel.currentNews.result.진위);
-        console.log('하이라이트 색상 적용 시작...');
-        updateHighlightColors(analysisPanel.currentNews.result.진위);
+      if (analysisPanel.currentNews.status === 'completed' && analysisPanel.currentNews.result) {
+        const result = typeof analysisPanel.currentNews.result === 'string' 
+          ? JSON.parse(analysisPanel.currentNews.result) 
+          : analysisPanel.currentNews.result;
         
-        // 수상한 문장 하이라이트 적용
-        if (analysisPanel.currentNews.result.수상한문장) {
-          console.log('수상한 문장 하이라이트 적용...');
-          highlightSuspiciousSentences(analysisPanel.currentNews.result.수상한문장);
+        if (result && result[0] && result[0].output && result[0].output.진위) {
+          console.log('현재 뉴스에 분석 결과 있음:', result[0].output.진위);
+          console.log('하이라이트 색상 적용 시작...');
+          updateHighlightColors(result[0].output.진위);
+          
+          // 수상한 문장 하이라이트 적용
+          if (result[0].output.수상한문장) {
+            console.log('수상한 문장 하이라이트 적용...');
+            highlightSuspiciousSentences(result[0].output.수상한문장);
+          }
+          return;
         }
-        return;
       }
     }
     
-    // 분석된 뉴스 리스트에서 확인
-    if (analysisPanel.analysisBlocks && analysisPanel.analysisBlocks.length > 0) {
-      console.log('분석된 뉴스 리스트 확인:', analysisPanel.analysisBlocks.length, '개');
+    // 분석된 뉴스 리스트에서 확인 (newsBlocks Map 사용)
+    if (analysisPanel.newsBlocks && analysisPanel.newsBlocks.size > 0) {
+      console.log('분석된 뉴스 리스트 확인:', analysisPanel.newsBlocks.size, '개');
       
-      for (const block of analysisPanel.analysisBlocks) {
+      for (const [id, block] of analysisPanel.newsBlocks.entries()) {
+        const normalizedBlockUrl = normalizeUrl(block.url);
         console.log('블록 상세:', {
+          id: id,
           url: block.url,
-          currentUrl: currentUrl,
-          urlMatch: block.url === currentUrl,
+          normalizedUrl: normalizedBlockUrl,
+          currentUrl: normalizedCurrentUrl,
+          urlMatch: normalizedBlockUrl === normalizedCurrentUrl,
           status: block.status,
-          hasResult: !!block.result,
-          verdict: block.result?.진위
+          hasResult: !!block.result
         });
         
-        if (block.url === currentUrl && block.status === 'completed' && block.result && block.result.진위) {
-          console.log('매칭되는 분석 결과 발견:', block.result.진위);
-          console.log('하이라이트 색상 적용 시작...');
-          updateHighlightColors(block.result.진위);
+        if (normalizedBlockUrl === normalizedCurrentUrl && block.status === 'completed' && block.result) {
+          const result = typeof block.result === 'string' 
+            ? JSON.parse(block.result) 
+            : block.result;
           
-          // 수상한 문장 하이라이트 적용
-          if (block.result.수상한문장) {
-            console.log('수상한 문장 하이라이트 적용...');
-            highlightSuspiciousSentences(block.result.수상한문장);
+          if (result && result[0] && result[0].output && result[0].output.진위) {
+            console.log('매칭되는 분석 결과 발견:', result[0].output.진위);
+            console.log('하이라이트 색상 적용 시작...');
+            updateHighlightColors(result[0].output.진위);
+            
+            // 수상한 문장 하이라이트 적용
+            if (result[0].output.수상한문장) {
+              console.log('수상한 문장 하이라이트 적용...');
+              highlightSuspiciousSentences(result[0].output.수상한문장);
+            }
+            return;
           }
-          return;
         }
       }
     }
@@ -770,7 +837,9 @@ if (isChromeApiAvailable()) {
         const panel = document.getElementById('news-analysis-panel');
         if (panel && panel.__analysisPanel) {
           console.log('분석 결과 표시:', message.blockId, message.result);
-          panel.__analysisPanel.completeAnalysis(message.blockId, message.result);
+          
+          // updateNewsStatus를 통해 상태를 completed로 변경 (자동으로 completeAnalysis 호출됨)
+          panel.__analysisPanel.updateNewsStatus(message.blockId, 'completed', message.result);
           
           // 분석 결과에 따라 페이지 하이라이트 색상 업데이트
           if (message.result && message.result.진위) {

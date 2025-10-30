@@ -13,7 +13,7 @@ class AnalysisPanel {
     this.currentTypingIntervals = new Map(); // 현재 타이핑 중인 인터벌들
     this.analysisSteps = ['분석진행', '진위', '근거', '분석', '요약']; // 분석 단계
     this.panelOpacity = this.getPanelOpacitySetting();
-    this.isHistoryCollapsed = false;
+    this.isHistoryCollapsed = this.getCollapsedStateSetting(); // localStorage에서 복원
     this.expandedPanelWidth = null;
     this.expandedPanelWidthValue = '';
     this.expandedPanelMinWidthValue = '';
@@ -716,6 +716,10 @@ class AnalysisPanel {
     }
 
     const safeTitle = this.currentNews.title || '제목 없음';
+    const status = this.currentNews.status || 'pending';
+    const showAnalyzeBtn = status === 'pending' || status === 'error';
+    const statusBadge = this.getCollapsedStatusBadge(this.currentNews);
+    
     return `
       <div style="
         display: flex;
@@ -727,7 +731,10 @@ class AnalysisPanel {
         background: ${this.blendColors(surface, base, 0.28)};
       ">
         <div style="display: flex; flex-direction: column; gap: 6px;">
-          <span style="font-size: 14px; font-weight: 600; color: ${text};">현재 페이지</span>
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <span style="font-size: 14px; font-weight: 600; color: ${text};">현재 페이지</span>
+            ${statusBadge}
+          </div>
           <span style="
             font-size: 13px;
             color: ${text};
@@ -737,7 +744,7 @@ class AnalysisPanel {
             overflow: hidden;
           ">${safeTitle}</span>
         </div>
-        <button id="collapsed-current-analyze-btn" style="
+        ${showAnalyzeBtn ? `<button id="collapsed-current-analyze-btn" style="
           padding: 8px 14px;
           border-radius: 8px;
           border: 1px solid rgba(140, 110, 84, 0.5);
@@ -746,7 +753,7 @@ class AnalysisPanel {
           font-size: 13px;
           cursor: pointer;
           transition: all 0.2s ease;
-        " onmouseover="this.style.background='rgba(140, 110, 84, 0.4)';" onmouseout="this.style.background='rgba(140, 110, 84, 0.28)';">분석하기</button>
+        " onmouseover="this.style.background='rgba(140, 110, 84, 0.4)';" onmouseout="this.style.background='rgba(140, 110, 84, 0.28)';">분석하기</button>` : ''}
       </div>
     `;
   }
@@ -1386,7 +1393,7 @@ class AnalysisPanel {
   }
 
   // 새 뉴스 추가 (분석된 뉴스 리스트에 추가)
-  addNews(title, url, content) {
+  addNews(title, url, content, startAnalyzing = false) {
     // URL 정규화 (쿼리 파라미터 제거)
     const normalizeUrl = (urlString) => {
       try {
@@ -1416,13 +1423,18 @@ class AnalysisPanel {
       title,
       url,
       content,
-      status: 'pending',
+      status: startAnalyzing ? 'analyzing' : 'pending',
       result: null,
-      progress: null,
+      progress: startAnalyzing ? '🔍 분석 시작...' : null,
       timestamp: Date.now()
     };
     
     this.addNewsBlock(newsData);
+    console.log('[addNews] 뉴스 블록 추가됨:', newsData);
+    
+    // 즉시 패널 업데이트하여 기록에 표시
+    this.updatePanel();
+    
     return id;
   }
 
@@ -1446,6 +1458,12 @@ class AnalysisPanel {
     if (progress) block.progress = progress;
     if (result) block.result = result;
     if (error) block.error = error;
+    
+    // 분석 완료 시 진위 결과 저장
+    if (status === 'completed' && result && id !== 'current') {
+      console.log('[updateNewsStatus] completeAnalysis 호출 전, id:', id, 'result 타입:', typeof result);
+      this.completeAnalysis(id, result);
+    }
     
     // 분석된 뉴스만 저장 (현재 뉴스는 페이지별로 관리)
     if (id !== 'current') {
@@ -1475,6 +1493,16 @@ class AnalysisPanel {
       const analyzedContainer = panel.querySelector('#analyzed-news-container');
       if (analyzedContainer) {
         analyzedContainer.innerHTML = this.renderAnalyzedNews();
+      }
+      
+      // 축소된 요약 뷰 업데이트 (축소 상태일 때)
+      if (this.isHistoryCollapsed) {
+        const collapsedSummary = panel.querySelector('#collapsed-summary');
+        if (collapsedSummary) {
+          collapsedSummary.innerHTML = this.renderCollapsedSummary();
+          // 축소 뷰 이벤트 재연결
+          this.attachCollapsedSummaryEvents(panel);
+        }
       }
       
       // 이벤트 다시 연결
@@ -1602,6 +1630,7 @@ class AnalysisPanel {
     }
 
     this.isHistoryCollapsed = shouldCollapse;
+    this.saveCollapsedStateSetting(shouldCollapse); // localStorage에 저장
     this.updateCollapsedSummary(panel);
   }
 
@@ -1609,21 +1638,22 @@ class AnalysisPanel {
     const panel = panelRef || document.getElementById(this.panelId);
     if (!panel) return;
 
-    const countLabel = panel.querySelector('#collapsed-summary-count');
-    const listContainer = panel.querySelector('#collapsed-summary-list');
-    if (countLabel) {
-      countLabel.textContent = this.getCollapsedSummaryCountText();
-    }
-    if (listContainer) {
-      listContainer.innerHTML = this.renderCollapsedSummaryItems();
-    }
-    const currentContainer = panel.querySelector('#collapsed-current-container');
-    if (currentContainer) {
-      currentContainer.innerHTML = this.renderCollapsedCurrentSection();
+    // 축소 뷰 전체를 다시 렌더링하여 최신 상태 반영
+    const collapsedSummary = panel.querySelector('#collapsed-summary');
+    if (collapsedSummary && this.isHistoryCollapsed) {
+      collapsedSummary.innerHTML = this.renderCollapsedSummary();
+      // 이벤트 재연결
+      this.attachCollapsedSummaryEvents(panel);
     }
   }
 
-  attachCollapsedSummaryEvents(panel) {
+  attachCollapsedSummaryEvents(panelRef = null) {
+    const panel = panelRef || document.getElementById(this.panelId);
+    if (!panel) {
+      console.warn('[attachCollapsedSummaryEvents] 패널을 찾을 수 없습니다.');
+      return;
+    }
+
     const expandBtn = panel.querySelector('#expand-panel-btn');
     if (expandBtn && !expandBtn.dataset.listenerAttached) {
       expandBtn.addEventListener('click', (e) => {
@@ -1649,6 +1679,17 @@ class AnalysisPanel {
       currentAnalyzeBtn.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
+        console.log('[Collapsed] Current analyze button clicked');
+        console.log('[Collapsed] currentNews:', this.currentNews);
+        
+        if (!this.currentNews) {
+          console.error('[Collapsed] No current news available');
+          alert('현재 뉴스가 없습니다.');
+          return;
+        }
+        
+        // 축소 상태에서도 분석 진행 (패널 확장하지 않음)
+        console.log('[Collapsed] Starting analysis in collapsed view');
         this.analyzeCurrentNews();
       });
       currentAnalyzeBtn.dataset.listenerAttached = 'true';
@@ -1816,6 +1857,8 @@ class AnalysisPanel {
 
   // 현재 뉴스 분석
   analyzeCurrentNews() {
+    console.log('[analyzeCurrentNews] 시작, currentNews:', this.currentNews);
+    
     if (!this.currentNews) {
       alert('현재 뉴스가 없습니다.');
       return;
@@ -1837,12 +1880,23 @@ class AnalysisPanel {
     );
     
     if (existingBlock) {
+      console.log('[analyzeCurrentNews] 이미 존재하는 뉴스:', existingBlock.id);
       alert('이 뉴스는 이미 분석 목록에 있습니다.');
       return;
     }
     
-    // 현재 뉴스를 분석 목록에 추가하고 분석 시작
-    const newId = this.addNews(this.currentNews.title, this.currentNews.url, this.currentNews.content);
+    // 현재 뉴스 상태를 analyzing으로 변경
+    this.currentNews.status = 'analyzing';
+    this.currentNews.progress = '🔍 분석 시작...';
+    this.currentNews.result = null;
+    
+    // 현재 뉴스를 분석 목록에 추가 (즉시 analyzing 상태로)
+    console.log('[analyzeCurrentNews] 새 뉴스 추가 중... (analyzing 상태로)');
+    const newId = this.addNews(this.currentNews.title, this.currentNews.url, this.currentNews.content, true);
+    console.log('[analyzeCurrentNews] 추가된 ID:', newId);
+    
+    // 분석 시작
+    console.log('[analyzeCurrentNews] 분석 시작 호출');
     this.startAnalysis(newId);
   }
 
@@ -3061,39 +3115,6 @@ ${comparisonContent}
           font-size: 14px;
         ">${this.getAutoOpenSetting() ? '켜짐' : '꺼짐'}</button>
       </div>
-      
-      <!-- 플로팅 버튼 항상 표시 -->
-      <div style="
-        display: flex; 
-        align-items: center; 
-        justify-content: space-between; 
-        padding: 16px 0;
-        border-bottom: 1px solid #E5E5E5;
-      ">
-        <div>
-          <div style="
-            font-size: 16px; 
-            font-weight: 600; 
-            color: #0D0D0D; 
-            margin-bottom: 4px;
-          ">플로팅 버튼 항상 표시</div>
-          <div style="
-            font-size: 13px; 
-            color: #737373;
-          ">뉴스 페이지가 아니어도 플로팅 버튼 표시</div>
-        </div>
-        <button class="always-show-floating-btn" style="
-          background: ${this.getAlwaysShowFloatingButtonSetting() ? '#10B981' : '#9CA3AF'}; 
-          color: white; 
-          padding: 8px 16px; 
-          border-radius: 6px; 
-          font-weight: 600; 
-          border: none; 
-          cursor: pointer; 
-          transition: background-color 0.2s; 
-          font-size: 14px;
-        ">${this.getAlwaysShowFloatingButtonSetting() ? '켜짐' : '꺼짐'}</button>
-      </div>
 
       <!-- 뉴스 브랜드 선택 -->
       <div style="
@@ -3305,34 +3326,6 @@ ${comparisonContent}
         autoOpenBtn.style.backgroundColor = currentSetting ? '#10B981' : '#9CA3AF';
       });
     }
-    
-    // 플로팅 버튼 항상 표시 토글 버튼
-    const alwaysShowFloatingBtn = modalContent.querySelector('.always-show-floating-btn');
-    if (alwaysShowFloatingBtn) {
-      alwaysShowFloatingBtn.addEventListener('click', () => {
-        const currentSetting = this.getAlwaysShowFloatingButtonSetting();
-        const newSetting = !currentSetting;
-        this.setAlwaysShowFloatingButtonSetting(newSetting);
-        
-        // 버튼 상태 업데이트
-        alwaysShowFloatingBtn.style.backgroundColor = newSetting ? '#10B981' : '#9CA3AF';
-        alwaysShowFloatingBtn.textContent = newSetting ? '켜짐' : '꺼짐';
-        
-        // 플로팅 버튼 즉시 반영
-        if (typeof window.updateFloatingButtonVisibility === 'function') {
-          window.updateFloatingButtonVisibility();
-        }
-      });
-      
-      alwaysShowFloatingBtn.addEventListener('mouseenter', () => {
-        const currentSetting = this.getAlwaysShowFloatingButtonSetting();
-        alwaysShowFloatingBtn.style.backgroundColor = currentSetting ? '#0EA16F' : '#6B7280';
-      });
-      alwaysShowFloatingBtn.addEventListener('mouseleave', () => {
-        const currentSetting = this.getAlwaysShowFloatingButtonSetting();
-        alwaysShowFloatingBtn.style.backgroundColor = currentSetting ? '#10B981' : '#9CA3AF';
-      });
-    }
 
     // 뉴스 브랜드 선택 버튼들
     const brandButtons = modalContent.querySelectorAll('.news-brand-option');
@@ -3501,24 +3494,24 @@ ${comparisonContent}
     }
   }
 
-  // 플로팅 버튼 항상 표시 설정 가져오기
-  getAlwaysShowFloatingButtonSetting() {
+  // 축소 상태 설정 가져오기
+  getCollapsedStateSetting() {
     try {
-      const setting = localStorage.getItem('factcheck_always_show_floating_button');
-      return setting !== null ? JSON.parse(setting) : false; // 기본값: false
+      const setting = localStorage.getItem('factcheck_panel_collapsed');
+      return setting !== null ? JSON.parse(setting) : false;
     } catch (error) {
-      console.error('Failed to get always show floating button setting:', error);
+      console.error('Failed to get collapsed state setting:', error);
       return false;
     }
   }
 
-  // 플로팅 버튼 항상 표시 설정 저장
-  setAlwaysShowFloatingButtonSetting(value) {
+  // 축소 상태 설정 저장
+  saveCollapsedStateSetting(value) {
     try {
-      localStorage.setItem('factcheck_always_show_floating_button', JSON.stringify(value));
-      console.log('Always show floating button setting updated:', value);
+      localStorage.setItem('factcheck_panel_collapsed', JSON.stringify(value));
+      console.log('Collapsed state setting updated:', value);
     } catch (error) {
-      console.error('Failed to save always show floating button setting:', error);
+      console.error('Failed to save collapsed state setting:', error);
     }
   }
 
@@ -4195,7 +4188,84 @@ ${comparisonContent}
     }
     
     this.streamingResults.delete(blockId); // 스트리밍 결과 정리
-    this.updateNewsStatus(blockId, 'completed', result);
+    
+    // ===== 진위 결과를 URL별로 따로 저장 (하이라이트용) =====
+    const block = this.newsBlocks.get(blockId);
+    if (block && block.url) {
+      try {
+        const parsedResult = typeof result === 'string' ? JSON.parse(result) : result;
+        const verdict = parsedResult?.[0]?.output?.진위;
+        const suspicious = parsedResult?.[0]?.output?.수상한문장;
+        
+        if (verdict) {
+          const normalizeUrl = (urlString) => {
+            try {
+              const urlObj = new URL(urlString);
+              return urlObj.origin + urlObj.pathname;
+            } catch {
+              return urlString;
+            }
+          };
+          
+          const normalizedUrl = normalizeUrl(block.url);
+          
+          console.log('[completeAnalysis] 진위 결과 저장 시작:', normalizedUrl, verdict);
+          
+          // chrome.storage에 진위 결과 저장
+          chrome.storage.local.get(['factcheck_verdicts'], (data) => {
+            if (chrome.runtime.lastError) {
+              console.error('[completeAnalysis] storage.get 에러:', chrome.runtime.lastError);
+              return;
+            }
+            
+            const savedVerdicts = data.factcheck_verdicts || {};
+            savedVerdicts[normalizedUrl] = {
+              verdict: verdict,
+              suspicious: suspicious,
+              timestamp: Date.now()
+            };
+            
+            chrome.storage.local.set({ factcheck_verdicts: savedVerdicts }, () => {
+              if (chrome.runtime.lastError) {
+                console.error('[completeAnalysis] storage.set 에러:', chrome.runtime.lastError);
+              } else {
+                console.log('[completeAnalysis] ✅ 진위 결과 저장 완료:', normalizedUrl, verdict);
+              }
+            });
+          });
+          
+          // 즉시 하이라이트 색상 변경
+          if (typeof window.updateHighlightColors === 'function') {
+            window.updateHighlightColors(verdict);
+          }
+          
+          // 수상한 문장 하이라이트
+          if (suspicious && typeof window.highlightSuspiciousSentences === 'function') {
+            window.highlightSuspiciousSentences(suspicious);
+          }
+        }
+      } catch (error) {
+        console.error('[completeAnalysis] 진위 결과 저장 실패:', error);
+      }
+    }
+    
+    // currentNews가 분석된 경우 상태도 completed로 변경
+    if (this.currentNews) {
+      const normalizeUrl = (urlString) => {
+        try {
+          const urlObj = new URL(urlString);
+          return urlObj.origin + urlObj.pathname;
+        } catch {
+          return urlString;
+        }
+      };
+      
+      if (block && normalizeUrl(block.url) === normalizeUrl(this.currentNews.url)) {
+        this.currentNews.status = 'completed';
+        this.currentNews.result = result;
+        this.updatePanel();
+      }
+    }
     
     // 분석 결과에 따라 하이라이트 색상 변경
     try {
@@ -4234,6 +4304,25 @@ ${comparisonContent}
   failAnalysis(blockId, error) {
     this.streamingResults.delete(blockId); // 스트리밍 결과 정리
     this.updateNewsStatus(blockId, 'error', null, null, error);
+    
+    // currentNews가 실패한 경우 상태도 error로 변경
+    if (this.currentNews) {
+      const normalizeUrl = (urlString) => {
+        try {
+          const urlObj = new URL(urlString);
+          return urlObj.origin + urlObj.pathname;
+        } catch {
+          return urlString;
+        }
+      };
+      
+      const block = this.newsBlocks.get(blockId);
+      if (block && normalizeUrl(block.url) === normalizeUrl(this.currentNews.url)) {
+        this.currentNews.status = 'error';
+        this.currentNews.error = error;
+        this.updatePanel();
+      }
+    }
   }
 
   // 뉴스 블록 데이터 저장
