@@ -1,51 +1,54 @@
-## 📹 시연 영상
+## 시연 영상
 
-### [기본분석 시연](https://drive.google.com/file/d/1KkgjLJ2K41v4h13l8gMmw3YIh-ujAncA/view?usp=drive_link)
-### [비교분석 시연](https://drive.google.com/file/d/1DqpSS3t5vxR92Bflw4BOIgffRZNi3f18/view?usp=sharing)
+[기본분석 시연](https://drive.google.com/file/d/1KkgjLJ2K41v4h13l8gMmw3YIh-ujAncA/view?usp=drive_link)  
+[비교분석 시연](https://drive.google.com/file/d/1DqpSS3t5vxR92Bflw4BOIgffRZNi3f18/view?usp=sharing)
 
 ---
 
-# FactCheckNEWS (크롬 확장 프로그램)
+FactCheckNEWS (크롬 확장 프로그램)
 
-**Gemini AI 기반 실시간 뉴스 팩트체크 확장 프로그램**
+Gemini AI 기반 실시간 뉴스 팩트체크 확장 프로그램
 
 네이버 뉴스, 다음 뉴스 등 주요 뉴스 사이트에서 Gemini API를 활용해 기사의 신뢰도 및 진위 여부를 실시간으로 분석합니다.  
 기사의 주요 부분을 자동 하이라이트하고, 분석 결과를 패널 형태로 직관적으로 표시합니다.
 
 ---
 
-## ✨ 주요 기능
+## 주요 기능
 
-### 📰 자동 뉴스 추출 및 하이라이트
+### 자동 뉴스 추출 및 하이라이트
 - **네이버 뉴스**: 제목, 본문, 시간 정보 자동 추출
 - **다음 뉴스**: 제목, 본문, 저자/언론사, 작성일, 요약, 사진 설명 자동 추출
 - 주요 텍스트 영역 시각적 하이라이트
 - **모듈식 파서 구조**: 사이트별 독립적인 파싱 로직으로 쉬운 확장 가능
+  - `NaverNewsParser`와 `DaumNewsParser`가 공통 인터페이스(`canParse`, `extractNewsData`, `updateHighlightColors`, `highlightSuspiciousSentences`)를 구현
+  - `content_script.js`에서 현재 URL을 기반으로 자동 파서 선택
+  - 새로운 뉴스 사이트 추가 시 파서 클래스만 작성하면 기존 코드 수정 없이 즉시 지원 가능
 
-### 🤖 AI 기반 팩트체크
+### AI 기반 팩트체크
 - Gemini API를 통한 기사 진위 여부 실시간 분석
 - 논리적 구조, 근거 제시 방식, 표현의 적절성 평가
 - 진위 판정 및 상세 근거 제시
 
-### 🎨 직관적인 UI/UX
+### 직관적인 UI/UX
 - **우측 슬라이드 패널**: 우→좌 애니메이션으로 부드러운 표시
 - **축소 모드**: 오른쪽 하단 미니 카드로 간소화, 현재 뉴스 및 최근 분석 3건 미리보기
 - **플로팅 버튼**: 패널 닫기 후 빠른 재진입
 - **테마 일관성**: 다크 모드 기반 전문적인 디자인
 
-### 📊 분석 기록 관리
+### 분석 기록 관리
 - 분석된 뉴스 자동 저장 및 목록 관리
 - 상태별 뱃지 표시 (대기 중, 분석 중, 완료, 오류)
 - 기록 클릭으로 자세히 보기 모달 제공
 
-### ⚙️ 설정 **옵션**
+### 설정 **옵션**
 - 자동 패널 열기 설정
 - 뉴스 브랜드 필터링 (연합뉴스, 조선일보, 중앙일보 등 10개 주요 언론사)
 - 패널 투명도 조절
 
 ---
 
-## 🚀 설치 및 사용법
+## 설치 및 사용법
 
 ### 1. 크롬 확장 프로그램 설치
 
@@ -94,7 +97,7 @@
 
 ---
 
-## 🎯 주요 동작 흐름
+## 주요 동작 흐름
 
 1. **뉴스 페이지 진입** → 자동으로 기사 정보 추출 및 하이라이트
 2. **패널 표시** → 우측에서 슬라이드 인, 현재 페이지 뉴스 표시
@@ -106,13 +109,16 @@
 
 ---
 
-## 📂 프로젝트 구조
+## 프로젝트 구조
 
 ```
 FactCheckNEWS/
-├── manifest.json              # 확장 프로그램 메타데이터
-├── content_script.js          # 뉴스 페이지 스크립트
-├── service_worker.js          # 백그라운드 서비스 워커
+├── manifest.json              # 확장 프로그램 메타데이터 (Manifest V3)
+├── content_script.js          # 뉴스 페이지 스크립트 (파서 자동 선택 로직)
+├── service_worker.js          # 백그라운드 서비스 워커 (Gemini API 호출)
+├── parsers/
+│   ├── naver-parser.js        # 네이버 뉴스 파서 (NaverNewsParser)
+│   └── daum-parser.js         # 다음 뉴스 파서 (DaumNewsParser)
 ├── components/
 │   ├── AnalysisPanel.js       # 메인 패널 컴포넌트
 │   ├── AnalysisBlock.js       # 분석 블록 컴포넌트
@@ -130,17 +136,118 @@ FactCheckNEWS/
 
 ---
 
-## 🛠️ 기술 스택
+## 기술 스택
 
-- **Frontend**: Vanilla JavaScript, ES6+
-- **UI Framework**: CSS-in-JS, Tailwind CSS
-- **API**: Google Gemini API
-- **Architecture**: Chrome Extension Manifest V3
+- **Frontend**: Vanilla JavaScript, ES6+ (Class, async/await, Map)
+- **UI Framework**: CSS-in-JS, Tailwind CSS v3
+- **API**: Google Gemini API (gemini-2.0-flash)
+- **Architecture**: Chrome Extension Manifest V3, Service Worker
+- **Storage**: Chrome Storage API (chrome.storage.local)
 - **Build Tool**: npm, Tailwind CLI
 
 ---
 
-## 📝 개발 참고사항
+## 파서 확장성
+
+### 새로운 뉴스 사이트 추가 방법
+
+본 프로젝트는 **Strategy Pattern** 기반 모듈식 파서 구조로, 새로운 뉴스 사이트 지원이 매우 간단합니다.
+
+#### 1단계: 파서 클래스 작성
+`parsers/` 폴더에 새 파서 파일 생성 (예: `chosun-parser.js`):
+
+```javascript
+class ChosunNewsParser {
+  canParse(url) {
+    return url.includes('chosun.com/');
+  }
+
+  extractNewsData(colorScheme) {
+    const title = document.querySelector('.article-title')?.textContent || '';
+    const content = document.querySelector('.article-body')?.textContent || '';
+    // ... 나머지 구현
+    return { title, content, author, date };
+  }
+
+  updateHighlightColors(colorScheme) {
+    // 하이라이트 색상 업데이트 로직
+  }
+
+  highlightSuspiciousSentences(sentences, colorScheme) {
+    // 의심 문장 하이라이트 로직
+  }
+}
+
+window.ChosunNewsParser = ChosunNewsParser;
+```
+
+#### 2단계: manifest.json 업데이트
+```json
+{
+  "content_scripts": [{
+    "matches": [
+      "https://n.news.naver.com/*",
+      "https://news.daum.net/*",
+      "https://www.chosun.com/*"  // 추가
+    ],
+    "js": [
+      "parsers/naver-parser.js",
+      "parsers/daum-parser.js",
+      "parsers/chosun-parser.js",  // 추가
+      "components/AnalysisPanel.js",
+      "content_script.js"
+    ]
+  }]
+}
+```
+
+#### 3단계: content_script.js에서 자동 인식
+`getParserForCurrentUrl()` 함수가 자동으로 새 파서를 감지합니다:
+
+```javascript
+function getParserForCurrentUrl() {
+  const currentUrl = window.location.href;
+  
+  // 기존 파서들
+  if (typeof window.NaverNewsParser !== 'undefined') {
+    const parser = new window.NaverNewsParser();
+    if (parser.canParse(currentUrl)) return parser;
+  }
+  
+  // 새 파서 자동 추가됨
+  if (typeof window.ChosunNewsParser !== 'undefined') {
+    const parser = new window.ChosunNewsParser();
+    if (parser.canParse(currentUrl)) return parser;
+  }
+  
+  return null;
+}
+```
+
+**핵심 장점:**
+- 기존 코드 수정 없이 파서만 추가하면 즉시 지원
+- 각 파서가 독립적으로 관리되어 유지보수 용이
+- URL 기반 자동 선택으로 사용자 경험 일관성 유지
+
+---
+
+## 보안 고려사항
+
+### API 키 관리
+- **현재 버전**: 로컬 학습용으로 Chrome Storage에 키 저장
+- **배포 버전 권장사항**: 
+  - 백엔드 프록시 서버를 통해 API 키 숨김
+  - 클라이언트에 키를 직접 노출하지 않음
+  - 사용자 인증 및 Rate Limiting 적용
+
+### 개인정보 보호
+- 사용자 계정 정보 수집하지 않음
+- 기사 URL과 분석 결과만 로컬 저장
+- Gemini API에는 기사 내용만 전송 (Google 보안 정책 준수)
+
+---
+
+## 개발 참고사항
 
 ### 애니메이션 시스템
 - 패널 전환: 150ms CSS transition
@@ -155,4 +262,4 @@ FactCheckNEWS/
 ### 색상 팔레트
 - Base: `#0D0D0D` (다크 배경)
 - Accent: `#8C6E54` (브라운 강조)
-- Floating Button: 인디고-퍼플 그라데이션 (`#4F46E5` → `#8B5CF6`)****
+- Floating Button: 인디고-퍼플 그라데이션 (`#4F46E5` → `#8B5CF6`)
