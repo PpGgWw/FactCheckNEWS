@@ -42,6 +42,9 @@ class AnalysisPanel {
     this.savedScrollPosition = { top: 0, left: 0 };
     this.boundWrapperScrollHandler = null;
     this.currentPageOffset = 0;
+    this.activeDetailOverlay = null;
+    this.detailEscapeHandler = null;
+    this.preDetailFocus = null;
     
     // 저장된 뉴스 블록 데이터 로드
     this.loadSavedNewsBlocks();
@@ -355,6 +358,8 @@ class AnalysisPanel {
     const panel = document.getElementById(this.panelId);
     if (!panel) return;
     
+    this.closeDetailInPanel(true);
+
     console.log('[Hide] Closing panel');
     
     // 패널 닫기 애니메이션 - 항상 좌->우
@@ -1773,6 +1778,8 @@ class AnalysisPanel {
     const panel = document.getElementById(this.panelId);
     if (!panel) return;
 
+    this.closeDetailInPanel(true);
+
     const collapseBtn = panel.querySelector('#collapse-history-btn');
     if (!collapseBtn) return;
 
@@ -2712,18 +2719,361 @@ ${comparisonContent}
       console.log('분석 결과가 없습니다:', id, block);
       return;
     }
-    
-    const modal = this.createResultModal(block);
-    document.body.appendChild(modal);
-    
-    // 애니메이션
-    setTimeout(() => {
-      modal.style.opacity = '1';
-      const modalContent = modal.querySelector('.modal-content');
-      if (modalContent) {
-        modalContent.style.transform = 'scale(1)';
+
+    const panel = document.getElementById(this.panelId);
+    const shouldUseModal = !panel || panel.classList.contains('analysis-panel-collapsed');
+
+    if (shouldUseModal) {
+      const modal = this.createResultModal(block);
+      document.body.appendChild(modal);
+
+      setTimeout(() => {
+        modal.style.opacity = '1';
+        const modalContent = modal.querySelector('.modal-content');
+        if (modalContent) {
+          modalContent.style.transform = 'scale(1)';
+        }
+      }, 10);
+      return;
+    }
+
+    this.showDetailInPanel(block);
+  }
+
+  showDetailInPanel(block) {
+    const panel = document.getElementById(this.panelId);
+    if (!panel) {
+      return;
+    }
+
+    this.closeDetailInPanel(true);
+
+    const result = block.result || {};
+    const analysisProcess = result.분석진행 || '';
+    const verdict = result.진위 || '분석 결과 없음';
+    const evidence = result.근거 || 'N/A';
+    const analysis = result.분석 || 'N/A';
+    const summary = result.요약 || 'N/A';
+    const { base, surface, surfaceAlt, accent, text, textMuted, border } = this.palette;
+    const verdictColors = this.getVerdictColors(verdict);
+    const suspiciousBorder = this.hexToRgba(verdictColors.base, 0.35);
+    const suspiciousBackground = this.hexToRgba(verdictColors.base, 0.08);
+    const suspiciousEntries = result.수상한문장 && Object.keys(result.수상한문장).length > 0
+      ? Object.entries(result.수상한문장).map(([sentence, reason]) => `
+          <div style="
+            padding: 14px 16px;
+            border-radius: 10px;
+            border: 1px solid ${suspiciousBorder};
+            background: ${suspiciousBackground};
+            line-height: 1.6;
+          ">
+            <div style="font-weight: 600; color: ${text}; margin-bottom: 8px;">"${this.escapeHtml(sentence)}"</div>
+            <div style="color: ${this.hexToRgba(text, 0.7)}; font-size: 13px;">${this.escapeHtml(reason)}</div>
+          </div>
+        `).join('')
+      : '';
+
+    const overlayBackground = `linear-gradient(180deg, ${this.hexToRgba(base, 0.97)} 0%, ${this.hexToRgba(base, 0.99)} 75%)`;
+    const headerBackground = `linear-gradient(135deg, ${this.hexToRgba(surfaceAlt, 0.92)} 0%, ${this.hexToRgba(accent, 0.92)} 100%)`;
+    const cardBackground = this.hexToRgba(surface, 0.22);
+    const mutedText = this.hexToRgba(text, 0.68);
+    const verdictBackground = this.hexToRgba(verdictColors.base, 0.18);
+    const verdictBorder = this.hexToRgba(verdictColors.base, 0.45);
+    const summaryBackground = `linear-gradient(135deg, ${this.hexToRgba(accent, 0.18)} 0%, ${this.hexToRgba(surfaceAlt, 0.15)} 100%)`;
+    const safeTitle = this.escapeHtml(block.title || '제목 없음');
+    const showProcessButton = Boolean(analysisProcess && analysisProcess !== 'N/A');
+
+    const overlay = document.createElement('div');
+    overlay.className = 'analysis-detail-layer';
+    overlay.style.cssText = `
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      background: ${overlayBackground};
+      opacity: 0;
+      transform: translateY(16px);
+      transition: opacity 0.18s ease, transform 0.18s ease;
+      z-index: 9;
+    `;
+
+    overlay.innerHTML = `
+      <div style="display: flex; flex-direction: column; flex: 1; color: ${text};">
+        <div style="
+          display: flex;
+          align-items: center;
+          gap: 14px;
+          padding: 20px 24px;
+          background: ${headerBackground};
+          border-bottom: 1px solid ${border};
+          flex-shrink: 0;
+        ">
+          <button type="button" class="detail-back-button" style="
+            background: rgba(13, 13, 13, 0.4);
+            color: ${text};
+            border: 1px solid ${this.hexToRgba(text, 0.2)};
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.2s ease, transform 0.2s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+          ">&larr; 뒤로가기</button>
+          <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0;">
+            <span style="font-size: 16px; font-weight: 600; letter-spacing: -0.01em;">분석 결과 상세</span>
+            <span style="
+              font-size: 12px;
+              color: ${this.hexToRgba(text, 0.72)};
+              max-width: 320px;
+              white-space: nowrap;
+              overflow: hidden;
+              text-overflow: ellipsis;
+            ">${safeTitle}</span>
+          </div>
+        </div>
+
+        <div class="detail-scroll" style="
+          flex: 1;
+          overflow-y: auto;
+          padding: 26px 28px 32px 28px;
+          display: flex;
+          flex-direction: column;
+          gap: 24px;
+        ">
+          <section>
+            <h3 style="
+              font-size: 13px;
+              font-weight: 600;
+              margin: 0 0 12px 0;
+              color: ${mutedText};
+              text-transform: uppercase;
+              letter-spacing: 0.05em;
+            ">제목</h3>
+            <div style="
+              background: ${cardBackground};
+              border: 1px solid ${border};
+              border-radius: 10px;
+              padding: 18px;
+              line-height: 1.6;
+              font-size: 14px;
+              color: ${text};
+            ">${safeTitle}</div>
+          </section>
+
+          <section>
+            <h3 style="
+              font-size: 15px;
+              font-weight: 600;
+              margin: 0 0 12px 0;
+              color: ${text};
+              display: flex;
+              align-items: center;
+              gap: 8px;
+            ">진위 판단</h3>
+            <div style="
+              color: ${verdictColors.text};
+              background: ${verdictBackground};
+              border: 2px solid ${verdictBorder};
+              padding: 18px;
+              border-radius: 12px;
+              font-weight: 600;
+              font-size: 16px;
+              text-align: center;
+              box-shadow: 0 10px 24px ${verdictColors.shadow};
+            ">${this.renderMarkdown(verdict)}</div>
+          </section>
+
+          <section>
+            <h3 style="
+              font-size: 15px;
+              font-weight: 600;
+              margin: 0 0 12px 0;
+              color: ${text};
+            ">근거</h3>
+            <div style="
+              background: ${cardBackground};
+              border: 1px solid ${border};
+              border-radius: 10px;
+              padding: 18px;
+              line-height: 1.65;
+              font-size: 14px;
+              color: ${text};
+            ">${this.renderMarkdown(evidence)}</div>
+          </section>
+
+          <section>
+            <h3 style="
+              font-size: 15px;
+              font-weight: 600;
+              margin: 0 0 12px 0;
+              color: ${text};
+            ">상세 분석</h3>
+            <div style="
+              background: ${cardBackground};
+              border: 1px solid ${border};
+              border-radius: 10px;
+              padding: 18px;
+              line-height: 1.7;
+              font-size: 14px;
+              color: ${text};
+            ">${this.renderMarkdown(analysis)}</div>
+          </section>
+
+          <section>
+            <h3 style="
+              font-size: 15px;
+              font-weight: 600;
+              margin: 0 0 12px 0;
+              color: ${text};
+            ">핵심 요약</h3>
+            <div style="
+              background: ${summaryBackground};
+              border: 1px solid ${this.hexToRgba(accent, 0.35)};
+              border-radius: 10px;
+              padding: 18px;
+              line-height: 1.6;
+              font-size: 14px;
+              color: ${text};
+              font-weight: 500;
+            ">${this.renderMarkdown(summary)}</div>
+          </section>
+
+          ${suspiciousEntries ? `
+          <section>
+            <h3 style="
+              font-size: 15px;
+              font-weight: 600;
+              margin: 0 0 12px 0;
+              color: ${text};
+            ">수상한 문장</h3>
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+              ${suspiciousEntries}
+            </div>
+          </section>` : ''}
+
+          ${showProcessButton ? `
+          <div style="text-align: center; margin-top: 8px;">
+            <button type="button" class="detail-analysis-process" style="
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              gap: 6px;
+              padding: 12px 22px;
+              border-radius: 10px;
+              border: none;
+              background: linear-gradient(135deg, ${this.hexToRgba(accent, 0.9)} 0%, ${this.hexToRgba(surfaceAlt, 0.9)} 100%);
+              color: ${text};
+              font-weight: 600;
+              cursor: pointer;
+              transition: transform 0.2s ease, box-shadow 0.2s ease;
+              box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
+            ">추론과정 확인</button>
+          </div>` : ''}
+        </div>
+      </div>
+    `;
+
+    panel.appendChild(overlay);
+
+    this.activeDetailOverlay = overlay;
+    this.preDetailFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
+    requestAnimationFrame(() => {
+      overlay.style.opacity = '1';
+      overlay.style.transform = 'translateY(0)';
+    });
+
+    const backButton = overlay.querySelector('.detail-back-button');
+    if (backButton) {
+      backButton.addEventListener('click', (event) => {
+        event.preventDefault();
+        this.closeDetailInPanel();
+      });
+      backButton.addEventListener('mouseenter', () => {
+        backButton.style.background = 'rgba(13, 13, 13, 0.55)';
+        backButton.style.transform = 'translateX(-2px)';
+      });
+      backButton.addEventListener('mouseleave', () => {
+        backButton.style.background = 'rgba(13, 13, 13, 0.4)';
+        backButton.style.transform = 'translateX(0)';
+      });
+      backButton.focus({ preventScroll: true });
+    }
+
+    const processButton = overlay.querySelector('.detail-analysis-process');
+    if (processButton && showProcessButton) {
+      processButton.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        this.showAnalysisProcessModal(analysisProcess);
+      });
+      processButton.addEventListener('mouseenter', () => {
+        processButton.style.transform = 'translateY(-2px)';
+        processButton.style.boxShadow = '0 14px 28px rgba(0, 0, 0, 0.4)';
+      });
+      processButton.addEventListener('mouseleave', () => {
+        processButton.style.transform = 'translateY(0)';
+        processButton.style.boxShadow = '0 10px 24px rgba(0, 0, 0, 0.35)';
+      });
+    }
+
+    this.detailEscapeHandler = (event) => {
+      if (event.key === 'Escape') {
+        this.closeDetailInPanel();
       }
-    }, 10);
+    };
+    document.addEventListener('keydown', this.detailEscapeHandler);
+  }
+
+  closeDetailInPanel(skipAnimation = false) {
+    if (!this.activeDetailOverlay) {
+      return;
+    }
+
+    const overlay = this.activeDetailOverlay;
+
+    if (this.detailEscapeHandler) {
+      document.removeEventListener('keydown', this.detailEscapeHandler);
+      this.detailEscapeHandler = null;
+    }
+
+    const removeOverlay = () => {
+      if (overlay.parentElement) {
+        overlay.parentElement.removeChild(overlay);
+      }
+      if (!skipAnimation && this.preDetailFocus && typeof this.preDetailFocus.focus === 'function') {
+        try {
+          this.preDetailFocus.focus({ preventScroll: true });
+        } catch (error) {
+          this.preDetailFocus.focus();
+        }
+      }
+      this.activeDetailOverlay = null;
+      this.preDetailFocus = null;
+    };
+
+    if (skipAnimation) {
+      removeOverlay();
+      return;
+    }
+
+    overlay.style.opacity = '0';
+    overlay.style.transform = 'translateY(16px)';
+
+    const timeoutId = setTimeout(() => {
+      overlay.removeEventListener('transitionend', handleTransitionEnd);
+      removeOverlay();
+    }, 220);
+
+    const handleTransitionEnd = () => {
+      clearTimeout(timeoutId);
+      removeOverlay();
+    };
+
+    overlay.addEventListener('transitionend', handleTransitionEnd, { once: true });
   }
 
   // 실시간 스트리밍 결과 보기 모달
