@@ -45,6 +45,8 @@ class AnalysisPanel {
     this.activeDetailOverlay = null;
     this.detailEscapeHandler = null;
     this.preDetailFocus = null;
+    this.crossVerificationInProgress = new Set(); // 교차 검증 중인 블록 ID들
+    this.crossVerificationDepth = this.getCrossVerificationDepthSetting(); // 교차 검증 단계 수 (기본 3)
     
     // 저장된 뉴스 블록 데이터 로드
     this.loadSavedNewsBlocks();
@@ -249,7 +251,7 @@ class AnalysisPanel {
     panelContainer.style.left = 'auto';
     panelContainer.style.height = '100vh';
     panelContainer.style.maxHeight = '100vh';
-    panelContainer.style.borderRadius = '20px 0 0 20px';
+  panelContainer.style.borderRadius = '20px 0 0 20px';
     panelContainer.style.boxShadow = '-4px 0 24px rgba(0, 0, 0, 0.25)';
 
     const desktopWidth = parseInt(panelContainer.dataset.desktopWidth || '520', 10);
@@ -263,7 +265,7 @@ class AnalysisPanel {
     panelContainer.style.flexDirection = 'column';
     panelContainer.style.background = this.palette.base;
     panelContainer.style.transition = 'transform 0.15s ease, opacity 0.15s ease';
-    panelContainer.style.overflow = 'hidden';
+    panelContainer.style.overflow = 'hidden auto';  // overflow-x: hidden, overflow-y: auto
   }
 
   // 페이지 오프셋 업데이트 (비활성화 - 페이지를 밀지 않음)
@@ -428,6 +430,59 @@ class AnalysisPanel {
         @keyframes spin {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }
+        }
+
+        @property --glow-opacity {
+          syntax: '<number>';
+          inherits: false;
+          initial-value: 0;
+        }
+
+        @property --glow-scale {
+          syntax: '<number>';
+          inherits: false;
+          initial-value: 1;
+        }
+
+        @property --glow-blur {
+          syntax: '<length>';
+          inherits: false;
+          initial-value: 0px;
+        }
+
+        .news-block {
+          position: relative;
+          transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.8s cubic-bezier(0.4, 0, 0.2, 1), --glow-opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1), --glow-scale 0.8s cubic-bezier(0.4, 0, 0.2, 1), --glow-blur 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+          box-shadow: var(--base-box-shadow, 0 4px 12px rgba(0, 0, 0, 0.25));
+          --glow-opacity: var(--glow-opacity-base, 0);
+          --glow-scale: var(--glow-scale-base, 1);
+          --glow-blur: var(--glow-blur-base, 0px);
+        }
+
+        .news-block--interactive {
+          cursor: pointer;
+        }
+
+        .news-block--interactive:hover {
+          transform: translateY(-4px) scale(1.01);
+          box-shadow: var(--hover-box-shadow, var(--base-box-shadow, 0 4px 12px rgba(0, 0, 0, 0.25)));
+          --glow-opacity: var(--glow-opacity-hover, var(--glow-opacity-base, 0));
+          --glow-scale: var(--glow-scale-hover, var(--glow-scale-base, 1));
+          --glow-blur: var(--glow-blur-hover, var(--glow-blur-base, 0px));
+        }
+
+        .news-block--glow::before {
+          content: '';
+          position: absolute;
+          inset: -20px;
+          border-radius: inherit;
+          background: radial-gradient(circle at center, var(--glow-color, rgba(255, 255, 255, 0.5)) 0%, rgba(0, 0, 0, 0) 72%);
+          opacity: var(--glow-opacity);
+          transform: scale(var(--glow-scale));
+          filter: blur(var(--glow-blur));
+          transition: opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1), transform 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+          z-index: -1;
+          pointer-events: none;
         }
       `;
       document.head.appendChild(style);
@@ -1049,25 +1104,30 @@ class AnalysisPanel {
     const isCompleted = status === 'completed';
     const isCompareMode = block.compareMode || false;
     const verdictColors = result && result.진위 ? this.getVerdictColors(result.진위) : null;
+    const hasGlow = isCompleted && verdictColors && !isCompareMode;
+    const glowColor = hasGlow ? verdictColors.base : null;
 
     const defaultBackground = this.blendColors(surface, base, isCurrent ? 0.28 : 0.22);
-    const hoverBackground = this.blendColors(surfaceAlt, base, 0.24);
     const compareBackground = this.blendColors(accent, base, 0.32);
     let blockBackground = isCompareMode ? compareBackground : defaultBackground;
-    let blockHoverBackground = isCompareMode ? compareBackground : hoverBackground;
     let borderColor = isCompareMode ? this.hexToRgba(accent, 0.6) : 'rgba(140, 110, 84, 0.55)';
-    let boxShadow = isCompareMode ? '0 14px 26px rgba(0, 0, 0, 0.35)' : '0 18px 36px rgba(0, 0, 0, 0.42)';
+    let boxShadow = isCompareMode ? '0 14px 26px rgba(0, 0, 0, 0.35)' : '0 4px 12px rgba(0, 0, 0, 0.25)';
+    let neonGlow = '';
+    let hoverNeonGlow = '';
 
-    if (isCompleted && verdictColors && !isCompareMode) {
+    if (hasGlow) {
       blockBackground = this.blendColors(verdictColors.base, base, 0.2);
-      blockHoverBackground = this.blendColors(verdictColors.base, base, 0.16);
       borderColor = verdictColors.border;
-      boxShadow = `0 20px 38px ${verdictColors.shadow}`;
+      boxShadow = '0 4px 12px rgba(0, 0, 0, 0.25)';
+
+    neonGlow = `0 0 32px ${this.hexToRgba(glowColor, 0.26)}, 0 0 68px ${this.hexToRgba(glowColor, 0.14)}, 0 0 120px ${this.hexToRgba(glowColor, 0.08)}, inset 0 0 100px ${this.hexToRgba(glowColor, 0.06)}`;
+    hoverNeonGlow = `0 0 50px ${this.hexToRgba(glowColor, 0.48)}, 0 0 110px ${this.hexToRgba(glowColor, 0.26)}, 0 0 160px ${this.hexToRgba(glowColor, 0.14)}, inset 0 0 130px ${this.hexToRgba(glowColor, 0.1)}`;
     }
 
-    const isClickable = status === 'completed' && !isCompareMode;
+    const baseBoxShadow = neonGlow ? `${boxShadow}, ${neonGlow}` : boxShadow;
+    const hoverBoxShadow = hasGlow ? `${boxShadow}, ${hoverNeonGlow}` : '0 12px 24px rgba(0, 0, 0, 0.35)';
+    const isClickable = isCompleted && !isCompareMode;
     const cursorStyle = isClickable ? 'cursor: pointer;' : '';
-    const hoverStyle = isClickable ? `onmouseover="this.style.background='${blockHoverBackground}'" onmouseout="this.style.background=''"` : '';
     const blockOpacity = isCompareMode ? '0.8' : '1';
 
     let actionButtons = '';
@@ -1151,46 +1211,80 @@ class AnalysisPanel {
         case 'completed':
         case 'error':
           actionButtons = `
-            <div style="display: flex; align-items: center; gap: 8px; width: 100%;">
-              <button class="analyze-current-btn" data-id="${id}" style="
-                background: ${primaryButtonBase};
-                color: ${text};
-                padding: 8px 16px;
-                border-radius: 6px;
-                font-size: 14px;
-                border: 1px solid ${primaryButtonBorder};
-                cursor: pointer;
-                transition: all 0.2s;
-                flex: 1;
-                backdrop-filter: blur(8px);
-              " onmouseover="this.style.background='${primaryButtonHover}'" onmouseout="this.style.background='${primaryButtonBase}'">다시 분석</button>
-              ${isCompleted ? `
-              <button class="open-site-btn" data-id="${id}" data-url="${encodedUrl}" style="
-                background: ${neutralButtonBase};
-                color: ${text};
-                padding: 8px 18px;
-                border-radius: 6px;
-                font-size: 14px;
-                border: 1px solid ${border};
-                cursor: pointer;
-                transition: all 0.2s;
-                flex: 1.2;
-                white-space: nowrap;
-                backdrop-filter: blur(6px);
-              " onmouseover="this.style.background='${neutralButtonHover}'" onmouseout="this.style.background='${neutralButtonBase}'">사이트 이동</button>
-              ` : ''}
-              ${isCompleted && verdictColors ? `
+            <div style="display: flex; flex-direction: column; gap: 8px; width: 100%;">
+              <div style="display: flex; align-items: center; gap: 8px; width: 100%;">
+                <button class="analyze-current-btn" data-id="${id}" style="
+                  background: ${primaryButtonBase};
+                  color: ${text};
+                  padding: 8px 16px;
+                  border-radius: 6px;
+                  font-size: 14px;
+                  border: 1px solid ${primaryButtonBorder};
+                  cursor: pointer;
+                  transition: all 0.2s;
+                  flex: 1;
+                  backdrop-filter: blur(8px);
+                " onmouseover="this.style.background='${primaryButtonHover}'" onmouseout="this.style.background='${primaryButtonBase}'">다시 분석</button>
+                ${isCompleted && !block.crossVerified && id !== 'current' ? `
+                <button class="cross-verify-btn" data-id="${id}" style="
+                  background: linear-gradient(135deg, rgba(99, 102, 241, 0.3), rgba(139, 92, 246, 0.3));
+                  color: ${text};
+                  padding: 8px 16px;
+                  border-radius: 6px;
+                  font-size: 14px;
+                  border: 1px solid rgba(99, 102, 241, 0.5);
+                  cursor: pointer;
+                  transition: all 0.2s;
+                  flex: 1;
+                  backdrop-filter: blur(8px);
+                  font-weight: 600;
+                " onmouseover="this.style.background='linear-gradient(135deg, rgba(99, 102, 241, 0.4), rgba(139, 92, 246, 0.4))'" onmouseout="this.style.background='linear-gradient(135deg, rgba(99, 102, 241, 0.3), rgba(139, 92, 246, 0.3))'">🔄 교차 검증</button>
+                ` : ''}
+                ${isCompleted && block.crossVerified && id !== 'current' ? `
+                <button disabled style="
+                  background: rgba(99, 102, 241, 0.15);
+                  color: rgba(242, 242, 242, 0.5);
+                  padding: 8px 16px;
+                  border-radius: 6px;
+                  font-size: 14px;
+                  border: 1px solid rgba(99, 102, 241, 0.3);
+                  cursor: not-allowed;
+                  flex: 1;
+                  backdrop-filter: blur(8px);
+                  font-weight: 600;
+                ">✓ 검증 완료</button>
+                ` : ''}
+                ${isCompleted ? `
+                <button class="open-site-btn" data-id="${id}" data-url="${encodedUrl}" style="
+                  background: ${neutralButtonBase};
+                  color: ${text};
+                  padding: 8px 18px;
+                  border-radius: 6px;
+                  font-size: 14px;
+                  border: 1px solid ${border};
+                  cursor: pointer;
+                  transition: all 0.2s;
+                  flex: 1.2;
+                  white-space: nowrap;
+                  backdrop-filter: blur(6px);
+                " onmouseover="this.style.background='${neutralButtonHover}'" onmouseout="this.style.background='${neutralButtonBase}'">사이트 이동</button>
+                ` : ''}
+              </div>
+              ${isCompleted && verdictColors && block.crossVerified && id !== 'current' ? `
+                <div style="display: flex; gap: 8px; align-items: center;">
                   <div style="
-                    background: ${verdictColors.badgeBackground};
-                    color: ${verdictColors.badgeText};
-                    border: 1px solid ${verdictColors.badgeBorder};
-                    padding: 4px 10px;
+                    background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(139, 92, 246, 0.2));
+                    color: rgba(99, 102, 241, 1);
+                    border: 1px solid rgba(99, 102, 241, 0.4);
+                    padding: 6px 12px;
                     border-radius: 12px;
                     font-size: 11px;
                     font-weight: 600;
+                    text-align: center;
                     white-space: nowrap;
-                  ">${result.진위}</div>
-                ` : ''}
+                  ">🔄 2차 검증</div>
+                </div>
+              ` : ''}
             </div>
           `;
           break;
@@ -1247,36 +1341,9 @@ class AnalysisPanel {
         `;
       } else {
         const compareButtonText = isCompareMode ? '취소' : '비교';
-        const compareBackgroundBase = isCompareMode ? 'rgba(99, 102, 241, 0.3)' : primaryButtonBase;
-        const compareBackgroundHover = isCompareMode ? 'rgba(99, 102, 241, 0.45)' : primaryButtonHover;
-        const compareBorder = isCompareMode ? 'rgba(129, 140, 248, 0.5)' : primaryButtonBorder;
 
         actionButtons = `
           <div style="display: flex; gap: 8px; align-items: center; width: 100%;">
-            <button class="delete-btn" data-id="${id}" style="
-              background: ${dangerButtonBase};
-              color: ${text};
-              padding: 8px 14px;
-              border-radius: 6px;
-              font-size: 14px;
-              border: 1px solid rgba(239, 68, 68, 0.5);
-              cursor: pointer;
-              transition: all 0.2s;
-              flex: 1;
-              backdrop-filter: blur(8px);
-            " onmouseover="this.style.background='${dangerButtonHover}'" onmouseout="this.style.background='${dangerButtonBase}'">삭제</button>
-            <button class="compare-btn" data-id="${id}" style="
-              background: ${compareBackgroundBase};
-              color: ${text};
-              padding: 8px 14px;
-              border-radius: 6px;
-              font-size: 14px;
-              border: 1px solid ${compareBorder};
-              cursor: pointer;
-              transition: all 0.2s;
-              flex: 1;
-              backdrop-filter: blur(8px);
-            " onmouseover="this.style.background='${compareBackgroundHover}'" onmouseout="this.style.background='${compareBackgroundBase}'">${compareButtonText}</button>
             ${isCompleted ? `
             <button class="open-site-btn" data-id="${id}" data-url="${encodedUrl}" style="
               background: ${neutralButtonBase};
@@ -1287,45 +1354,147 @@ class AnalysisPanel {
               border: 1px solid ${border};
               cursor: pointer;
               transition: all 0.2s;
-              flex: 1.2;
+              flex: 1;
               white-space: nowrap;
               backdrop-filter: blur(6px);
             " onmouseover="this.style.background='${neutralButtonHover}'" onmouseout="this.style.background='${neutralButtonBase}'">사이트 이동</button>
             ` : ''}
-            ${isCompleted && verdictColors ? `
+            <div style="position: relative; flex: 1; z-index: 10;">
+              <button class="more-menu-btn" data-id="${id}" style="
+                background: ${primaryButtonBase};
+                color: ${text};
+                padding: 8px 16px;
+                border-radius: 6px;
+                font-size: 14px;
+                border: 1px solid ${primaryButtonBorder};
+                cursor: pointer;
+                transition: all 0.2s;
+                width: 100%;
+                backdrop-filter: blur(8px);
+              " onmouseover="this.style.background='${primaryButtonHover}'" onmouseout="this.style.background='${primaryButtonBase}'">더보기 ▼</button>
+              <div class="more-menu-dropdown" data-id="${id}" style="
+                display: none;
+                position: absolute;
+                top: auto;
+                bottom: calc(100% + 4px);
+                right: 0;
+                background: ${this.hexToRgba(surface, 0.98)};
+                border: 1px solid ${border};
+                border-radius: 8px;
+                padding: 4px;
+                min-width: 140px;
+                max-height: 300px;
+                overflow-y: auto;
+                z-index: 9999;
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+                backdrop-filter: blur(12px);
+              ">
+                ${isCompleted && !block.crossVerified ? `
+                <button class="cross-verify-btn" data-id="${id}" style="
+                  background: transparent;
+                  color: ${text};
+                  padding: 10px 14px;
+                  border: none;
+                  border-radius: 6px;
+                  font-size: 14px;
+                  cursor: pointer;
+                  width: 100%;
+                  text-align: left;
+                  transition: background 0.2s;
+                " onmouseover="this.style.background='${this.hexToRgba(accent, 0.2)}'" onmouseout="this.style.background='transparent'">🔄 교차 검증</button>
+                ` : ''}
+                ${isCompleted && block.crossVerified ? `
+                <button disabled style="
+                  background: transparent;
+                  color: ${this.hexToRgba(text, 0.5)};
+                  padding: 10px 14px;
+                  border: none;
+                  border-radius: 6px;
+                  font-size: 14px;
+                  cursor: not-allowed;
+                  width: 100%;
+                  text-align: left;
+                ">✓ 검증 완료</button>
+                ` : ''}
+                <button class="compare-btn" data-id="${id}" style="
+                  background: transparent;
+                  color: ${text};
+                  padding: 10px 14px;
+                  border: none;
+                  border-radius: 6px;
+                  font-size: 14px;
+                  cursor: pointer;
+                  width: 100%;
+                  text-align: left;
+                  transition: background 0.2s;
+                " onmouseover="this.style.background='${this.hexToRgba(accent, 0.2)}'" onmouseout="this.style.background='transparent'">${isCompareMode ? '✕ 비교 취소' : '⚖️ 비교하기'}</button>
+              </div>
+            </div>
+            <button class="delete-btn" data-id="${id}" style="
+              background: ${dangerButtonBase};
+              color: ${text};
+              padding: 8px 12px;
+              border-radius: 6px;
+              font-size: 14px;
+              border: 1px solid rgba(239, 68, 68, 0.5);
+              cursor: pointer;
+              transition: all 0.2s;
+              backdrop-filter: blur(8px);
+              white-space: nowrap;
+            " onmouseover="this.style.background='${dangerButtonHover}'" onmouseout="this.style.background='${dangerButtonBase}'">🗑️</button>
+            ${isCompleted && block.crossVerified ? `
                 <div style="
-                  background: ${verdictColors.badgeBackground};
-                  color: ${verdictColors.badgeText};
-                  border: 1px solid ${verdictColors.badgeBorder};
+                  background: linear-gradient(135deg, rgba(99, 102, 241, 0.3), rgba(139, 92, 246, 0.3));
+                  color: rgba(180, 190, 254, 1);
+                  border: 1px solid rgba(99, 102, 241, 0.6);
                   padding: 4px 10px;
                   border-radius: 12px;
                   font-size: 11px;
-                  font-weight: 600;
+                  font-weight: 700;
                   white-space: nowrap;
-                ">${result.진위}</div>
+                  display: flex;
+                  align-items: center;
+                  gap: 3px;
+                ">
+                  <span style="font-size: 13px;">↻</span>
+                  <span>${block.currentVerificationStep || this.crossVerificationDepth}차 검증</span>
+                </div>
               ` : ''}
           </div>
         `;
       }
     }
 
+    const blockClasses = ['news-block'];
+    if (hasGlow) blockClasses.push('news-block--glow');
+    if (isClickable) blockClasses.push('news-block--interactive');
+
     return `
-      <div class="news-block" data-id="${id}" style="
-        border: 2px solid ${borderColor};
+      <div class="${blockClasses.join(' ')}" data-id="${id}" style="
         border-radius: 12px;
-        background: ${blockBackground};
+        background: ${this.blendColors(surface, base, 0.22)};
         opacity: ${blockOpacity};
-        transition: all 0.3s ease;
         width: 100%;
-        overflow: hidden;
+        overflow: visible;
         position: relative;
-        box-shadow: ${boxShadow};
+        box-shadow: var(--base-box-shadow);
+        --base-box-shadow: ${baseBoxShadow};
+        --hover-box-shadow: ${hoverBoxShadow};
+        ${hasGlow
+          ? `--glow-color: ${glowColor}; --glow-opacity-base: 0.35; --glow-opacity-hover: 0.98; --glow-scale-base: 0.88; --glow-scale-hover: 1.28; --glow-blur-base: 26px; --glow-blur-hover: 64px;`
+          : `--glow-opacity-base: 0; --glow-opacity-hover: 0; --glow-scale-base: 1; --glow-scale-hover: 1; --glow-blur-base: 0px; --glow-blur-hover: 0px;`}
       ">
         <div class="news-content-area" data-id="${id}" style="
           padding: 16px 16px 14px 16px;
+          overflow: hidden;
+          border-radius: 12px 12px 0 0;
+          border: 2px solid ${borderColor};
+          border-bottom: none;
+          background: ${blockBackground};
+          transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
           ${cursorStyle}
           ${isCompareMode ? 'pointer-events: none;' : ''}
-        " ${isClickable ? hoverStyle : ''}>
+        ">
           ${block.isComparison ? `
           <div style="
             background: ${primaryButtonHover};
@@ -1398,13 +1567,16 @@ class AnalysisPanel {
         <div style="
           border-top: 1px solid ${borderColor};
           padding: 10px 16px 16px 16px;
-          background: ${blockBackground};
-          backdrop-filter: blur(6px);
+          background: ${this.blendColors(surface, base, 0.22)};
+          backdrop-filter: blur(12px);
+          border-radius: 0 0 12px 12px;
+          overflow: visible;
         ">
           <div style="
             display: flex;
             gap: 10px;
             width: 100%;
+            overflow: visible;
           ">
             ${actionButtons}
           </div>
@@ -1425,7 +1597,12 @@ class AnalysisPanel {
   renderMarkdown(text) {
     if (!text) return '';
     
-    let html = this.escapeHtml(text);
+    // <br> 태그를 임시로 보호 (대소문자 구분 없이)
+    let html = text.replace(/<br\s*\/?>/gi, '|||BR_TAG|||');
+    
+    // HTML 이스케이프로 XSS 방지
+    html = this.escapeHtml(html);
+    
     const { text: textColor, textMuted, accent, border, base, surface } = this.palette;
     const headingBorder = this.hexToRgba(accent, 0.45);
     const boldColor = this.hexToRgba(accent, 0.85);
@@ -1445,6 +1622,8 @@ class AnalysisPanel {
       .replace(/^-\s*(.+)$/gm, `<li style="margin: 4px 0; padding-left: 8px; list-style: disc; color: ${listColor};">$1</li>`)
       // 인용 (> 텍스트)
       .replace(/^>\s*(.+)$/gm, `<blockquote style="border-left: 3px solid ${quoteBorder}; margin: 8px 0; padding: 8px 12px; background: ${quoteBackground}; font-style: italic; color: ${textColor};">$1</blockquote>`)
+      // 보호했던 <br> 태그 복원 (다른 변환보다 먼저)
+      .replace(/\|\|\|BR_TAG\|\|\|/g, '<br>')
       // 줄바꿈을 임시로 처리
       .replace(/\n/g, '|||NEWLINE|||');
     
@@ -1759,6 +1938,27 @@ class AnalysisPanel {
     this.attachBlockEvents(panel);
     this.attachCollapseToggle(panel);
     this.attachCollapsedSummaryEvents(panel);
+    this.attachScrollPrevention(panel);
+  }
+
+  // 패널 스크롤 시 페이지 스크롤 방지
+  attachScrollPrevention(panel) {
+    panel.addEventListener('wheel', (e) => {
+      const scrollContainer = panel;
+      const isScrollable = scrollContainer.scrollHeight > scrollContainer.clientHeight;
+      
+      if (isScrollable) {
+        // 스크롤이 가능한 경우, 패널 내부에서만 스크롤
+        const scrollTop = scrollContainer.scrollTop;
+        const scrollHeight = scrollContainer.scrollHeight;
+        const clientHeight = scrollContainer.clientHeight;
+        
+        // 맨 위에서 위로 스크롤하려고 하거나, 맨 아래에서 아래로 스크롤하려고 하는 경우가 아니면 이벤트 전파 방지
+        if (!(scrollTop === 0 && e.deltaY < 0) && !(scrollTop + clientHeight >= scrollHeight && e.deltaY > 0)) {
+          e.stopPropagation();
+        }
+      }
+    }, { passive: false });
   }
 
   // 패널 축소 토글 버튼 이벤트
@@ -2004,12 +2204,87 @@ class AnalysisPanel {
 
   // 블록 이벤트 연결
   attachBlockEvents(container) {
+    // 더보기 메뉴 토글
+    container.querySelectorAll('.more-menu-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = btn.dataset.id;
+        const dropdown = container.querySelector(`.more-menu-dropdown[data-id="${id}"]`);
+        if (dropdown) {
+          const isVisible = dropdown.style.display === 'block';
+          
+          // 모든 드롭다운 닫기 및 z-index 초기화
+          container.querySelectorAll('.more-menu-dropdown').forEach(d => {
+            d.style.display = 'none';
+            // 부모 뉴스 블록의 z-index 초기화
+            const parentBlock = d.closest('.news-block');
+            if (parentBlock) {
+              parentBlock.style.zIndex = '';
+            }
+          });
+          
+          if (!isVisible) {
+            // 드롭다운 위치 계산
+            const btnRect = btn.getBoundingClientRect();
+            const panel = document.getElementById(this.panelId);
+            const panelRect = panel.getBoundingClientRect();
+            
+            // 부모 뉴스 블록의 z-index를 높게 설정
+            const parentBlock = dropdown.closest('.news-block');
+            if (parentBlock) {
+              parentBlock.style.zIndex = '100';
+            }
+            
+            // 버튼이 패널 상단에 가까우면 아래로, 아니면 위로
+            const spaceAbove = btnRect.top - panelRect.top;
+            const spaceBelow = panelRect.bottom - btnRect.bottom;
+            
+            if (spaceAbove < 200 || spaceBelow > spaceAbove) {
+              // 아래로 표시
+              dropdown.style.bottom = 'auto';
+              dropdown.style.top = 'calc(100% + 4px)';
+            } else {
+              // 위로 표시 (기본값)
+              dropdown.style.top = 'auto';
+              dropdown.style.bottom = 'calc(100% + 4px)';
+            }
+            
+            dropdown.style.display = 'block';
+          }
+        }
+      });
+    });
+    
+    // 드롭다운 외부 클릭 시 닫기
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('.more-menu-btn')) {
+        container.querySelectorAll('.more-menu-dropdown').forEach(d => {
+          d.style.display = 'none';
+          // 부모 뉴스 블록의 z-index 초기화
+          const parentBlock = d.closest('.news-block');
+          if (parentBlock) {
+            parentBlock.style.zIndex = '';
+          }
+        });
+      }
+    });
+    
     // 현재 뉴스 분석 버튼
     container.querySelectorAll('.analyze-current-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
         console.log('현재 뉴스 분석 버튼 클릭');
         this.analyzeCurrentNews();
+      });
+    });
+    
+    // 교차 검증 버튼
+    container.querySelectorAll('.cross-verify-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = btn.dataset.id === 'current' ? 'current' : parseInt(btn.dataset.id);
+        console.log('교차 검증 버튼 클릭, ID:', id);
+        this.startCrossVerification(id);
       });
     });
     
@@ -2040,13 +2315,14 @@ class AnalysisPanel {
       });
     });
 
-    // 비교하기 버튼
+    // 비교하기 버튼 (기능 비활성화)
     container.querySelectorAll('.compare-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        const id = parseInt(btn.dataset.id);
-        console.log('비교하기 버튼 클릭, ID:', id, 'waitingForComparison:', this.waitingForComparison);
-        this.toggleCompareMode(id);
+        alert('비교 분석 기능은 현재 준비 중입니다.');
+        // const id = parseInt(btn.dataset.id);
+        // console.log('비교하기 버튼 클릭, ID:', id, 'waitingForComparison:', this.waitingForComparison);
+        // this.toggleCompareMode(id);
       });
     });
 
@@ -2081,21 +2357,12 @@ class AnalysisPanel {
       
       if (newsData) {
         if (newsData.status === 'completed') {
-          // 완료된 뉴스 - 결과 보기 또는 비교 대상 선택
+          // 완료된 뉴스 - 결과 보기
           contentArea.addEventListener('click', (e) => {
             e.stopPropagation();
-            console.log('완료된 뉴스 클릭, ID:', id, 'waitingForComparison:', this.waitingForComparison);
-            
-            // 비교 모드 대기 중인지 확인
-            if (this.waitingForComparison && parseInt(id) !== this.waitingForComparison) {
-              console.log('비교 분석 실행:', this.waitingForComparison, '->', parseInt(id));
-              // 비교 분석 실행
-              this.createComparisonAnalysis(this.waitingForComparison, parseInt(id));
-            } else {
-              console.log('일반 결과 보기:', id);
-              // 일반 결과 보기
-              this.showAnalysisResult(id);
-            }
+            console.log('완료된 뉴스 클릭, ID:', id);
+            // 일반 결과 보기
+            this.showAnalysisResult(id);
           });
         }
         // 분석 중인 뉴스는 클릭 이벤트 없음 (타이핑 효과만 표시)
@@ -2151,6 +2418,13 @@ class AnalysisPanel {
     
     if (existingBlock) {
       console.log('[analyzeCurrentNews] 이미 존재하는 뉴스:', existingBlock.id);
+      
+      // 교차 검증 관련 상태 초기화
+      existingBlock.crossVerified = false;
+      existingBlock.crossVerifiedResult = null;
+      existingBlock.firstAnalysis = null;
+      this.crossVerificationInProgress.delete(existingBlock.id);
+      
       alert('이 뉴스는 이미 분석 목록에 있습니다.');
       return;
     }
@@ -2159,6 +2433,9 @@ class AnalysisPanel {
     this.currentNews.status = 'analyzing';
     this.currentNews.progress = '🔍 분석 시작...';
     this.currentNews.result = null;
+    this.currentNews.crossVerified = false;
+    this.currentNews.crossVerifiedResult = null;
+    this.currentNews.firstAnalysis = null;
     
     // UI 즉시 업데이트 (분석 중 상태 표시)
     this.updatePanel();
@@ -2256,6 +2533,131 @@ class AnalysisPanel {
         }, 800);
       }, 500);
     }, 300);
+  }
+
+  // 교차 검증 시작
+  startCrossVerification(id) {
+    console.log('교차 검증 시작, ID:', id);
+    
+    // current인 경우 currentNews 사용, 아니면 newsBlocks에서 찾기
+    let block;
+    if (id === 'current') {
+      block = this.currentNews;
+    } else {
+      block = this.newsBlocks.get(id);
+    }
+    
+    // 블록 존재 확인
+    if (!block) {
+      console.error('블록을 찾을 수 없음, ID:', id);
+      return;
+    }
+    
+    // 1차 분석 완료 확인
+    if (!block.result || block.status !== 'completed') {
+      console.warn('1차 분석이 완료되지 않았습니다.');
+      return;
+    }
+    
+    // 이미 교차 검증 중이면 중복 방지
+    if (this.crossVerificationInProgress.has(id)) {
+      console.warn('이미 교차 검증이 진행 중입니다.');
+      return;
+    }
+    
+    // 이미 교차 검증 완료된 경우 중복 방지
+    if (block.crossVerified) {
+      console.warn('이미 교차 검증이 완료되었습니다.');
+      return;
+    }
+    
+    // 교차 검증 진행 상태 추가
+    this.crossVerificationInProgress.add(id);
+    
+    // 기존 타임아웃 제거
+    if (this.analysisTimeouts.has(id)) {
+      clearTimeout(this.analysisTimeouts.get(id));
+    }
+    
+    // 10분 타임아웃 설정 (다단계 검증이므로 더 긴 시간)
+    const timeoutId = setTimeout(() => {
+      console.warn(`[Timeout] 교차 검증 시간 초과 (10분), ID: ${id}`);
+      this.crossVerificationInProgress.delete(id);
+      this.stopAnalysis(id, '⏱️ 교차 검증 시간이 초과되었습니다 (10분). 다시 시도해주세요.');
+    }, 10 * 60 * 1000);
+    
+    this.analysisTimeouts.set(id, timeoutId);
+    
+    // AbortController 생성
+    const abortController = new AbortController();
+    this.abortControllers.set(id, abortController);
+    
+    // 1차 분석 결과를 기준점으로 저장 (이후 모든 검증에 포함)
+    if (!block.baselineAnalysis) {
+      block.baselineAnalysis = JSON.parse(JSON.stringify(block.result));
+      console.log('[교차 검증] 기준점(1차 분석) 저장:', block.baselineAnalysis.진위);
+    }
+    
+    // 검증 히스토리 초기화
+    if (!block.verificationHistory) {
+      block.verificationHistory = [];
+    }
+    
+    // 현재 검증 단계 초기화 (0부터 시작)
+    block.currentVerificationStep = 0;
+    
+    // 다단계 교차 검증 시작
+    this.performRecursiveVerification(id, block, abortController);
+  }
+  
+  // 재귀적 교차 검증 수행
+  async performRecursiveVerification(id, block, abortController) {
+    const depth = this.crossVerificationDepth;
+    const currentStep = block.currentVerificationStep + 1;
+    
+    console.log(`[재귀 검증] ${currentStep}/${depth}차 검증 시작, ID: ${id}`);
+    
+    // 진행 상태 메시지
+    const progressMessages = [
+      `🔄 ${currentStep}/${depth}차 검증 준비 중...`,
+      `🧐 ${currentStep}/${depth}차 재검토 수행 중...`,
+      `🔍 ${currentStep}/${depth}차 교차 검증 중...`,
+      `⚡ ${currentStep}/${depth}차 메타인지적 재평가 중...`
+    ];
+    
+    // 상태 업데이트 (순차적 메시지)
+    for (let i = 0; i < progressMessages.length; i++) {
+      await new Promise(resolve => setTimeout(resolve, i === 0 ? 0 : 400));
+      this.updateNewsStatus(id, 'analyzing', null, progressMessages[i]);
+    }
+    
+    // 직전 검증 결과 가져오기 (첫 번째는 null, 이후는 직전 검증 결과)
+    const previousResult = currentStep === 1 
+      ? null  // 첫 검증은 1차 분석만 참조
+      : block.verificationHistory[currentStep - 2];
+    
+    // 교차 검증 프롬프트 생성 (항상 기준점인 1차 분석 + 직전 검증 결과 포함)
+    const crossVerifyPrompt = this.generateCrossVerificationPrompt(
+      block.title,
+      block.content,
+      block.baselineAnalysis,  // 1차 분석 결과 (고정 기준점)
+      previousResult,          // 직전 검증 결과 (첫 번째는 null)
+      currentStep,
+      depth
+    );
+    
+    console.log(`[재귀 검증] ${currentStep}/${depth}차 API 요청 전송, blockId: ${id}`);
+    
+    // API 요청 전송
+    chrome.runtime.sendMessage({
+      action: "analyzeNewsWithGemini",
+      prompt: crossVerifyPrompt,
+      blockId: id,
+      isCrossVerification: true,
+      verificationStep: currentStep,
+      verificationDepth: depth,
+      signal: abortController.signal
+    });
   }
   
   showApiKeyWarning() {
@@ -2469,15 +2871,31 @@ class AnalysisPanel {
     document.head.appendChild(fadeOutStyle);
   }
 
+  // 현재 날짜/시간 포맷 (한국 시간)
+  getCurrentDateTime() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const dayOfWeek = ['일', '월', '화', '수', '목', '금', '토'][now.getDay()];
+    
+    return `${year}년 ${month}월 ${day}일 (${dayOfWeek}) ${hours}:${minutes}`;
+  }
+
   // 분석 프롬프트 생성
   generateAnalysisPrompt(title, content, isComparison = false) {
     const articleContent = `${title}\n${content}`;
+    const currentDateTime = this.getCurrentDateTime();
     
     if (isComparison) {
       return this.generateComparisonPrompt(articleContent);
     }
     
     return `
+**[현재 시각: ${currentDateTime}]**
+
 ## 역할
 당신은 주어진 기사 텍스트의 **논리적 구조, 근거 제시 방식, 표현의 적절성**만을 분석하는 **'뉴스 텍스트 분석가'** 입니다.  
 당신의 유일한 임무는 아래의 '절대적 분석 원칙'과 '판단 조건'에 따라, 외부 세계의 사실이나 당신의 사전 지식과 비교하지 않고 오직 **주어진 텍스트 자체**만을 평가하는 것입니다.
@@ -2639,17 +3057,25 @@ class AnalysisPanel {
 
 ## 출력 형식
 다음 **JSON 배열 형식**으로만 응답하십시오.  
-JSON 외의 문장, 주석, 코드 블록(\`\`\`json\`\`\`)은 절대 포함하지 마십시오.
+JSON 외의 문장, 주석, 코드 블록(\\\`\\\`\\\`json\\\`\\\`\\\`)은 절대 포함하지 마십시오.
+
+**[중요] 텍스트 포맷팅 필수 규칙:**
+- **줄바꿈 필수**: 여러 항목 나열 시 반드시 <br> 태그로 구분 (쉼표 사용 금지)
+  - 올바른 예: "첫 번째 근거입니다<br>두 번째 근거입니다<br>세 번째 근거입니다"
+  - 잘못된 예: "첫 번째 근거, 두 번째 근거, 세 번째 근거"
+- **강조**: **텍스트** 형식 사용 (예: **핵심 근거**)
+- **제목/리스트**: 필요시 ## 제목, - 항목, 1. 항목 사용
 
 [
   {
     "instruction": "해당 기사는 진위 여부 판단을 목적으로 수집되었습니다. 조건에 따라 종합적으로 검토 후 판단 결과를 진위, 근거, 분석 항목으로 나누어 출력하세요.",
     "input": "주어진 텍스트 전체",
     "output": {
+      "분석진행": "기사 구조 파악 → 근거 확인 → 논리 구조 분석 → 표현 분석 → 오탐 체크리스트 확인 → 종합 판단 순으로 단계별 추론 과정을 작성",
       "진위": "판단 결과('가짜 뉴스' / '가짜일 가능성이 높은 뉴스' / '가짜일 가능성이 있는 뉴스' / '부분적으로 신뢰할 수 있는 뉴스' / '진짜 뉴스')",
-      "근거": "탐지된 중요도 조건 번호와 이름. 여러 개일 경우 번호를 붙여 한 줄 문자열로 나열. 예: 2-2. 근거 없는 의혹 제기, 3-2. 감정적 표현 사용",
-      "분석": "위 근거들을 종합하여 기사의 어떤 부분이 왜 문제인지 혹은 신뢰할 수 있는지를 구체적으로 설명",
-      "요약": "기사의 핵심 내용을 간결하고 정확하게 요약. 비교 분석용으로 핵심 단어를 최대한 포함."
+      "근거": "탐지된 중요도 조건을 <br> 태그로 반드시 구분하여 나열. 예: 1-1. 기사 내 명백한 내용상 모순<br>3-2. 감정적 표현 사용<br>4-1. 제목과 내용의 불일치",
+      "분석": "위 근거들을 종합하여 기사의 어떤 부분이 왜 문제인지 혹은 신뢰할 수 있는지를 구체적으로 설명. 문단 구분이 필요하면 <br><br> 사용",
+      "요약": "기사의 핵심 내용을 간결하고 정확하게 요약. 여러 핵심 내용이 있으면 <br>로 구분"
     }
   }
 ]
@@ -2663,7 +3089,11 @@ ${articleContent}
 
   // 비교분석용 프롬프트 생성
   generateComparisonPrompt(comparisonContent) {
+    const currentDateTime = this.getCurrentDateTime();
+    
     return `
+**[현재 시각: ${currentDateTime}]**
+
 ## 역할
 당신은 두 개의 뉴스 기사를 비교분석하는 **'뉴스 비교분석 전문가'**입니다. 주어진 두 뉴스의 관점, 내용, 신뢰도를 객관적으로 비교하여 분석해주세요.
 
@@ -2685,15 +3115,19 @@ ${articleContent}
 ---
 
 ## 출력 형식
+
+**[중요] 텍스트 포맷팅 문법:**
+- **줄바꿈**: <br> 태그, **강조**: **텍스트**, **제목**: ## 제목, **리스트**: - 항목 또는 1. 항목
+
 [
   {
     "instruction": "해당 기사들은 비교분석을 목적으로 수집되었습니다. 두 기사의 내용 일치성, 관점 차이, 신뢰도를 종합적으로 검토 후 판단 결과를 출력하세요.",
     "input": "주어진 두 뉴스 텍스트 전체",
     "output": {
-      "분석진행": "비교분석을 위한 단계별 추론 과정을 투명하게 작성하세요. 1단계: 두 기사의 핵심 주장 파악, 2단계: 내용 일치성 분석, 3단계: 관점 및 편향성 분석, 4단계: 신뢰도 종합 평가 등 최소 4개 단계로 체계적으로 분석하세요.",
+      "분석진행": "비교분석을 위한 단계별 추론 과정을 작성",
       "진위": "두 뉴스의 비교분석 결과 ('일치하는 진짜 뉴스' / '일부 차이가 있지만 신뢰할 수 있는 뉴스' / '상당한 차이가 있어 주의가 필요한 뉴스' / '상충되는 내용으로 추가 검증 필요')",
-      "근거": "두 뉴스 간의 일치점과 차이점, 신뢰도 차이의 구체적인 근거",
-      "분석": "두 뉴스의 비교분석 결과를 상세히 서술. 어떤 부분이 일치하고 어떤 부분이 다른지, 왜 그런 차이가 발생했는지 구체적으로 설명",
+      "근거": "두 뉴스 간의 일치점과 차이점을 나열",
+      "분석": "두 뉴스의 비교분석 결과를 상세히 서술",
       "요약": "두 뉴스의 핵심 내용과 주요 차이점을 간결하게 요약"
     }
   }
@@ -2702,6 +3136,155 @@ ${articleContent}
 ---
 [비교분석 대상 뉴스]
 ${comparisonContent}
+---`;
+  }
+
+  // 2차 교차 검증용 프롬프트 생성
+  generateCrossVerificationPrompt(title, content, baselineAnalysis, previousVerification = null, currentStep = 1, totalDepth = 1) {
+    const articleContent = `${title}\n${content}`;
+    const currentDateTime = this.getCurrentDateTime();
+    
+    // 첫 번째 검증 (1차 분석 결과만 검토)
+    if (currentStep === 1) {
+      return `
+**[현재 시각: ${currentDateTime}]**
+
+## 역할
+당신은 **'AI 분석 검증 전문가'**입니다. 다른 AI가 수행한 뉴스 분석 결과를 재검토하고, 오류나 과도한 판단이 있는지 교차 검증하는 것이 당신의 임무입니다.
+
+---
+
+### **교차 검증 원칙**
+1. **독립적 재평가**: 1차 분석 결과에 영향받지 않고 원문을 다시 독립적으로 평가
+2. **오판 가능성 점검**: 1차 분석이 놓친 맥락이나 과도한 판단이 있는지 확인
+3. **근거의 타당성 재검토**: 제시된 근거가 실제로 원문에 존재하고 타당한지 검증
+4. **False Positive 방지**: 정상적인 기사를 가짜 뉴스로 오판하지 않았는지 특별히 주의
+5. **최종 균형 판단**: 1차 분석과 재평가를 종합하여 더 정확하고 신중한 결론 도출
+
+---
+
+### **검증 체크리스트**
+□ 1차 분석에서 제시한 근거가 실제로 원문에 존재하는가?
+□ 전문 용어나 업계 표현을 "모호한 표현"으로 오인하지 않았는가?
+□ 기사 장르(속보/칼럼/인터뷰/탐사보도)의 특성을 고려했는가?
+□ 부정적 내용을 "가짜 뉴스"로 오판하지 않았는가?
+□ 인용문과 기자의 주장을 명확히 구분했는가?
+□ 감정 표현이 사건의 심각성에 비례하는 적절한 수준인가?
+□ 1차 분석의 판정이 너무 가혹하거나 너무 관대하지 않은가?
+
+---
+
+## 출력 형식
+
+**[중요] 텍스트 포맷팅 문법:**
+- **줄바꿈**: <br> 태그, **강조**: **텍스트**, **제목**: ## 제목, **리스트**: - 항목 또는 1. 항목
+
+[
+  {
+    "instruction": "아래는 동일한 기사에 대한 1차 AI 분석 결과입니다. 이를 참고하되, 원문을 독립적으로 재평가하여 최종 판단을 내리세요.",
+    "input": "원문 기사 + 1차 분석 결과",
+    "output": {
+      "분석진행": "1차 분석 검토 → 원문 재평가 → 오류/과도한 판단 확인 → 최종 판단 도출 과정을 단계별로 작성",
+      "진위": "교차 검증 후 최종 판단 ('가짜 뉴스' / '가짜일 가능성이 높은 뉴스' / '가짜일 가능성이 있는 뉴스' / '부분적으로 신뢰할 수 있는 뉴스' / '진짜 뉴스')",
+      "근거": "최종 판단의 근거를 나열",
+      "분석": "1차 분석의 타당성 검토 + 원문 재평가 결과를 종합하여 상세히 설명",
+      "요약": "교차 검증을 거친 최종 결론을 간결하게 요약",
+      "검증의견": "1차 분석과 비교하여 달라진 점, 보완된 점, 또는 동의하는 이유를 명시"
+    }
+  }
+]
+
+---
+
+[원문 기사]
+${articleContent}
+
+---
+
+[1차 AI 분석 결과]
+진위: ${baselineAnalysis.진위 || 'N/A'}
+근거: ${baselineAnalysis.근거 || 'N/A'}
+분석: ${baselineAnalysis.분석 || 'N/A'}
+요약: ${baselineAnalysis.요약 || 'N/A'}
+
+---`;
+    }
+    
+    // 2차 이상의 재귀적 검증 (원문 + 1차 분석 + 직전 검증 결과 모두 참조)
+    return `
+**[현재 시각: ${currentDateTime}]**
+
+## 역할
+당신은 **'재귀적 검증 전문가'**입니다. 이전 AI의 검증 결과를 다시 한번 재검토하여, 판단의 정확도를 더욱 높이는 것이 당신의 임무입니다.
+
+**현재 진행 상황: ${currentStep}/${totalDepth}차 검증**
+
+---
+
+### **재귀적 검증 원칙**
+1. **원문 기반 재평가**: 항상 원문을 기준점으로 하여 이전 검증들이 원문의 실제 내용과 일치하는지 확인
+2. **1차 분석 참조**: 초기 AI 분석이 제시한 관점을 염두에 두되, 맹신하지 않기
+3. **이전 검증의 맹점 탐색**: 직전 검증에서 놓쳤을 수 있는 세부사항을 집중적으로 재검토
+4. **자기 강화적 피드백**: 이전 판단을 무조건 수용하지 않고, 원문 기반으로 독립적 재평가
+5. **점진적 정밀화**: 매 단계마다 판단의 근거와 논리를 더욱 정교하게 다듬기
+6. **과잉 수정 방지**: 이전 검증이 타당하다면 불필요하게 뒤집지 않고 보강만 하기
+
+---
+
+### **재검증 체크리스트**
+□ 직전 검증의 판단 근거가 원문과 정확히 일치하는가?
+□ 1차 분석과 직전 검증 사이에 일관성이 있는가?
+□ 원문에서 간과한 중요한 맥락이나 뉘앙스가 있는가?
+□ 이전 검증들의 결론이 지나치게 확신적이거나 모호하지 않은가?
+□ 감정적 표현과 객관적 사실을 명확히 구분했는가?
+□ 기사의 장르와 의도를 충분히 고려했는가?
+□ 인용문의 출처와 신뢰성을 재확인했는가?
+□ 최종 판단이 원문의 전체 맥락과 일관되는가?
+
+---
+
+## 출력 형식
+
+**[중요] 텍스트 포맷팅 문법:**
+- **줄바꿈**: <br> 태그, **강조**: **텍스트**, **제목**: ## 제목, **리스트**: - 항목 또는 1. 항목
+
+[
+  {
+    "instruction": "아래는 동일한 기사에 대한 1차 분석 및 ${currentStep - 1}차 검증 결과입니다. 원문을 기준점으로 이들을 재검토하여 더 정확한 판단을 내리세요.",
+    "input": "원문 기사 + 1차 분석 결과 + ${currentStep - 1}차 검증 결과",
+    "output": {
+      "분석진행": "원문 재확인 → 1차 분석 검토 → ${currentStep - 1}차 검증 검토 → 놓친 맥락 확인 → 최종 정밀화된 판단 도출 과정을 단계별로 작성",
+      "진위": "${currentStep}차 재귀적 검증 후 최종 판단 ('가짜 뉴스' / '가짜일 가능성이 높은 뉴스' / '가짜일 가능성이 있는 뉴스' / '부분적으로 신뢰할 수 있는 뉴스' / '진짜 뉴스')",
+      "근거": "최종 판단의 근거를 나열",
+      "분석": "원문 기반으로 1차 분석과 ${currentStep - 1}차 검증의 타당성 재검토",
+      "요약": "${currentStep}차 재귀적 검증을 거친 최종 결론을 간결하게 요약",
+      "검증의견": "${currentStep - 1}차 검증 및 1차 분석과 비교하여 달라진 점, 보완된 점, 또는 동의하는 이유를 명시"
+    }
+  }
+]
+
+---
+
+[원문 기사]
+${articleContent}
+
+---
+
+[1차 AI 분석 결과 (기준점)]
+진위: ${baselineAnalysis.진위 || 'N/A'}
+근거: ${baselineAnalysis.근거 || 'N/A'}
+분석: ${baselineAnalysis.분석 || 'N/A'}
+요약: ${baselineAnalysis.요약 || 'N/A'}
+
+---
+
+[${currentStep - 1}차 검증 결과]
+진위: ${previousVerification.진위 || 'N/A'}
+근거: ${previousVerification.근거 || 'N/A'}
+분석: ${previousVerification.분석 || 'N/A'}
+요약: ${previousVerification.요약 || 'N/A'}
+검증의견: ${previousVerification.검증의견 || 'N/A'}
+
 ---`;
   }
 
@@ -2719,6 +3302,17 @@ ${comparisonContent}
       console.log('분석 결과가 없습니다:', id, block);
       return;
     }
+
+    // 모든 열린 드롭다운 메뉴 닫기
+  const openDropdowns = document.querySelectorAll('.more-menu-dropdown');
+    openDropdowns.forEach(dropdown => {
+      dropdown.style.display = 'none';
+      // 부모 블록의 z-index도 원래대로
+      const parentBlock = dropdown.closest('.news-block');
+      if (parentBlock) {
+        parentBlock.style.zIndex = '';
+      }
+    });
 
     const panel = document.getElementById(this.panelId);
     const shouldUseModal = !panel || panel.classList.contains('analysis-panel-collapsed');
@@ -2747,6 +3341,40 @@ ${comparisonContent}
     }
 
     this.closeDetailInPanel(true);
+
+    // 뉴스 블록 리스트 숨기기
+    const newsBlocksList = panel.querySelector('#analyzed-news-container');
+    if (newsBlocksList) {
+      if (!('prevVisibility' in newsBlocksList.dataset)) {
+        newsBlocksList.dataset.prevVisibility = newsBlocksList.style.visibility || '';
+      }
+      if (!('prevOpacity' in newsBlocksList.dataset)) {
+        newsBlocksList.dataset.prevOpacity = newsBlocksList.style.opacity || '';
+      }
+      if (!('prevPointerEvents' in newsBlocksList.dataset)) {
+        newsBlocksList.dataset.prevPointerEvents = newsBlocksList.style.pointerEvents || '';
+      }
+      if (!('prevMinHeight' in newsBlocksList.dataset)) {
+        newsBlocksList.dataset.prevMinHeight = newsBlocksList.style.minHeight || '';
+      }
+
+      const currentHeight = newsBlocksList.offsetHeight;
+      if (!newsBlocksList.dataset.placeholderHeight) {
+        newsBlocksList.dataset.placeholderHeight = String(currentHeight);
+      }
+
+      if (currentHeight > 0) {
+        newsBlocksList.style.minHeight = `${currentHeight}px`;
+      }
+      newsBlocksList.style.visibility = 'hidden';
+      newsBlocksList.style.opacity = '0';
+      newsBlocksList.style.pointerEvents = 'none';
+    }
+
+    if (!('prevOverflow' in panel.dataset)) {
+      panel.dataset.prevOverflow = panel.style.overflow || '';
+    }
+    panel.style.overflow = 'hidden';
 
     const result = block.result || {};
     const analysisProcess = result.분석진행 || '';
@@ -2838,10 +3466,14 @@ ${comparisonContent}
         <div class="detail-scroll" style="
           flex: 1;
           overflow-y: auto;
+          overflow-x: hidden;
           padding: 26px 28px 32px 28px;
           display: flex;
           flex-direction: column;
           gap: 24px;
+          min-height: 0;
+          scrollbar-width: thin;
+          scrollbar-color: #BF9780 rgba(13, 13, 13, 0.3);
         ">
           <section>
             <h3 style="
@@ -2872,7 +3504,20 @@ ${comparisonContent}
               display: flex;
               align-items: center;
               gap: 8px;
-            ">진위 판단</h3>
+            ">
+              진위 판단
+              ${block.crossVerified ? `
+              <span style="
+                background: linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(139, 92, 246, 0.25));
+                color: rgba(99, 102, 241, 1);
+                border: 1px solid rgba(99, 102, 241, 0.5);
+                padding: 4px 10px;
+                border-radius: 8px;
+                font-size: 11px;
+                font-weight: 600;
+              ">🔄 2차 검증 완료</span>
+              ` : ''}
+            </h3>
             <div style="
               color: ${verdictColors.text};
               background: ${verdictBackground};
@@ -2882,8 +3527,21 @@ ${comparisonContent}
               font-weight: 600;
               font-size: 16px;
               text-align: center;
-              box-shadow: 0 10px 24px ${verdictColors.shadow};
-            ">${this.renderMarkdown(verdict)}</div>
+            ">${verdict}</div>
+            ${block.crossVerified && block.firstAnalysis && block.firstAnalysis.진위 !== verdict ? `
+            <div style="
+              margin-top: 12px;
+              background: rgba(255, 193, 7, 0.1);
+              border: 1px solid rgba(255, 193, 7, 0.3);
+              border-radius: 10px;
+              padding: 14px;
+              font-size: 13px;
+              color: ${text};
+            ">
+              <div style="font-weight: 600; color: rgba(255, 193, 7, 1); margin-bottom: 6px;">⚠️ 1차 분석과 다른 결과</div>
+              <div style="color: ${mutedText};">1차 판단: <strong>${block.firstAnalysis.진위}</strong> → 2차 재검토: <strong>${verdict}</strong></div>
+            </div>
+            ` : ''}
           </section>
 
           <section>
@@ -2978,6 +3636,35 @@ ${comparisonContent}
 
     panel.appendChild(overlay);
 
+    // 스크롤바 스타일 추가
+    const scrollContainer = overlay.querySelector('.detail-scroll');
+    if (scrollContainer) {
+      // webkit 브라우저용 스크롤바 스타일
+      const styleId = 'detail-scroll-style';
+      let styleTag = document.getElementById(styleId);
+      if (!styleTag) {
+        styleTag = document.createElement('style');
+        styleTag.id = styleId;
+        styleTag.textContent = `
+          .detail-scroll::-webkit-scrollbar {
+            width: 8px;
+          }
+          .detail-scroll::-webkit-scrollbar-track {
+            background: rgba(13, 13, 13, 0.3);
+            border-radius: 4px;
+          }
+          .detail-scroll::-webkit-scrollbar-thumb {
+            background: #BF9780;
+            border-radius: 4px;
+          }
+          .detail-scroll::-webkit-scrollbar-thumb:hover {
+            background: #D4A88A;
+          }
+        `;
+        document.head.appendChild(styleTag);
+      }
+    }
+
     this.activeDetailOverlay = overlay;
     this.preDetailFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
 
@@ -3035,6 +3722,51 @@ ${comparisonContent}
 
     const overlay = this.activeDetailOverlay;
 
+    // 뉴스 블록 리스트 다시 표시
+    const panel = document.getElementById(this.panelId);
+    if (panel) {
+      const newsBlocksList = panel.querySelector('#analyzed-news-container');
+      if (newsBlocksList) {
+        const prevVisibility = newsBlocksList.dataset.prevVisibility;
+        const prevOpacity = newsBlocksList.dataset.prevOpacity;
+        const prevPointerEvents = newsBlocksList.dataset.prevPointerEvents;
+        const prevMinHeight = newsBlocksList.dataset.prevMinHeight;
+
+        if (prevVisibility !== undefined) {
+          newsBlocksList.style.visibility = prevVisibility;
+          delete newsBlocksList.dataset.prevVisibility;
+        } else {
+          newsBlocksList.style.visibility = '';
+        }
+
+        if (prevOpacity !== undefined) {
+          newsBlocksList.style.opacity = prevOpacity;
+          delete newsBlocksList.dataset.prevOpacity;
+        } else {
+          newsBlocksList.style.opacity = '';
+        }
+
+        if (prevPointerEvents !== undefined) {
+          newsBlocksList.style.pointerEvents = prevPointerEvents;
+          delete newsBlocksList.dataset.prevPointerEvents;
+        } else {
+          newsBlocksList.style.pointerEvents = '';
+        }
+
+        if (prevMinHeight !== undefined) {
+          newsBlocksList.style.minHeight = prevMinHeight;
+          delete newsBlocksList.dataset.prevMinHeight;
+        } else {
+          newsBlocksList.style.minHeight = '';
+        }
+
+        if (newsBlocksList.dataset.placeholderHeight) {
+          delete newsBlocksList.dataset.placeholderHeight;
+        }
+      }
+
+    }
+
     if (this.detailEscapeHandler) {
       document.removeEventListener('keydown', this.detailEscapeHandler);
       this.detailEscapeHandler = null;
@@ -3044,6 +3776,17 @@ ${comparisonContent}
       if (overlay.parentElement) {
         overlay.parentElement.removeChild(overlay);
       }
+
+      if (panel) {
+        const prevOverflow = panel.dataset.prevOverflow;
+        if (prevOverflow !== undefined) {
+          panel.style.overflow = prevOverflow;
+          delete panel.dataset.prevOverflow;
+        } else {
+          panel.style.overflow = 'hidden auto';
+        }
+      }
+
       if (!skipAnimation && this.preDetailFocus && typeof this.preDetailFocus.focus === 'function') {
         try {
           this.preDetailFocus.focus({ preventScroll: true });
@@ -3607,6 +4350,45 @@ ${comparisonContent}
 
   // 분석진행 모달 표시
   showAnalysisProcessModal(analysisProcess) {
+    // 마크다운 렌더링 (검은색 텍스트 강제)
+    const renderProcessText = (text) => {
+      if (!text) return '추론과정이 없습니다.';
+      
+      // <br> 태그 보호
+      let html = text.replace(/<br\s*\/?>/gi, '|||BR_TAG|||');
+      
+      // HTML 이스케이프
+      html = this.escapeHtml(html);
+      
+      // 마크다운 변환 (검은색 강제)
+      html = html
+        // 제목 (## 제목)
+        .replace(/^## (.+)$/gm, '<h2 style="color: #0D0D0D; font-weight: 600; font-size: 16px; margin: 12px 0 6px 0; border-bottom: 1px solid #BF9780; padding-bottom: 4px;">$1</h2>')
+        // 강조 (**텍스트**)
+        .replace(/\*\*(.+?)\*\*/g, '<strong style="color: #0D0D0D; font-weight: 600;">$1</strong>')
+        // 숫자 리스트
+        .replace(/^(\d+)\.\s*(.+)$/gm, '<li style="margin: 6px 0; padding-left: 8px; list-style: decimal; color: #0D0D0D;">$2</li>')
+        // 일반 리스트
+        .replace(/^-\s*(.+)$/gm, '<li style="margin: 4px 0; padding-left: 8px; list-style: disc; color: #0D0D0D;">$1</li>')
+        // 보호했던 <br> 태그 복원
+        .replace(/\|\|\|BR_TAG\|\|\|/g, '<br>')
+        // 줄바꿈 처리
+        .replace(/\n/g, '|||NEWLINE|||');
+      
+      // 리스트 감싸기
+      html = html.replace(/(<li[^>]*list-style: decimal;[^>]*>.*?<\/li>(?:\s*\|\|\|NEWLINE\|\|\|\s*<li[^>]*list-style: decimal;[^>]*>.*?<\/li>)*)/gs, 
+        '<ol style="margin: 8px 0; padding-left: 20px; color: #0D0D0D;">$1</ol>');
+      html = html.replace(/(<li[^>]*list-style: disc;[^>]*>.*?<\/li>(?:\s*\|\|\|NEWLINE\|\|\|\s*<li[^>]*list-style: disc;[^>]*>.*?<\/li>)*)/gs, 
+        '<ul style="margin: 8px 0; padding-left: 20px; color: #0D0D0D;">$1</ul>');
+      
+      // NEWLINE 제거 및 변환
+      html = html.replace(/(<[ou]l[^>]*>.*?)\|\|\|NEWLINE\|\|\|(?=\s*<li)/gs, '$1');
+      html = html.replace(/(<\/li>)\s*\|\|\|NEWLINE\|\|\|/g, '$1');
+      html = html.replace(/\|\|\|NEWLINE\|\|\|/g, '<br>');
+      
+      return html;
+    };
+    
     const modal = document.createElement('div');
     modal.className = 'analysis-process-modal';
     modal.style.cssText = `
@@ -3669,8 +4451,7 @@ ${comparisonContent}
           line-height: 1.6;
           color: #0D0D0D;
           font-size: 14px;
-          white-space: pre-wrap;
-        ">${this.renderMarkdown(analysisProcess)}</div>
+        ">${renderProcessText(analysisProcess)}</div>
       </div>
     `;
 
@@ -4179,6 +4960,52 @@ ${comparisonContent}
           accent-color: #BF9780;
         " />
       </div>
+
+      <!-- 교차 검증 깊이 설정 -->
+      <div style="padding: 16px; background: rgba(191, 151, 128, 0.08); border-radius: 8px; margin-top: 12px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 14px; font-weight: 600; color: #0D0D0D;">교차 검증 깊이</span>
+            <span style="font-size: 12px; color: rgba(13, 13, 13, 0.6);">(재귀적 피드백 루프)</span>
+          </div>
+          <span class="cross-verification-depth-value" style="
+            font-size: 14px;
+            font-weight: 600;
+            color: #0D0D0D;
+            min-width: 48px;
+            text-align: right;
+          ">${this.getCrossVerificationDepthSetting()}회</span>
+        </div>
+        <input type="range" class="cross-verification-depth-slider" min="2" max="4" step="1" value="${this.getCrossVerificationDepthSetting()}" style="
+          width: 100%;
+          accent-color: #BF9780;
+        " />
+        <div style="font-size: 11px; color: rgba(13, 13, 13, 0.5); margin-top: 6px;">
+          매 단계마다 직전 결과를 참고하여 새로운 판단을 내립니다
+        </div>
+      </div>
+
+      <!-- 전체 뉴스 블록 삭제 -->
+      <div style="padding: 16px; background: rgba(239, 68, 68, 0.08); border-radius: 8px; margin-top: 12px; border: 1px solid rgba(239, 68, 68, 0.2);">
+        <div style="margin-bottom: 8px;">
+          <span style="font-size: 14px; font-weight: 600; color: #0D0D0D;">데이터 관리</span>
+        </div>
+        <button class="delete-all-news-btn" style="
+          background: rgba(239, 68, 68, 0.1);
+          color: rgba(239, 68, 68, 1);
+          padding: 10px 16px;
+          border-radius: 6px;
+          font-size: 13px;
+          font-weight: 600;
+          border: 1px solid rgba(239, 68, 68, 0.3);
+          cursor: pointer;
+          width: 100%;
+          transition: all 0.2s;
+        " onmouseover="this.style.background='rgba(239, 68, 68, 0.2)'; this.style.borderColor='rgba(239, 68, 68, 0.5)'" onmouseout="this.style.background='rgba(239, 68, 68, 0.1)'; this.style.borderColor='rgba(239, 68, 68, 0.3)'">🗑️ 모든 뉴스 블록 삭제</button>
+        <div style="font-size: 11px; color: rgba(13, 13, 13, 0.5); margin-top: 6px;">
+          저장된 모든 분석 결과를 영구적으로 삭제합니다
+        </div>
+      </div>
     `;
     
     modal.appendChild(modalContent);
@@ -4413,6 +5240,56 @@ ${comparisonContent}
         updateOpacity(event.target.value, true);
       });
     }
+
+    // 교차 검증 깊이 슬라이더
+    const depthSlider = modalContent.querySelector('.cross-verification-depth-slider');
+    const depthValueLabel = modalContent.querySelector('.cross-verification-depth-value');
+    if (depthSlider && depthValueLabel) {
+      const updateDepth = (rawValue, persist = false) => {
+        const parsed = parseInt(rawValue, 10);
+        const numeric = Math.min(Math.max(Number.isNaN(parsed) ? this.crossVerificationDepth : parsed, 2), 4);
+        depthValueLabel.textContent = `${numeric}회`;
+        depthSlider.value = numeric;
+        if (persist) {
+          this.setCrossVerificationDepthSetting(numeric);
+        } else {
+          this.crossVerificationDepth = numeric;
+        }
+      };
+
+      depthSlider.addEventListener('input', (event) => {
+        updateDepth(event.target.value, false);
+      });
+
+      depthSlider.addEventListener('change', (event) => {
+        updateDepth(event.target.value, true);
+      });
+    }
+
+    // 전체 뉴스 블록 삭제 버튼
+    const deleteAllBtn = modalContent.querySelector('.delete-all-news-btn');
+    if (deleteAllBtn) {
+      deleteAllBtn.addEventListener('click', () => {
+        if (confirm('모든 뉴스 블록을 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.')) {
+          // 모든 뉴스 블록 삭제
+          this.newsBlocks.clear();
+          this.saveNewsBlocks();
+          
+          // URL별 진위 결과 저장 데이터도 삭제
+          chrome.storage.local.remove('factcheck_verdicts', () => {
+            console.log('URL별 진위 결과 저장 데이터가 삭제되었습니다.');
+          });
+          
+          this.updatePanel();
+          
+          // 모달 닫기
+          modal.style.opacity = '0';
+          setTimeout(() => modal.remove(), 300);
+          
+          console.log('모든 뉴스 블록이 삭제되었습니다.');
+        }
+      });
+    }
   }
 
   // API 키 모달 생성 (별도)
@@ -4550,6 +5427,34 @@ ${comparisonContent}
 
     this.panelOpacity = clamped;
     this.applyPanelOpacity(clamped);
+  }
+
+  // 교차 검증 깊이 설정 가져오기
+  getCrossVerificationDepthSetting() {
+    try {
+      const stored = localStorage.getItem('factcheck_cross_verification_depth');
+      const parsed = stored !== null ? parseInt(stored, 10) : 3;
+      if (Number.isNaN(parsed)) {
+        return 3;
+      }
+      return Math.min(Math.max(parsed, 2), 4);
+    } catch (error) {
+      console.error('Failed to get cross verification depth setting:', error);
+      return 3;
+    }
+  }
+
+  // 교차 검증 깊이 설정 저장
+  setCrossVerificationDepthSetting(value) {
+    const clamped = Math.min(Math.max(value, 2), 4);
+    try {
+      localStorage.setItem('factcheck_cross_verification_depth', String(clamped));
+      console.log('Cross verification depth setting updated:', clamped);
+    } catch (error) {
+      console.error('Failed to save cross verification depth setting:', error);
+    }
+    this.crossVerificationDepth = clamped;
+    return clamped;
   }
 
   // 패널에 투명도 적용
@@ -5168,6 +6073,12 @@ ${comparisonContent}
 
   // 분석 완료 (외부에서 호출)
   completeAnalysis(blockId, result) {
+    // 교차 검증 완료 처리
+    if (this.crossVerificationInProgress.has(blockId)) {
+      this.completeCrossVerification(blockId, result);
+      return;
+    }
+    
     // 타임아웃 제거
     if (this.analysisTimeouts.has(blockId)) {
       clearTimeout(this.analysisTimeouts.get(blockId));
@@ -5288,6 +6199,165 @@ ${comparisonContent}
     
   }
 
+  // 교차 검증 완료 처리
+  completeCrossVerification(blockId, crossVerifiedResult) {
+    console.log('교차 검증 단계 완료, ID:', blockId);
+    
+    // current인 경우 currentNews 사용, 아니면 newsBlocks에서 찾기
+    let block;
+    if (blockId === 'current') {
+      block = this.currentNews;
+    } else {
+      block = this.newsBlocks.get(blockId);
+    }
+    
+    if (!block) {
+      console.error('블록을 찾을 수 없음, ID:', blockId);
+      return;
+    }
+    
+    // 현재 단계 증가
+    block.currentVerificationStep = (block.currentVerificationStep || 0) + 1;
+    
+    // 검증 결과를 히스토리에 저장
+    if (!block.verificationHistory) {
+      block.verificationHistory = [];
+    }
+    block.verificationHistory.push(crossVerifiedResult);
+    
+    console.log(`[교차 검증] ${block.currentVerificationStep}/${this.crossVerificationDepth}차 검증 완료`);
+    
+    // 모든 검증 단계가 완료되었는지 확인
+    if (block.currentVerificationStep >= this.crossVerificationDepth) {
+      // 최종 검증 완료
+      this.finalizeCrossVerification(blockId, block);
+    } else {
+      // 다음 단계 검증 계속 진행
+      const abortController = this.abortControllers.get(blockId);
+      this.performRecursiveVerification(blockId, block, abortController);
+    }
+  }
+  
+  finalizeCrossVerification(blockId, block) {
+    console.log(`[교차 검증] 모든 검증 완료, ID: ${blockId}, 총 ${block.currentVerificationStep}차 검증`);
+    
+    // 타임아웃 제거
+    if (this.analysisTimeouts.has(blockId)) {
+      clearTimeout(this.analysisTimeouts.get(blockId));
+      this.analysisTimeouts.delete(blockId);
+    }
+    
+    // AbortController 제거
+    if (this.abortControllers.has(blockId)) {
+      this.abortControllers.delete(blockId);
+    }
+    
+    // 교차 검증 진행 상태 제거
+    this.crossVerificationInProgress.delete(blockId);
+    
+    // 교차 검증 플래그 설정
+    block.crossVerified = true;
+    
+    // 최종 검증 결과 저장 (마지막 검증 결과)
+    const finalResult = block.verificationHistory[block.verificationHistory.length - 1];
+    block.crossVerifiedResult = finalResult;
+    
+    // 상태를 completed로 변경하고 최종 결과로 업데이트
+    block.status = 'completed';
+    block.result = finalResult;
+    
+    // 스트리밍 결과 정리
+    this.streamingResults.delete(blockId);
+    
+    const { normalizedResult, verdict, suspicious } = this.parseAnalysisResult(finalResult);
+    
+    // 진위 결과를 URL별로 저장 (최종 검증 결과로 업데이트)
+    if (block.url && verdict) {
+      try {
+        const normalizeUrl = (urlString) => {
+          try {
+            const urlObj = new URL(urlString);
+            return urlObj.origin + urlObj.pathname;
+          } catch {
+            return urlString;
+          }
+        };
+        
+        const normalizedUrl = normalizeUrl(block.url);
+        
+        console.log(`[최종 검증] ${block.currentVerificationStep}차 검증 진위 결과 저장:`, normalizedUrl, verdict);
+        
+        chrome.storage.local.get(['factcheck_verdicts'], (data) => {
+          if (chrome.runtime.lastError) {
+            console.error('[최종 검증] storage.get 에러:', chrome.runtime.lastError);
+            return;
+          }
+          
+          const savedVerdicts = data.factcheck_verdicts || {};
+          savedVerdicts[normalizedUrl] = {
+            verdict,
+            suspicious,
+            timestamp: Date.now(),
+            crossVerified: true,
+            verificationDepth: block.currentVerificationStep
+          };
+          
+          chrome.storage.local.set({ factcheck_verdicts: savedVerdicts }, () => {
+            if (chrome.runtime.lastError) {
+              console.error('[최종 검증] storage.set 에러:', chrome.runtime.lastError);
+            } else {
+              console.log(`[최종 검증] ✅ ${block.currentVerificationStep}차 검증 결과 저장 완료:`, normalizedUrl, verdict);
+            }
+          });
+        });
+      } catch (error) {
+        console.error('[최종 검증] 검증 결과 저장 실패:', error);
+      }
+    }
+    
+    // 하이라이트 업데이트 (최종 검증 결과 반영)
+    if (verdict && typeof window.updateHighlightColors === 'function') {
+      window.updateHighlightColors(verdict);
+    }
+    
+    if (suspicious && typeof window.highlightSuspiciousSentences === 'function') {
+      window.highlightSuspiciousSentences(suspicious);
+    }
+    
+    // currentNews 동기화
+    if (this.currentNews) {
+      const normalizeUrl = (urlString) => {
+        try {
+          const urlObj = new URL(urlString);
+          return urlObj.origin + urlObj.pathname;
+        } catch {
+          return urlString;
+        }
+      };
+      
+      if (normalizeUrl(block.url) === normalizeUrl(this.currentNews.url)) {
+        this.currentNews.status = 'completed';
+        this.currentNews.result = finalResult;
+        this.currentNews.crossVerified = true;
+        this.currentNews.crossVerifiedResult = finalResult;
+        this.currentNews.verificationHistory = block.verificationHistory;
+        this.currentNews.currentVerificationStep = block.currentVerificationStep;
+        this.currentNews.baselineAnalysis = block.baselineAnalysis;  // 1차 분석 결과도 함께 저장
+      }
+    }
+    
+    // 저장 및 패널 업데이트 (current가 아닌 경우만)
+    if (blockId !== 'current') {
+      this.saveNewsBlocks();
+    }
+    this.updatePanel();
+    
+    // 완료 알림
+    this.highlightCompletedBlock(blockId);
+    
+    console.log(`[최종 검증] ${block.currentVerificationStep}차 교차 검증 완료, 최종 결과 적용됨`);
+  }
+
   // 완료된 블록 강조 표시
   highlightCompletedBlock(blockId) {
     const newsBlocks = this.panelContent.querySelectorAll('.news-block');
@@ -5310,6 +6380,58 @@ ${comparisonContent}
   // 분석 실패 (외부에서 호출)
   failAnalysis(blockId, error) {
     this.streamingResults.delete(blockId); // 스트리밍 결과 정리
+    
+    // 429 에러 (할당량 초과) 체크
+    const is429Error = error && (
+      error.includes('429') || 
+      error.includes('RESOURCE_EXHAUSTED') ||
+      error.includes('Resource exhausted')
+    );
+    
+    // 교차 검증 중 429 에러 발생 시 처리
+    if (is429Error && this.crossVerificationInProgress.has(blockId)) {
+      console.warn('[교차 검증] API 할당량 초과, 진행 중단:', blockId);
+      
+      // 교차 검증 진행 상태 제거
+      this.crossVerificationInProgress.delete(blockId);
+      
+      // 타임아웃 제거
+      if (this.analysisTimeouts.has(blockId)) {
+        clearTimeout(this.analysisTimeouts.get(blockId));
+        this.analysisTimeouts.delete(blockId);
+      }
+      
+      // AbortController 제거
+      if (this.abortControllers.has(blockId)) {
+        this.abortControllers.delete(blockId);
+      }
+      
+      // 현재까지의 검증 결과가 있으면 그것을 사용, 없으면 1차 분석 유지
+      let block;
+      if (blockId === 'current') {
+        block = this.currentNews;
+      } else {
+        block = this.newsBlocks.get(blockId);
+      }
+      
+      if (block && block.verificationHistory && block.verificationHistory.length > 0) {
+        // 마지막 성공한 검증 결과 사용
+        const lastSuccessfulResult = block.verificationHistory[block.verificationHistory.length - 1];
+        block.crossVerified = true;
+        block.crossVerifiedResult = lastSuccessfulResult;
+        block.result = lastSuccessfulResult;
+        block.status = 'completed';
+        
+        const errorMsg = `⚠️ API 할당량 초과로 ${block.currentVerificationStep}/${this.crossVerificationDepth}차까지만 검증 완료. 마지막 검증 결과를 사용합니다.`;
+        console.warn(errorMsg);
+        
+        this.updateNewsStatus(blockId, 'completed', lastSuccessfulResult, errorMsg);
+        return;
+      } else {
+        // 검증 히스토리가 없으면 1차 분석 결과 유지
+        error = `⚠️ API 할당량 초과로 교차 검증 실패. 1차 분석 결과를 유지합니다.\n\n원본 오류: ${error}`;
+      }
+    }
     
     // 타임아웃 제거
     if (this.analysisTimeouts.has(blockId)) {
@@ -5877,7 +6999,7 @@ if (!document.getElementById('analysis-panel-animations')) {
     }
     
     div[id^="typing-content-"]::-webkit-scrollbar-track {
-      background: #F0F0F0;
+      background: rgba(13, 13, 13, 0.3);
       border-radius: 3px;
     }
     
