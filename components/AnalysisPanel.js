@@ -3423,10 +3423,11 @@ ${articleContent}
       transform: translateY(16px);
       transition: opacity 0.18s ease, transform 0.18s ease;
       z-index: 9;
+      overflow: hidden;
     `;
 
     overlay.innerHTML = `
-      <div style="display: flex; flex-direction: column; flex: 1; color: ${text};">
+      <div style="display: flex; flex-direction: column; flex: 1; color: ${text}; min-height: 0;">
         <div style="
           display: flex;
           align-items: center;
