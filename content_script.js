@@ -11,12 +11,49 @@ function isChromeApiAvailable() {
 
 // 전역 변수
 let extractedData = [];
+let currentParser = null; // 현재 사용 중인 파서 인스턴스
+
+/**
+ * 현재 URL에 맞는 파서 인스턴스 가져오기
+ */
+function getParserForCurrentUrl() {
+  const currentUrl = window.location.href;
+  
+  // 네이버 뉴스 파서
+  if (typeof window.NaverNewsParser !== 'undefined') {
+    const naverParser = new window.NaverNewsParser();
+    if (naverParser.canParse(currentUrl)) {
+      console.log('네이버 뉴스 파서 선택');
+      return naverParser;
+    }
+  }
+  
+  // 다음 뉴스 파서
+  if (typeof window.DaumNewsParser !== 'undefined') {
+    const daumParser = new window.DaumNewsParser();
+    if (daumParser.canParse(currentUrl)) {
+      console.log('다음 뉴스 파서 선택');
+      return daumParser;
+    }
+  }
+  
+  console.warn('현재 URL에 맞는 파서를 찾을 수 없습니다:', currentUrl);
+  return null;
+}
 
 /**
  * 초기화 함수
  */
 async function initialize() {
   console.log('초기화 시작');
+  
+  // 현재 URL에 맞는 파서 선택
+  currentParser = getParserForCurrentUrl();
+  
+  if (!currentParser) {
+    console.log('지원하지 않는 뉴스 사이트입니다.');
+    return;
+  }
   
   // 이전 데이터 초기화
   extractedData = [];
@@ -57,8 +94,14 @@ async function getSavedVerdict() {
   
   // chrome.storage에서 조회
   try {
-    const data = await new Promise((resolve) => {
-      chrome.storage.local.get(['factcheck_verdicts'], resolve);
+    const data = await new Promise((resolve, reject) => {
+      chrome.storage.local.get(['factcheck_verdicts'], (result) => {
+        if (chrome.runtime.lastError) {
+          reject(chrome.runtime.lastError);
+        } else {
+          resolve(result);
+        }
+      });
     });
     
     const verdicts = data.factcheck_verdicts || {};
@@ -106,101 +149,34 @@ function getColorScheme(verdict) {
 }
 
 /**
- * 뉴스 데이터 추출 및 하이라이트
+ * 뉴스 데이터 추출 및 하이라이트 (파서 모듈 사용)
  */
 function extractNewsData(savedAnalysis = null) {
   console.log('뉴스 데이터 추출 시작');
   
+  if (!currentParser) {
+    console.error('파서가 초기화되지 않았습니다.');
+    return;
+  }
+  
   const verdict = savedAnalysis?.verdict || null;
   const colorScheme = getColorScheme(verdict);
+  
   if (verdict) {
     console.log('[extractNewsData] 저장된 분석 결과로 하이라이트 적용:', verdict);
   } else {
     console.log('[extractNewsData] 저장된 분석 결과 없음, 기본 색상 적용');
   }
   
-  // 제목 처리
-  const titleSelector = 'h2.media_end_head_headline';
-  const titleElement = document.querySelector(titleSelector);
-
-  if (titleElement) {
-    // 하이라이트 (저장된 분석 결과에 따른 색상)
-    titleElement.style.backgroundColor = colorScheme.background;
-    titleElement.style.padding = '5px';
-    titleElement.style.borderRadius = '5px';
-    titleElement.style.border = `2px solid ${colorScheme.border}`;
-
-    // 데이터 수집
-    const titleText = titleElement.textContent?.trim();
-    if (titleText) {
-      extractedData.push({ type: '제목', text: titleText });
-    }
-    console.log('네이버 뉴스 제목을 성공적으로 하이라이트하고 데이터를 수집했습니다.');
-  } else {
-    console.log('하이라이트할 네이버 뉴스 제목을 찾지 못했습니다.');
-  }
-
-  // 내용 처리
-  const contentSelectors = [
-    '#dic_area',
-    '.go_trans._article_content',
-    '#articeBody'
-  ];
-
-  let contentFound = false;
-
-  for (const selector of contentSelectors) {
-    const contentElements = document.querySelectorAll(selector);
-    
-    if (contentElements.length > 0) {
-      contentElements.forEach((element, index) => {
-        // 하이라이트 (저장된 분석 결과에 따른 색상)
-        element.style.backgroundColor = colorScheme.background;
-        element.style.padding = '10px';
-        element.style.borderRadius = '5px';
-        element.style.border = `2px solid ${colorScheme.border}`;
-
-        // 데이터 수집
-        const contentText = element.textContent?.trim();
-        if (contentText) {
-          extractedData.push({ type: '내용', text: contentText });
-        }
-      });
-      
-      console.log(`${selector}로 ${contentElements.length}개의 내용 요소를 하이라이트하고 데이터를 수집했습니다.`);
-      contentFound = true;
-      break;
-    }
-  }
-
-  if (!contentFound) {
-    console.log('하이라이트할 네이버 뉴스 내용을 찾지 못했습니다.');
-  }
-
-  // 부제목 처리
-  const subtitleSelector = '.media_end_head_info_datestamp_bunch .media_end_head_info_datestamp_time';
-  const subtitleElement = document.querySelector(subtitleSelector);
-
-  if (subtitleElement) {
-    // 하이라이트
-    subtitleElement.style.backgroundColor = colorScheme.border; // 테두리 색상 사용
-    subtitleElement.style.padding = '3px';
-    subtitleElement.style.borderRadius = '3px';
-
-    // 데이터 수집
-    const subtitleText = subtitleElement.textContent?.trim();
-    if (subtitleText) {
-      extractedData.push({ type: '시간', text: subtitleText });
-    }
-    console.log('네이버 뉴스 시간 정보를 성공적으로 하이라이트하고 데이터를 수집했습니다.');
-  } else {
-    console.log('하이라이트할 네이버 뉴스 시간 정보를 찾지 못했습니다.');
-  }
-
+  // 파서를 사용하여 데이터 추출 및 하이라이트
+  extractedData = currentParser.extractNewsData(colorScheme);
+  
   // 저장된 수상한 문장 하이라이트도 적용
   if (savedAnalysis?.suspicious) {
-    highlightSuspiciousSentences(savedAnalysis.suspicious);
+    currentParser.highlightSuspiciousSentences(savedAnalysis.suspicious);
   }
+  
+  console.log(`뉴스 데이터 추출 완료: ${extractedData.length}개 항목`);
 }
 
 /**
@@ -362,56 +338,21 @@ function updateFloatingButtonVisibility() {
 }
 
 /**
- * 진위 여부에 따라 하이라이트 색상 변경
+ * 진위 여부에 따라 하이라이트 색상 변경 (파서 모듈 사용)
  */
 function updateHighlightColors(verdict) {
   console.log('[updateHighlightColors] 시작 - 진위:', verdict);
   
+  if (!currentParser) {
+    console.error('[updateHighlightColors] 파서가 초기화되지 않았습니다.');
+    return;
+  }
+  
   const colorScheme = getColorScheme(verdict);
   console.log('[updateHighlightColors] 적용할 색상:', colorScheme);
   
-  let elementsUpdated = 0;
-  
-  // 제목 하이라이트 색상 변경
-  const titleSelector = 'h2.media_end_head_headline';
-  const titleElement = document.querySelector(titleSelector);
-  
-  if (titleElement) {
-    titleElement.style.backgroundColor = colorScheme.background;
-    titleElement.style.borderColor = colorScheme.border;
-    titleElement.style.border = `2px solid ${colorScheme.border}`;
-    console.log('[updateHighlightColors] 제목 색상 변경:', colorScheme.background);
-    elementsUpdated++;
-  }
-  
-  // 내용 하이라이트 색상 변경
-  const contentSelectors = [
-    '#dic_area',
-    '.go_trans._article_content',
-    '#articeBody'
-  ];
-  
-  for (const selector of contentSelectors) {
-    const contentElements = document.querySelectorAll(selector);
-    
-    contentElements.forEach((element, index) => {
-      element.style.backgroundColor = colorScheme.background;
-      element.style.borderColor = colorScheme.border;
-      element.style.border = `2px solid ${colorScheme.border}`;
-      console.log(`[updateHighlightColors] ${selector}[${index}] 색상 변경`);
-      elementsUpdated++;
-    });
-  }
-  
-  // 시간 정보 하이라이트 색상 변경
-  const subtitleSelector = '.media_end_head_info_datestamp_bunch .media_end_head_info_datestamp_time';
-  const subtitleElement = document.querySelector(subtitleSelector);
-  
-  if (subtitleElement) {
-    subtitleElement.style.backgroundColor = colorScheme.border;
-    console.log('[updateHighlightColors] 시간 정보 색상 변경:', colorScheme.border);
-    elementsUpdated++;
-  }
+  // 파서의 updateHighlightColors 메서드 사용
+  const elementsUpdated = currentParser.updateHighlightColors(colorScheme);
   
   console.log(`[updateHighlightColors] 완료 - 판정: ${verdict}, 업데이트: ${elementsUpdated}개`);
   
@@ -421,10 +362,15 @@ function updateHighlightColors(verdict) {
 }
 
 /**
- * 수상한 문장 하이라이트 적용
+ * 수상한 문장 하이라이트 적용 (파서 모듈 사용)
  */
 function highlightSuspiciousSentences(suspiciousSentences) {
   console.log('수상한 문장 하이라이트 시작:', suspiciousSentences);
+  
+  if (!currentParser) {
+    console.error('파서가 초기화되지 않았습니다.');
+    return;
+  }
   
   if (!suspiciousSentences || Object.keys(suspiciousSentences).length === 0) {
     console.log('수상한 문장이 없습니다.');
@@ -494,51 +440,34 @@ function highlightSuspiciousSentences(suspiciousSentences) {
     document.head.appendChild(style);
   }
   
-  // 내용 영역에서 수상한 문장 찾기
-  const contentSelectors = [
-    '#dic_area',
-    '.go_trans._article_content',
-    '#articeBody'
-  ];
+  // 파서의 highlightSuspiciousSentences 메서드 사용
+  // 다만 툴팁 기능은 여기서 추가로 처리
+  const suspiciousArray = Object.entries(suspiciousSentences);
   
-  let highlightedCount = 0;
+  // 먼저 파서의 기본 하이라이트 적용
+  currentParser.highlightSuspiciousSentences(suspiciousArray.map(([sentence]) => sentence));
   
-  for (const selector of contentSelectors) {
-    const contentElements = document.querySelectorAll(selector);
+  // 그 다음 툴팁 기능 추가 (모든 파서에 공통 적용)
+  document.querySelectorAll('mark').forEach(mark => {
+    const sentence = mark.textContent.trim();
+    const reason = suspiciousSentences[sentence];
     
-    contentElements.forEach(element => {
-      let html = element.innerHTML;
+    if (reason) {
+      // mark를 span.suspicious-sentence-highlight로 교체
+      const span = document.createElement('span');
+      span.className = 'suspicious-sentence-highlight';
+      span.textContent = mark.textContent;
       
-      // 각 수상한 문장에 대해 하이라이트 적용
-      Object.entries(suspiciousSentences).forEach(([sentence, reason]) => {
-        // HTML 태그를 제외한 텍스트에서 문장 찾기
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = html;
-        const text = tempDiv.textContent || tempDiv.innerText;
-        
-        if (text.includes(sentence)) {
-          // 이스케이프 처리
-          const escapedSentence = sentence.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-          const regex = new RegExp(`(${escapedSentence})`, 'gi');
-          
-          // 하이라이트 적용 (기존 태그 보존)
-          html = html.replace(regex, (match) => {
-            highlightedCount++;
-            return `<span class="suspicious-sentence-highlight">
-              ${match}
-              <span class="suspicious-tooltip">⚠️ ${reason}</span>
-            </span>`;
-          });
-        }
-      });
+      const tooltip = document.createElement('span');
+      tooltip.className = 'suspicious-tooltip';
+      tooltip.textContent = `⚠️ ${reason}`;
+      span.appendChild(tooltip);
       
-      if (html !== element.innerHTML) {
-        element.innerHTML = html;
-      }
-    });
-  }
+      mark.parentNode.replaceChild(span, mark);
+    }
+  });
   
-  console.log(`수상한 문장 하이라이트 완료: ${highlightedCount}개 문장 처리`);
+  console.log(`수상한 문장 하이라이트 완료: ${suspiciousArray.length}개 문장 처리`);
 }
 
 /**

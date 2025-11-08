@@ -2105,6 +2105,28 @@ class AnalysisPanel {
       return;
     }
     
+    // API 키 먼저 확인
+    chrome.storage.local.get(['gemini_api_key'], (result) => {
+      if (chrome.runtime.lastError) {
+        console.error('Storage 오류:', chrome.runtime.lastError);
+        this.showApiKeyWarning();
+        return;
+      }
+      
+      const apiKey = result.gemini_api_key;
+      
+      if (!apiKey || apiKey.trim() === '') {
+        console.warn('[analyzeCurrentNews] API 키가 설정되지 않았습니다.');
+        this.showApiKeyWarning();
+        return;
+      }
+      
+      // API 키가 있으면 분석 진행
+      this.proceedWithCurrentNewsAnalysis();
+    });
+  }
+  
+  proceedWithCurrentNewsAnalysis() {
     // 이미 분석 목록에 있는지 확인
     const normalizeUrl = (urlString) => {
       try {
@@ -2155,6 +2177,36 @@ class AnalysisPanel {
     
     console.log('분석할 블록:', block);
     
+    // 재분석인 경우에만 API 키 확인 (현재 뉴스에서 호출된 경우는 이미 체크됨)
+    const isRetry = block.status === 'error' || block.status === 'pending';
+    
+    if (isRetry) {
+      // 재분석 시에만 API 키 확인
+      chrome.storage.local.get(['gemini_api_key'], (result) => {
+        if (chrome.runtime.lastError) {
+          console.error('Storage 오류:', chrome.runtime.lastError);
+          this.showApiKeyWarning();
+          return;
+        }
+        
+        const apiKey = result.gemini_api_key;
+        
+        if (!apiKey || apiKey.trim() === '') {
+          console.warn('API 키가 설정되지 않았습니다.');
+          this.showApiKeyWarning();
+          return;
+        }
+        
+        // API 키가 있으면 분석 진행
+        this.proceedWithAnalysis(id, block);
+      });
+    } else {
+      // 현재 뉴스에서 호출된 경우 바로 진행 (이미 체크됨)
+      this.proceedWithAnalysis(id, block);
+    }
+  }
+  
+  proceedWithAnalysis(id, block) {
     // 기존 타임아웃 제거
     if (this.analysisTimeouts.has(id)) {
       clearTimeout(this.analysisTimeouts.get(id));
@@ -2197,6 +2249,217 @@ class AnalysisPanel {
         }, 800);
       }, 500);
     }, 300);
+  }
+  
+  showApiKeyWarning() {
+    const { base, surface, accent, text, textMuted, border } = this.palette;
+    
+    // 기존 모달이 있으면 제거
+    const existingModal = document.getElementById('api-key-warning-modal');
+    if (existingModal) {
+      existingModal.remove();
+    }
+    
+    // 모달 오버레이 생성
+    const modalOverlay = document.createElement('div');
+    modalOverlay.id = 'api-key-warning-modal';
+    modalOverlay.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 999999;
+      animation: fadeIn 0.2s ease;
+    `;
+    
+    // 모달 컨텐츠
+    const modalContent = document.createElement('div');
+    modalContent.style.cssText = `
+      background: linear-gradient(180deg, ${surface} 0%, ${base} 100%);
+      border-radius: 16px;
+      border: 2px solid ${accent};
+      box-shadow: 0 24px 48px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(140, 110, 84, 0.3);
+      padding: 32px;
+      max-width: 480px;
+      width: 90%;
+      animation: slideUp 0.3s ease;
+      position: relative;
+    `;
+    
+    modalContent.innerHTML = `
+      <div style="text-align: center; margin-bottom: 24px;">
+        <div style="
+          width: 64px;
+          height: 64px;
+          background: linear-gradient(135deg, rgba(255, 193, 7, 0.2) 0%, rgba(255, 152, 0, 0.2) 100%);
+          border: 2px solid rgba(255, 193, 7, 0.5);
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin: 0 auto 16px auto;
+        ">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#FFC107" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+            <line x1="12" y1="9" x2="12" y2="13"></line>
+            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+          </svg>
+        </div>
+        <h3 style="
+          font-size: 20px;
+          font-weight: 700;
+          color: ${text};
+          margin: 0 0 12px 0;
+          letter-spacing: -0.02em;
+        ">API 키가 설정되지 않았습니다</h3>
+        <p style="
+          font-size: 15px;
+          color: ${textMuted};
+          line-height: 1.6;
+          margin: 0;
+        ">
+          뉴스 분석을 시작하려면<br>
+          먼저 Gemini API 키를 입력해주세요.
+        </p>
+      </div>
+      
+      <div style="display: flex; gap: 12px; margin-top: 28px;">
+        <button id="api-warning-settings-btn" style="
+          flex: 1;
+          padding: 14px 24px;
+          background: linear-gradient(135deg, ${accent} 0%, #705A46 100%);
+          border: 1px solid rgba(140, 110, 84, 0.6);
+          border-radius: 10px;
+          color: ${text};
+          font-size: 15px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          box-shadow: 0 4px 12px rgba(140, 110, 84, 0.3);
+        ">
+          ⚙️ 설정 열기
+        </button>
+        <button id="api-warning-close-btn" style="
+          flex: 1;
+          padding: 14px 24px;
+          background: rgba(72, 80, 89, 0.5);
+          border: 1px solid ${border};
+          border-radius: 10px;
+          color: ${text};
+          font-size: 15px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        ">
+          닫기
+        </button>
+      </div>
+    `;
+    
+    // 애니메이션 CSS 추가
+    if (!document.getElementById('modal-animation-styles')) {
+      const style = document.createElement('style');
+      style.id = 'modal-animation-styles';
+      style.textContent = `
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+        @keyframes slideUp {
+          from { 
+            opacity: 0;
+            transform: translateY(20px) scale(0.95);
+          }
+          to { 
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+        #api-warning-settings-btn:hover {
+          transform: translateY(-2px);
+          box-shadow: 0 6px 16px rgba(140, 110, 84, 0.4) !important;
+          background: linear-gradient(135deg, #9D7F66 0%, #8A6E5A 100%) !important;
+        }
+        #api-warning-close-btn:hover {
+          background: rgba(72, 80, 89, 0.7) !important;
+          border-color: rgba(242, 242, 242, 0.2) !important;
+        }
+      `;
+      document.head.appendChild(style);
+    }
+    
+    modalOverlay.appendChild(modalContent);
+    document.body.appendChild(modalOverlay);
+    
+    // 설정 열기 버튼
+    const settingsBtn = document.getElementById('api-warning-settings-btn');
+    if (settingsBtn) {
+      settingsBtn.addEventListener('click', () => {
+        modalOverlay.remove();
+        
+        // 설정 패널 생성 및 열기
+        this.checkSavedApiKey().then((savedApiKey) => {
+          const settingsModal = this.createSettingsPanel(savedApiKey);
+          document.body.appendChild(settingsModal);
+          
+          settingsModal.style.display = 'flex';
+          settingsModal.style.visibility = 'visible';
+          
+          setTimeout(() => {
+            settingsModal.style.opacity = '1';
+            const settingsContent = settingsModal.querySelector('.settings-panel-content');
+            if (settingsContent) {
+              settingsContent.style.transform = 'scale(1)';
+            }
+          }, 10);
+        });
+      });
+    }
+    
+    // 닫기 버튼
+    const closeBtn = document.getElementById('api-warning-close-btn');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => {
+        modalOverlay.style.animation = 'fadeOut 0.2s ease';
+        modalContent.style.animation = 'slideDown 0.2s ease';
+        setTimeout(() => modalOverlay.remove(), 200);
+      });
+    }
+    
+    // 오버레이 클릭 시 닫기
+    modalOverlay.addEventListener('click', (e) => {
+      if (e.target === modalOverlay) {
+        modalOverlay.style.animation = 'fadeOut 0.2s ease';
+        modalContent.style.animation = 'slideDown 0.2s ease';
+        setTimeout(() => modalOverlay.remove(), 200);
+      }
+    });
+    
+    // fadeOut, slideDown 애니메이션 추가
+    const fadeOutStyle = document.createElement('style');
+    fadeOutStyle.textContent = `
+      @keyframes fadeOut {
+        from { opacity: 1; }
+        to { opacity: 0; }
+      }
+      @keyframes slideDown {
+        from { 
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+        to { 
+          opacity: 0;
+          transform: translateY(20px) scale(0.95);
+        }
+      }
+    `;
+    document.head.appendChild(fadeOutStyle);
   }
 
   // 분석 프롬프트 생성
@@ -2332,7 +2595,10 @@ ${comparisonContent}
     // 애니메이션
     setTimeout(() => {
       modal.style.opacity = '1';
-      modal.querySelector('.modal-content').style.transform = 'scale(1)';
+      const modalContent = modal.querySelector('.modal-content');
+      if (modalContent) {
+        modalContent.style.transform = 'scale(1)';
+      }
     }, 10);
   }
 
@@ -2356,7 +2622,10 @@ ${comparisonContent}
     // 애니메이션
     setTimeout(() => {
       modal.style.opacity = '1';
-      modal.querySelector('.modal-content').style.transform = 'scale(1) translateY(0)';
+      const modalContent = modal.querySelector('.modal-content');
+      if (modalContent) {
+        modalContent.style.transform = 'scale(1) translateY(0)';
+      }
     }, 10);
   }
 
@@ -2936,7 +3205,10 @@ ${comparisonContent}
     // 애니메이션
     setTimeout(() => {
       modal.style.opacity = '1';
-      modal.querySelector('.modal-content').style.transform = 'scale(1)';
+      const modalContent = modal.querySelector('.modal-content');
+      if (modalContent) {
+        modalContent.style.transform = 'scale(1)';
+      }
     }, 10);
 
     // 이벤트 리스너
@@ -3254,7 +3526,7 @@ ${comparisonContent}
       left: 0;
       width: 100vw;
       height: 100vh;
-      background: rgba(13,13,13,0.6);
+      background: rgba(13,13,13,0.5);
       z-index: 2147483648;
       display: flex;
       align-items: center;
@@ -3909,7 +4181,7 @@ ${comparisonContent}
         if (apiKey) {
           if (this.isChromeApiAvailable()) {
             try {
-              chrome.storage.local.set({ apiKey: apiKey }, () => {
+              chrome.storage.local.set({ gemini_api_key: apiKey }, () => {
                 if (chrome.runtime.lastError) {
                   console.log('Chrome storage failed, using localStorage:', chrome.runtime.lastError);
                   localStorage.setItem('gemini_api_key', apiKey);
@@ -3959,12 +4231,12 @@ ${comparisonContent}
     try {
       if (this.isChromeApiAvailable()) {
         return new Promise((resolve) => {
-          chrome.storage.local.get(['apiKey'], (result) => {
+          chrome.storage.local.get(['gemini_api_key'], (result) => {
             if (chrome.runtime.lastError) {
               console.log('Chrome storage failed, using localStorage:', chrome.runtime.lastError);
               resolve(localStorage.getItem('gemini_api_key') || '');
             } else {
-              resolve(result.apiKey || '');
+              resolve(result.gemini_api_key || '');
             }
           });
         });
@@ -4159,7 +4431,10 @@ ${comparisonContent}
     // 애니메이션
     setTimeout(() => {
       modal.style.opacity = '1';
-      modal.querySelector('div').style.transform = 'scale(1)';
+      const modalContent = modal.querySelector('div');
+      if (modalContent) {
+        modalContent.style.transform = 'scale(1)';
+      }
     }, 10);
 
     // 이벤트 리스너

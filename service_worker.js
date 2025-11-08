@@ -23,14 +23,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     
     // 저장된 API 키 가져오기
     try {
-      chrome.storage.local.get(['apiKey'], (result) => {
+      chrome.storage.local.get(['gemini_api_key'], (result) => {
         if (chrome.runtime.lastError) {
           console.error("API 키 로드 오류:", chrome.runtime.lastError);
           sendResponse({ status: "저장소 오류", error: chrome.runtime.lastError.message });
           return;
         }
         
-        const API_KEY = result.apiKey;
+        const API_KEY = result.gemini_api_key;
         
         if (!API_KEY) {
           console.error("API 키가 설정되지 않았습니다.");
@@ -86,61 +86,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     // 비동기 응답을 위해 true를 반환
     return true; 
-  } else if (message.action === "saveVerdict") {
-    console.log("Content Script로부터 진위 결과 저장 요청을 받았습니다.", message);
-    const { url, result } = message;
-
-    if (!url || !result) {
-      console.error("[ServiceWorker] 저장할 URL 또는 결과가 없습니다.");
-      sendResponse({ status: "저장 실패", error: "URL 또는 결과 없음" });
-      return true;
-    }
-
-    const normalizeUrl = (urlString) => {
-      try {
-        const urlObj = new URL(urlString);
-        return urlObj.origin + urlObj.pathname;
-      } catch {
-        return urlString;
-      }
-    };
-
-    const normalizedUrl = normalizeUrl(url);
-    const verdict = result.진위;
-    const suspicious = result.수상한문장;
-
-    if (!verdict) {
-      console.warn("[ServiceWorker] 저장할 진위 결과(verdict)가 없습니다.");
-      sendResponse({ status: "저장 실패", error: "진위 결과 없음" });
-      return true;
-    }
-
-    chrome.storage.local.get(['factcheck_verdicts'], (storageResult) => {
-      if (chrome.runtime.lastError) {
-        console.error('[ServiceWorker] 저장소 읽기 오류:', chrome.runtime.lastError);
-        sendResponse({ status: "저장 실패", error: chrome.runtime.lastError.message });
-        return;
-      }
-
-      const savedVerdicts = storageResult.factcheck_verdicts || {};
-      savedVerdicts[normalizedUrl] = {
-        verdict: verdict,
-        suspicious: suspicious,
-        timestamp: Date.now()
-      };
-
-      chrome.storage.local.set({ factcheck_verdicts: savedVerdicts }, () => {
-        if (chrome.runtime.lastError) {
-          console.error('[ServiceWorker] 🚨 저장 실패:', chrome.runtime.lastError);
-          sendResponse({ status: "저장 실패", error: chrome.runtime.lastError.message });
-        } else {
-          console.log('[ServiceWorker] ✅ 진위 결과 저장 완료:', normalizedUrl, verdict);
-          sendResponse({ status: "저장 성공" });
-        }
-      });
-    });
-
-    return true; // 비동기 응답
   }
 });
 
