@@ -18,7 +18,6 @@
       "matches": [
         "https://n.news.naver.com/article/*",
         "https://n.news.naver.com/mnews/*",
-        "https://news.daum.net/*",
         "https://v.daum.net/*",
         "https://v.daum.net/v/*"
       ],

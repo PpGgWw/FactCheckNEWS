@@ -232,7 +232,25 @@ async function callGeminiAPIWithRetry(prompt, apiUrl, tabId, blockId, maxRetries
  */
 async function callGeminiAPIWithStreaming(prompt, apiUrl, tabId, blockId) {
   try {
-    // 일단 기본 API로 전체 결과를 받은 후 타이핑 효과 시뮬레이션
+    // 분석 단계별 진행 상황 전송 (간소화)
+    const sendProgressUpdate = (message) => {
+      if (isChromeApiAvailable()) {
+        try {
+          chrome.tabs.sendMessage(tabId, {
+            action: "updateAnalysisProgress",
+            blockId: blockId,
+            message: message
+          }).catch(error => {
+            console.error("진행상황 메시지 전송 오류:", error);
+          });
+        } catch (error) {
+          console.error("Chrome API 호출 오류:", error);
+        }
+      }
+    };
+    
+    sendProgressUpdate('📡 API 요청 중...');
+    
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
@@ -252,57 +270,17 @@ async function callGeminiAPIWithStreaming(prompt, apiUrl, tabId, blockId) {
       throw new Error(`API 요청 실패: ${response.status} ${response.statusText} - ${JSON.stringify(errorBody)}`);
     }
 
+    sendProgressUpdate('📥 응답 분석 중...');
+    
     const data = await response.json();
     const fullResult = extractNewsContent(data);
     
-    // 결과를 문자 단위로 타이핑 효과 시뮬레이션
-    if (typeof fullResult === 'string') {
-      await simulateTypingEffect(fullResult, tabId, blockId);
-    } else {
-      // JSON 객체인 경우 문자열로 변환 후 타이핑 효과
-      const resultString = JSON.stringify(fullResult, null, 2);
-      await simulateTypingEffect(resultString, tabId, blockId);
-    }
+    sendProgressUpdate('✅ 분석 완료!');
 
     return fullResult;
   } catch (error) {
     console.error("API 호출 오류:", error);
     throw error;
-  }
-}
-
-/**
- * 타이핑 효과 시뮬레이션
- * @param {string} text - 전체 텍스트
- * @param {number} tabId - 탭 ID
- * @param {string} blockId - 블록 ID
- */
-async function simulateTypingEffect(text, tabId, blockId) {
-  const words = text.split(' ');
-  let currentText = '';
-  
-  for (let i = 0; i < words.length; i++) {
-    currentText += (i > 0 ? ' ' : '') + words[i];
-    
-    // 단어별로 실시간 업데이트 전송 (안전 확인)
-    if (isChromeApiAvailable()) {
-      try {
-        chrome.tabs.sendMessage(tabId, {
-          action: "updateStreamingResult",
-          partialResult: currentText,
-          blockId: blockId
-        }).catch(error => {
-          console.error("스트리밍 메시지 전송 오류:", error);
-        });
-      } catch (error) {
-        console.error("Chrome API 호출 오류:", error);
-        break; // 오류 발생 시 루프 중단
-      }
-    }
-    
-    // 타이핑 속도 조절 (단어 길이에 따라 조절)
-    const delay = Math.max(50, Math.min(200, words[i].length * 20));
-    await new Promise(resolve => setTimeout(resolve, delay));
   }
 }
 

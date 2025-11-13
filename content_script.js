@@ -718,7 +718,7 @@ function sendToGeminiForAnalysis(blockId) {
     "instruction": "해당 기사는 진위 여부판단을 목적으로 수집되었습니다. 조건에 따라서 종합적으로 검토 후 판단 결과를 진위,근거,분석,수상한문장 항목으로 나누어 출력하세요.",
     "input": "주어진 텍스트 전체",
     "output": {
-      "분석진행": "분석을 위한 당신의 추론 내용을 투명하게 꼼꼼히 적으세요. 추론은 반드시 어떻게 분석할 것인지, 어떤 분석을 해야 할지를 순서를 정하여 순서대로 하나씩 분석합니다. (정확한 분석을 위하여 최소 4개 이상의 분석 단계를 만드세요. 정말 필요 없을 정도로 간단한 경우만 2개까지 허용합니다.) 모든 단계별 분석이 끝나면 그 분석된 내용들을 전부 합치고 정리하여 최종 진위, 근거, 분석, 요약을 도출합니다. 비교분석의 경우 진위/근거는 두 기사 내용의 일치성과 신뢰도를 기준으로 판단하세요. **이 내용은 반드시 마크다운 문법으로 작성하세요 (## 제목, **강조**, - 리스트 등 사용).**",
+      "분석진행": "**반드시 다음 단계를 각각 구체적으로 작성하세요 (마크다운 형식 사용):**<br><br>## 1단계: 기사 구조 파악<br>- 제목: [제목]<br>- 주장: 1) ... 2) ... 3) ...<br>- 장르: [속보/일반/칼럼 등]<br><br>## 2단계: 근거 확인<br>- 주장1 근거: ...<br>- 출처 명확성: ...<br><br>## 3단계: 논리 구조 분석<br>- 논리 연결: ...<br>- 생략 단계: ...<br><br>## 4단계: 표현 분석<br>- 감정 단어: ...<br>- 단정적 표현: ...<br><br>## 5단계: 종합 판단<br>- 발견 문제: ...<br>- 최종 판단: ...",
       "진위": "판단 결과('가짜 뉴스' / '가짜일 가능성이 높은 뉴스' / '가짜일 가능성이 있는 뉴스' / '진짜 뉴스')가 여기에 위치합니다.",
       "근거": "탐지된 중요도의 조건 번호와 이름이 위치합니다. 여러 개일 경우 '1. 첫 번째 근거\\n2. 두 번째 근거\\n' 형식으로 숫자 리스트로 나열하세요. 예시: 1. 2-2. 근거 없는 의혹 제기\\n2. 3-1. 단정적·선동적 어조\\n",
       "분석": "위 근거들을 종합하여 기사의 어떤 부분이 왜 문제인지 혹은 신뢰할 수 있는지를 구체적으로 서술합니다. 여러 항목이 있는 경우 '1. 첫 번째 분석 내용\\n2. 두 번째 분석 내용\\n' 형식으로 숫자 리스트로 작성하세요.",
@@ -821,12 +821,12 @@ if (isChromeApiAvailable()) {
             panel.__analysisPanel.showErrorModal(message.error, message.blockId);
           }
         }
-      } else if (message.action === "updateStreamingResult" && message.partialResult) {
-        // 실시간 스트리밍 결과 업데이트
+      } else if (message.action === "updateAnalysisProgress" && message.message) {
+        // 분석 진행 상황 업데이트
         const panel = document.getElementById('news-analysis-panel');
         if (panel && panel.__analysisPanel) {
-          console.log('스트리밍 결과 업데이트:', message.blockId, message.partialResult.length, '글자');
-          panel.__analysisPanel.updateStreamingResult(message.blockId, message.partialResult);
+          console.log('분석 진행 상황 업데이트:', message.blockId, message.message);
+          panel.__analysisPanel.updateNewsStatus(message.blockId, 'analyzing', null, message.message);
         }
       }
       
