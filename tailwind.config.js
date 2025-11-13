@@ -20,15 +20,24 @@ module.exports = {
         'glow': '0 0 20px rgba(242, 206, 162, 0.3)',
       },
       borderRadius: {
-        'xl': '12px',
-        '2xl': '16px',
-        '3xl': '20px',
+        'sm': '6px',
+        'md': '10px',
+        'lg': '12px',
+        'xl': '16px',
+        '2xl': '20px',
+        '3xl': '24px',
       },
       animation: {
         'fade-in': 'fadeIn 0.3s ease-out',
         'slide-up': 'slideUp 0.3s ease-out',
+        'slide-down': 'slideDown 0.3s ease-out',
+        'slide-left': 'slideLeft 0.3s ease-out',
+        'slide-right': 'slideRight 0.3s ease-out',
         'bounce-soft': 'bounceSoft 0.6s ease-out',
         'pulse-soft': 'pulseSoft 2s infinite',
+        'spin-slow': 'spin 1.5s linear infinite',
+        'shimmer': 'shimmer 2s infinite linear',
+        'glow': 'glow 2s ease-in-out infinite',
       },
       keyframes: {
         fadeIn: {
@@ -39,6 +48,18 @@ module.exports = {
           '0%': { transform: 'translateY(100%)' },
           '100%': { transform: 'translateY(0)' },
         },
+        slideDown: {
+          '0%': { transform: 'translateY(-100%)' },
+          '100%': { transform: 'translateY(0)' },
+        },
+        slideLeft: {
+          '0%': { transform: 'translateX(100%)' },
+          '100%': { transform: 'translateX(0)' },
+        },
+        slideRight: {
+          '0%': { transform: 'translateX(-100%)' },
+          '100%': { transform: 'translateX(0)' },
+        },
         bounceSoft: {
           '0%, 20%, 53%, 80%, 100%': { transform: 'translate3d(0,0,0)' },
           '40%, 43%': { transform: 'translate3d(0,-15px,0)' },
@@ -48,7 +69,20 @@ module.exports = {
         pulseSoft: {
           '0%, 100%': { opacity: '1' },
           '50%': { opacity: '0.7' },
+        },
+        shimmer: {
+          '0%': { backgroundPosition: '-200% 0' },
+          '100%': { backgroundPosition: '200% 0' },
+        },
+        glow: {
+          '0%, 100%': { boxShadow: '0 0 20px rgba(242, 206, 162, 0.3)' },
+          '50%': { boxShadow: '0 0 40px rgba(242, 206, 162, 0.6)' },
         }
+      },
+      transitionDuration: {
+        'fast': '150ms',
+        'normal': '200ms',
+        'slow': '300ms',
       }
     },
   },
@@ -93,9 +127,23 @@ module.exports = {
     'hover:text-text-primary', 'hover:border-primary', 'hover:shadow-soft',
     
     // Animation classes
-    'animate-fade-in', 'animate-slide-up', 'animate-bounce-soft', 'animate-pulse-soft',
+    'animate-fade-in', 'animate-slide-up', 'animate-slide-down', 'animate-slide-left', 'animate-slide-right',
+    'animate-bounce-soft', 'animate-pulse-soft', 'animate-spin-slow', 'animate-shimmer', 'animate-glow',
     
     // Shadow classes
     'shadow-soft', 'shadow-medium', 'shadow-strong', 'shadow-glow',
+    
+    // Transition durations
+    'duration-fast', 'duration-normal', 'duration-slow',
+    
+    // Gradient utilities
+    'bg-gradient-primary', 'bg-gradient-subtle', 'bg-gradient-panel-header', 'bg-gradient-panel-surface',
+    'bg-gradient-panel-alt', 'bg-gradient-panel-dark', 'bg-gradient-panel-base',
+    
+    // Pattern and backdrop utilities
+    'pattern-dots', 'backdrop-blur-panel', 'backdrop-blur-modal',
+    
+    // Utility classes
+    'hover:shadow-glow', 'hover:animate-glow',
   ],
 }

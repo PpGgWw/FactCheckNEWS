@@ -48,6 +48,31 @@ const colors = {
   'accent': '#8B5CF6',              // 액센트 색상
   'accent-light': '#EDE9FE',        // 액센트 배경
   'accent-dark': '#7C3AED',         // 액센트 진한색
+  
+  // Opacity utilities (for consistent rgba usage)
+  'opacity-10': '0.1',
+  'opacity-15': '0.15',
+  'opacity-20': '0.2',
+  'opacity-25': '0.25',
+  'opacity-30': '0.3',
+  'opacity-40': '0.4',
+  'opacity-50': '0.5',
 };
+
+// Typography Scale (for consistent font sizing)
+// Use these with Tailwind text-* classes
+const typography = {
+  // text-xs: 0.75rem (12px)
+  // text-sm: 0.875rem (14px)
+  // text-base: 1rem (16px)
+  // text-lg: 1.125rem (18px)
+  // text-xl: 1.25rem (20px)
+  // text-2xl: 1.5rem (24px)
+  // text-3xl: 1.875rem (30px)
+};
+
+// Spacing Scale (for consistent padding/margin)
+// Use Tailwind spacing: p-1(4px), p-2(8px), p-3(12px), p-4(16px), p-5(20px), p-6(24px)
+// p-8(32px), p-10(40px), p-12(48px), p-16(64px)
 
 module.exports = colors;

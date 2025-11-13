@@ -280,35 +280,35 @@ class AnalysisPanel {
     const palette = {
       '진짜 뉴스': {
         base: '#22C55E',
-        badgeBackground: 'rgba(34, 197, 94, 0.18)',
+        badgeBackground: 'rgba(34, 197, 94, 0.15)',
         badgeText: '#BBF7D0',
-        badgeBorder: 'rgba(34, 197, 94, 0.55)'
+        badgeBorder: 'rgba(34, 197, 94, 0.5)'
       },
       '가짜일 가능성이 있는 뉴스': {
         base: '#F59E0B',
-        badgeBackground: 'rgba(245, 158, 11, 0.18)',
+        badgeBackground: 'rgba(245, 158, 11, 0.15)',
         badgeText: '#FDE68A',
-        badgeBorder: 'rgba(245, 158, 11, 0.55)'
+        badgeBorder: 'rgba(245, 158, 11, 0.5)'
       },
       '가짜일 가능성이 높은 뉴스': {
         base: '#F97316',
-        badgeBackground: 'rgba(249, 115, 22, 0.18)',
+        badgeBackground: 'rgba(249, 115, 22, 0.15)',
         badgeText: '#FDBA74',
-        badgeBorder: 'rgba(249, 115, 22, 0.55)'
+        badgeBorder: 'rgba(249, 115, 22, 0.5)'
       },
       '가짜 뉴스': {
         base: '#EF4444',
-        badgeBackground: 'rgba(239, 68, 68, 0.18)',
+        badgeBackground: 'rgba(239, 68, 68, 0.15)',
         badgeText: '#FCA5A5',
-        badgeBorder: 'rgba(239, 68, 68, 0.55)'
+        badgeBorder: 'rgba(239, 68, 68, 0.5)'
       }
     };
 
     const selected = palette[verdict] || palette['가짜일 가능성이 있는 뉴스'];
     return {
       ...selected,
-      shadow: this.hexToRgba(selected.base, 0.35),
-      border: this.hexToRgba(selected.base, 0.45)
+      shadow: this.hexToRgba(selected.base, 0.3),
+      border: this.hexToRgba(selected.base, 0.4)
     };
   }
 
@@ -487,7 +487,7 @@ class AnalysisPanel {
       `;
       document.head.appendChild(style);
     }
-  const { base, surface, surfaceAlt, accent, text, textMuted, border } = this.palette;
+  const { base, surface, surfaceAlt, text, textMuted, border } = this.palette;
     const surfaceSoft = this.blendColors(surface, base, 0.35);
     const surfaceAltSoft = this.blendColors(surfaceAlt, base, 0.4);
 
@@ -495,105 +495,36 @@ class AnalysisPanel {
       ${this.renderHeader()}
       
       <!-- 현재 뉴스 블록 (고정) -->
-      <div id="current-news-section" class="analysis-panel-collapsible" style="
-        padding: 20px;
-        background: linear-gradient(180deg, ${surface} 0%, ${surfaceAltSoft} 100%);
-        border-bottom: 1px solid ${border};
-        flex-shrink: 0;
-      ">
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
-          <h3 style="
-            font-size: 16px;
-            font-weight: 600;
-            color: ${text};
-            margin: 0;
-          ">
+      <div id="current-news-section" class="analysis-panel-collapsible p-5 bg-gradient-panel-surface border-b flex-shrink-0" style="border-color: ${border};">
+        <div class="flex items-center justify-between mb-4">
+          <h3 class="text-base font-semibold m-0" style="color: ${text};">
             현재 페이지
           </h3>
         </div>
-        <div id="current-news-container" style="
-          background: ${surfaceSoft};
-          border-radius: 12px;
-          border: 1px solid ${border};
-          box-shadow: 0 12px 24px rgba(0, 0, 0, 0.25);
-          overflow: hidden;
-        ">
+        <div id="current-news-container" class="rounded-xl border shadow-strong overflow-hidden" style="background: ${surfaceSoft}; border-color: ${border};">
           ${this.renderCurrentNews()}
         </div>
       </div>
       
       <!-- 분석된 뉴스 리스트 (스크롤) -->
-      <div class="analysis-panel-list-wrapper" style="
-        flex: 1;
-        display: flex;
-        flex-direction: column;
-        overflow: hidden;
-        background: linear-gradient(180deg, ${base} 0%, rgba(13, 13, 13, 0.92) 100%);
-      ">
-        <div style="
-          padding: 20px 20px 12px 20px;
-          flex-shrink: 0;
-          background: linear-gradient(180deg, ${surfaceAlt} 0%, ${surface} 100%);
-          border-bottom: 1px solid ${border};
-          box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.4);
-        ">
-          <div style="display: flex; align-items: center; justify-content: space-between;">
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <button id="collapse-history-btn" style="
-                width: 32px;
-                height: 32px;
-                background: rgba(140, 110, 84, 0.16);
-                border: 1px solid rgba(140, 110, 84, 0.4);
-                border-radius: 6px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                cursor: pointer;
-                transition: all 0.2s ease;
-                backdrop-filter: blur(10px);
-                flex-shrink: 0;
-                color: ${text};
-              " onmouseover="this.style.background='rgba(140, 110, 84, 0.3)'; this.style.transform='scale(1.05)';" 
-                 onmouseout="this.style.background='rgba(140, 110, 84, 0.16)'; this.style.transform='scale(1)';">
+      <div class="analysis-panel-list-wrapper flex-1 flex flex-col overflow-hidden bg-gradient-panel-dark">
+        <div class="p-5 pb-3 flex-shrink-0 bg-gradient-panel-alt border-b shadow-[inset_0_-1px_0_rgba(0,0,0,0.4)]" style="border-color: ${border};">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <button id="collapse-history-btn" class="w-8 h-8 bg-secondary/15 border border-secondary/40 rounded-md flex items-center justify-center cursor-pointer transition-all duration-normal backdrop-blur-panel flex-shrink-0 hover:bg-secondary/30 hover:scale-105 active:scale-95" style="color: ${text};">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M9 18l6-6-6-6"></path>
                 </svg>
               </button>
-              <h3 class="analysis-panel-collapsible" style="
-                font-size: 16px;
-                font-weight: 600;
-                color: ${text};
-                margin: 0;
-              ">
+              <h3 class="analysis-panel-collapsible text-base font-semibold m-0" style="color: ${text};">
                 분석 기록
               </h3>
             </div>
-            <span id="analysis-count" class="analysis-panel-collapsible" style="
-              background: rgba(140, 110, 84, 0.25);
-              color: ${text};
-              padding: 4px 10px;
-              border-radius: 12px;
-              font-size: 12px;
-              font-weight: 600;
-              min-width: 20px;
-              text-align: center;
-              border: 1px solid rgba(140, 110, 84, 0.45);
-            ">${this.newsBlocks.size}</span>
+            <span id="analysis-count" class="analysis-panel-collapsible text-xs font-semibold bg-secondary/25 px-2.5 py-1 rounded-xl min-w-[20px] text-center border border-secondary/45" style="color: ${text};">${this.newsBlocks.size}</span>
           </div>
         </div>
-        <div class="analysis-panel-collapsible" style="
-          flex: 1;
-          overflow-y: auto;
-          overflow-x: hidden;
-          padding: 16px 20px 20px 20px;
-          background: linear-gradient(180deg, rgba(13, 13, 13, 0.94) 0%, ${base} 100%);
-        ">
-          <div id="analyzed-news-container" style="
-            display: flex; 
-            flex-direction: column; 
-            gap: 16px;
-            width: 100%;
-          ">
+        <div class="analysis-panel-collapsible flex-1 overflow-y-auto overflow-x-hidden p-4 px-5 pb-5 bg-gradient-panel-base">
+          <div id="analyzed-news-container" class="flex flex-col gap-4 w-full">
             ${this.renderAnalyzedNews()}
           </div>
         </div>
@@ -624,60 +555,25 @@ class AnalysisPanel {
 
   // 헤더 렌더링
   renderHeader() {
-    const { accent, surfaceAlt, surface, text, textMuted, border } = this.palette;
+    const { text, textMuted } = this.palette;
     return `
-      <div class="analysis-panel-collapsible" style="
-        background: linear-gradient(135deg, ${surfaceAlt} 0%, ${accent} 100%);
-        padding: 20px;
-        border-bottom: none;
-        border-radius: 20px 20px 0 0;
-        flex-shrink: 0;
-        position: relative;
-        overflow: hidden;
-      ">
-        <div style="
-          position: absolute;
-          top: 0;
-          left: 0;
-          right: 0;
-          bottom: 0;
-          background-image: radial-gradient(circle at 20% 50%, rgba(242, 242, 242, 0.15) 1px, transparent 1px),
-                           radial-gradient(circle at 80% 50%, rgba(242, 242, 242, 0.15) 1px, transparent 1px);
-          background-size: 50px 50px;
-          pointer-events: none;
-          opacity: 0.6;
-        "></div>
+      <div class="analysis-panel-collapsible bg-gradient-panel-header p-5 rounded-t-[20px] flex-shrink-0 relative overflow-hidden">
+        <div class="absolute inset-0 pattern-dots pointer-events-none opacity-60"></div>
         
-        <div style="position: relative; z-index: 1;">
-          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
-            <div style="flex: 1;">
-              <h2 style="
-                font-size: 20px;
-                font-weight: 700;
-                color: ${text};
-                margin: 0 0 4px 0;
-                letter-spacing: -0.5px;
-              ">뉴스 팩트체크</h2>
-              <p style="
-                font-size: 13px;
-                color: ${textMuted};
-                margin: 0;
-                font-weight: 500;
-              ">AI 기반 실시간 신뢰도 검증</p>
+        <div class="relative z-10">
+          <div class="flex items-center justify-between mb-2">
+            <div class="flex-1">
+              <h2 class="text-xl font-bold tracking-tight m-0 mb-1" style="color: ${text};">뉴스 팩트체크</h2>
+              <p class="text-sm font-medium m-0" style="color: ${textMuted};">AI 기반 실시간 신뢰도 검증</p>
             </div>
             
-            <div style="display: flex; align-items: center; gap: 8px;">
-              <div style="display: flex; align-items: center; gap: 6px; margin-right: 8px;">
-                <div style="
-                  width: 10px;
-                  height: 10px;
-                  background: #10B981;
-                  border-radius: 50%;
+            <div class="flex items-center gap-2">
+              <div class="flex items-center gap-1.5 mr-2">
+                <div class="w-2.5 h-2.5 bg-green-500 rounded-full
                   animation: pulse 2s infinite;
                   box-shadow: 0 0 12px rgba(16, 185, 129, 0.6);
                 "></div>
-                <span style="
-                  font-size: 11px;
+                <span class="text-xs" style="
                   color: ${textMuted};
                   font-weight: 500;
                 ">연결됨</span>
@@ -694,7 +590,6 @@ class AnalysisPanel {
                 justify-content: center;
                 cursor: pointer;
                 transition: all 0.2s ease;
-                font-size: 16px;
                 backdrop-filter: blur(10px);
                 color: ${text};
               " onmouseover="this.style.background='rgba(13, 13, 13, 0.4)'; this.style.transform='scale(1.05)';" 
@@ -705,23 +600,16 @@ class AnalysisPanel {
                 </svg>
               </button>
               
-              <button id="close-panel" style="
-                width: 36px;
-                height: 36px;
-                background: rgba(13, 13, 13, 0.25);
-                border: 1px solid ${border};
-                border-radius: 10px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                cursor: pointer;
-                transition: all 0.2s ease;
-                font-size: 18px;
-                font-weight: 300;
-                backdrop-filter: blur(10px);
-                color: ${text};
-              " onmouseover="this.style.background='rgba(239, 68, 68, 0.25)'; this.style.transform='scale(1.05)';" 
-                 onmouseout="this.style.background='rgba(13, 13, 13, 0.25)'; this.style.transform='scale(1)';">&times;</button>
+              <button id="close-panel" class="text-lg" style="
+                <span class="text-xs font-medium" style="color: ${text};">실시간</span>
+              </div>
+              <button id="settings-btn" class="w-9 h-9 bg-black/25 border border-border rounded-lg flex items-center justify-center cursor-pointer transition-all duration-normal backdrop-blur-panel hover:bg-black/40 hover:scale-105" style="color: ${text};">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="3"></circle>
+                  <path d="M12 1v6m0 6v6m-9-9h6m6 0h6"></path>
+                </svg>
+              </button>
+              <button id="close-panel-btn" class="w-9 h-9 bg-black/25 border border-border rounded-lg flex items-center justify-center cursor-pointer transition-all duration-normal font-light backdrop-blur-panel hover:bg-red-500/25 hover:scale-105" style="color: ${text};">&times;</button>
             </div>
           </div>
         </div>
@@ -731,42 +619,26 @@ class AnalysisPanel {
 
   // 빈 상태 렌더링
   renderEmptyState() {
-    const { surface, surfaceAlt, accent, text, textMuted, border, base } = this.palette;
+    const { text, textMuted, border, base, surface } = this.palette;
     const cardBackground = this.blendColors(surface, base, 0.25);
     return `
-      <div style="
-        text-align: center; 
-        padding: 40px 20px;
-        background: ${cardBackground};
-        border-radius: 12px;
-        border: 1px solid ${border};
-        box-shadow: 0 18px 32px rgba(0, 0, 0, 0.35);
-      ">
-        <div style="
-          width: 64px;
-          height: 64px;
-          background: linear-gradient(135deg, ${surfaceAlt}, ${accent});
-          border-radius: 16px;
-          display: flex;
+      <div class="text-center p-10 rounded-xl border shadow-strong" style="background: ${cardBackground}; border-color: ${border};">
+        <div class="w-16 h-16 bg-gradient-panel-header rounded-2xl flex
           align-items: center;
           justify-content: center;
           margin: 0 auto 16px;
           box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
         ">
-          <span style="font-size: 24px;">📰</span>
+          <span class="text-2xl">📰</span>
         </div>
-        <h4 style="
-          font-size: 16px;
-          font-weight: 600;
-          color: ${text};
-          margin: 0 0 8px 0;
-        ">분석할 뉴스가 없습니다</h4>
-        <p style="
-          font-size: 13px;
-          color: ${textMuted};
-          margin: 0;
-          line-height: 1.4;
-        ">뉴스 기사를 선택하면<br>자동으로 분석을 시작합니다</p>
+          items-center justify-center mx-auto mb-6 shadow-medium" aria-hidden="true">
+          <svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+            <polyline points="14 2 14 8 20 8"></polyline>
+          </svg>
+        </div>
+        <h4 class="text-base font-semibold m-0 mb-2" style="color: ${text};">분석할 뉴스가 없습니다</h4>
+        <p class="text-sm m-0 leading-snug" style="color: ${textMuted};">뉴스 기사를 선택하면<br>자동으로 분석을 시작합니다</p>
       </div>
     `;
   }
@@ -776,17 +648,8 @@ class AnalysisPanel {
     const { textMuted } = this.palette;
     if (!this.currentNews) {
       return `
-        <div style="
-          text-align: center; 
-          padding: 24px 16px;
-          color: ${textMuted};
-        ">
-          <p style="
-            font-size: 14px;
-            margin: 0;
-            line-height: 1.4;
-            color: ${textMuted};
-          ">현재 페이지에서<br>뉴스를 찾을 수 없습니다</p>
+        <div class="text-center py-6 px-4" style="color: ${textMuted};">
+          <p class="text-sm m-0 leading-snug" style="color: ${textMuted};">현재 페이지에서<br>뉴스를 찾을 수 없습니다</p>
         </div>
       `;
     }
@@ -800,20 +663,8 @@ class AnalysisPanel {
     const cardBackground = this.blendColors(surface, base, 0.25);
     if (this.newsBlocks.size === 0) {
       return `
-        <div style="
-          text-align: center; 
-          padding: 32px 16px;
-          background: ${cardBackground};
-          border-radius: 12px;
-          border: 1px solid ${border};
-          color: ${text};
-        ">
-          <p style="
-            font-size: 14px;
-            color: ${textMuted};
-            margin: 0;
-            line-height: 1.4;
-          ">아직 분석된 뉴스가 없습니다<br><span style='font-size: 12px; color: ${textMuted}; opacity: 0.8;'>뉴스를 선택하여 분석을 시작하세요</span></p>
+        <div class="text-center py-8 px-4 rounded-xl border" style="background: ${cardBackground}; border-color: ${border}; color: ${text};">
+          <p class="text-sm m-0 leading-snug" style="color: ${textMuted};">아직 분석된 뉴스가 없습니다<br><span class='text-xs opacity-80' style='color: ${textMuted};'>뉴스를 선택하여 분석을 시작하세요</span></p>
         </div>
       `;
     }
@@ -825,48 +676,24 @@ class AnalysisPanel {
   }
 
   renderCollapsedSummary() {
-    const { surface, base, text, textMuted, border } = this.palette;
+    const { text, textMuted, border } = this.palette;
     return `
-      <div style="display: flex; flex-direction: column; gap: 16px;">
-        <div style="display: flex; align-items: center; justify-content: space-between;">
-          <span style="font-size: 15px; font-weight: 600; color: ${text};">간단 보기</span>
-          <div style="display: flex; gap: 8px;">
-            <button id="expand-panel-btn" style="
-              padding: 6px 12px;
-              border-radius: 7px;
-              border: 1px solid rgba(140, 110, 84, 0.5);
-              background: rgba(140, 110, 84, 0.22);
-              color: ${text};
-              font-size: 12px;
-              cursor: pointer;
-              transition: all 0.2s ease;
-            " onmouseover="this.style.background='rgba(140, 110, 84, 0.34)';" onmouseout="this.style.background='rgba(140, 110, 84, 0.22)';">패널 확장</button>
-            <button id="collapsed-close-btn" style="
-              width: 30px;
-              height: 30px;
-              border-radius: 8px;
-              border: 1px solid ${border};
-              background: rgba(26, 26, 26, 0.55);
-              color: ${text};
-              font-size: 14px;
-              cursor: pointer;
-              line-height: 1;
-              transition: all 0.2s ease;
-            " onmouseover="this.style.background='rgba(26, 26, 26, 0.7)';" onmouseout="this.style.background='rgba(26, 26, 26, 0.55)';">✕</button>
+      <div class="flex flex-col gap-4">
+        <div class="flex items-center justify-between">
+          <span class="text-base font-semibold" style="color: ${text};">간단 보기</span>
+          <div class="flex gap-2">
+            <button id="expand-panel-btn" class="text-xs px-3 py-1.5 rounded-lg border border-secondary/50 bg-secondary/20 cursor-pointer transition-all duration-normal hover:bg-secondary/35 active:scale-95" style="color: ${text};">패널 확장</button>
+            <button id="collapsed-close-btn" class="text-sm w-[30px] h-[30px] rounded-lg border leading-none cursor-pointer transition-all duration-normal hover:bg-surface-dark/70 active:scale-95" style="border-color: ${border}; background: rgba(26, 26, 26, 0.55); color: ${text};">✕</button>
           </div>
         </div>
         <div id="collapsed-current-container">
           ${this.renderCollapsedCurrentSection()}
         </div>
-        <div style="display: flex; flex-direction: column; gap: 6px;">
-          <span style="font-size: 15px; font-weight: 600; color: ${text};">분석 기록</span>
-          <span id="collapsed-summary-count" style="font-size: 12px; color: ${textMuted}; opacity: 0.9;">${this.getCollapsedSummaryCountText()}</span>
+        <div class="flex flex-col gap-1.5">
+          <span class="text-base font-semibold" style="color: ${text};">분석 기록</span>
+          <span id="collapsed-summary-count" class="text-xs opacity-90" style="color: ${textMuted};">${this.getCollapsedSummaryCountText()}</span>
         </div>
-        <div id="collapsed-summary-list" style="
-          display: flex;
-          flex-direction: column;
-          gap: 10px;
-        ">
+        <div id="collapsed-summary-list" class="flex flex-col gap-2.5">
           ${this.renderCollapsedSummaryItems()}
         </div>
       </div>
@@ -877,13 +704,12 @@ class AnalysisPanel {
     const { surface, base, text, textMuted, border } = this.palette;
     if (!this.currentNews) {
       return `
-        <div style="
+        <div class="text-sm" style="
           padding: 14px 16px;
           border-radius: 12px;
           border: 1px solid ${border};
           background: ${this.blendColors(surface, base, 0.24)};
           color: ${textMuted};
-          font-size: 13px;
           text-align: center;
         ">현재 페이지에서 분석할 뉴스를 찾지 못했습니다</div>
       `;
@@ -904,30 +730,14 @@ class AnalysisPanel {
         border: 1px solid ${border};
         background: ${this.blendColors(surface, base, 0.28)};
       ">
-        <div style="display: flex; flex-direction: column; gap: 6px;">
-          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-            <span style="font-size: 14px; font-weight: 600; color: ${text};">현재 페이지</span>
+        <div class="flex flex-col gap-1.5">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="text-sm font-semibold" style="color: ${text};">현재 페이지</span>
             ${statusBadge}
           </div>
-          <span style="
-            font-size: 13px;
-            color: ${text};
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
-          ">${safeTitle}</span>
+          <span class="text-sm line-clamp-2" style="color: ${text};">${safeTitle}</span>
         </div>
-        ${showAnalyzeBtn ? `<button id="collapsed-current-analyze-btn" style="
-          padding: 8px 14px;
-          border-radius: 8px;
-          border: 1px solid rgba(140, 110, 84, 0.5);
-          background: rgba(140, 110, 84, 0.28);
-          color: ${text};
-          font-size: 13px;
-          cursor: pointer;
-          transition: all 0.2s ease;
-        " onmouseover="this.style.background='rgba(140, 110, 84, 0.4)';" onmouseout="this.style.background='rgba(140, 110, 84, 0.28)';">분석하기</button>` : ''}
+        ${showAnalyzeBtn ? `<button id="collapsed-current-analyze-btn" class="px-3.5 py-2 rounded-lg border border-secondary/50 bg-secondary/25 text-xs cursor-pointer transition-all duration-normal hover:bg-secondary/40 active:scale-95" style="color: ${text};">분석하기</button>` : ''}
       </div>
     `;
   }
@@ -939,13 +749,12 @@ class AnalysisPanel {
 
     if (this.newsBlocks.size === 0) {
       return `
-        <div style="
+        <div class="text-sm" style="
           padding: 16px;
           border-radius: 10px;
           border: 1px solid ${border};
           background: ${itemBackground};
           color: ${textMuted};
-          font-size: 13px;
           text-align: center;
         ">아직 저장된 분석이 없습니다</div>
       `;
@@ -961,61 +770,42 @@ class AnalysisPanel {
         const showAnalyze = block.status === 'pending' || block.status === 'error';
         const statusBadge = this.getCollapsedStatusBadge(block);
         const analyzeButton = showAnalyze ? `
-              <button class="mini-action-btn mini-analyze-btn" data-block-id="${block.id}" style="
+              <button class="mini-action-btn mini-analyze-btn text-xs" data-block-id="${block.id}" style="
                 flex: 1 1 110px;
                 padding: 6px 10px;
                 border-radius: 6px;
                 border: 1px solid rgba(140, 110, 84, 0.45);
                 background: rgba(140, 110, 84, 0.22);
                 color: ${text};
-                font-size: 12px;
                 cursor: pointer;
                 transition: all 0.2s ease;
               " onmouseover="this.style.background='rgba(140, 110, 84, 0.34)';" onmouseout="this.style.background='rgba(140, 110, 84, 0.22)';">분석하기</button>` : '';
         const openButton = encodedUrl ? `
-              <button class="mini-action-btn mini-open-btn" data-url="${encodedUrl}" style="
+              <button class="mini-action-btn mini-open-btn text-xs" data-url="${encodedUrl}" style="
                 flex: 1 1 90px;
                 padding: 6px 10px;
                 border-radius: 6px;
                 border: 1px solid rgba(242, 242, 242, 0.2);
                 background: rgba(26, 26, 26, 0.5);
                 color: ${text};
-                font-size: 12px;
                 cursor: pointer;
                 transition: all 0.2s ease;
               " onmouseover="this.style.background='rgba(26, 26, 26, 0.65)';" onmouseout="this.style.background='rgba(26, 26, 26, 0.5)';">원문 열기</button>` : '';
         return `
-          <div class="collapsed-summary-item" data-block-id="${block.id}" data-url="${encodedUrl}" data-status="${block.status}" style="
+          <div class="collapsed-summary-item flex flex-col gap-2 cursor-pointer transition-all duration-normal hover:-translate-y-0.5 hover:shadow-medium" data-block-id="${block.id}" data-url="${encodedUrl}" data-status="${block.status}" style="
             padding: 12px 14px;
             border-radius: 10px;
             border: 1px solid ${shimmerBorder};
             background: ${itemBackground};
-            display: flex;
-            flex-direction: column;
-            gap: 8px;
-            cursor: pointer;
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
-          " onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 12px 24px rgba(0,0,0,0.25)';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='none';">
-            <div style="display: flex; flex-direction: column; gap: 4px;">
-              <span style="
-                font-size: 13px;
-                font-weight: 600;
-                color: ${text};
-                display: -webkit-box;
-                -webkit-line-clamp: 2;
-                -webkit-box-orient: vertical;
-                overflow: hidden;
-              ">${title}</span>
-              <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
-                <span style="font-size: 12px; color: ${textMuted};">${subtitle}</span>
+          ">
+            <div class="flex flex-col gap-1">
+              <span class="text-sm line-clamp-2 font-semibold" style="color: ${text};">${title}</span>
+              <div class="flex items-center gap-1.5 flex-wrap">
+                <span class="text-xs" style="color: ${textMuted};">${subtitle}</span>
                 ${statusBadge}
               </div>
             </div>
-            <div class="collapsed-summary-actions" style="
-              display: flex;
-              gap: 6px;
-              flex-wrap: wrap;
-            ">
+            <div class="collapsed-summary-actions flex gap-1.5 flex-wrap">
               ${analyzeButton}
               ${openButton}
             </div>
@@ -1035,23 +825,23 @@ class AnalysisPanel {
 
   getCollapsedStatusBadge(block) {
     const { text, accent, textMuted } = this.palette;
-    const baseStyle = `display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 10px; font-size: 11px; font-weight: 600;`;
+    const baseStyle = `display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 10px; font-weight: 600;`;
 
     switch (block.status) {
       case 'pending':
-        return `<span style="${baseStyle} background: rgba(140, 110, 84, 0.18); color: ${text}; border: 1px solid rgba(140, 110, 84, 0.45);">대기 중</span>`;
+        return `<span class="text-xs" style="${baseStyle} background: rgba(140, 110, 84, 0.15); color: ${text}; border: 1px solid rgba(140, 110, 84, 0.4);">대기 중</span>`;
       case 'analyzing':
-        return `<span style="${baseStyle} background: rgba(59, 130, 246, 0.2); color: ${text}; border: 1px solid rgba(59, 130, 246, 0.45);">분석 중</span>`;
+        return `<span class="text-xs" style="${baseStyle} background: rgba(59, 130, 246, 0.2); color: ${text}; border: 1px solid rgba(59, 130, 246, 0.4);">분석 중</span>`;
       case 'error':
-        return `<span style="${baseStyle} background: rgba(239, 68, 68, 0.2); color: ${text}; border: 1px solid rgba(239, 68, 68, 0.45);">재시도 필요</span>`;
+        return `<span class="text-xs" style="${baseStyle} background: rgba(239, 68, 68, 0.2); color: ${text}; border: 1px solid rgba(239, 68, 68, 0.4);">재시도 필요</span>`;
       case 'completed':
         if (block.result && block.result.진위) {
           const verdictColors = this.getVerdictColors(block.result.진위);
-          return `<span style="${baseStyle} background: ${verdictColors.badgeBackground}; color: ${verdictColors.badgeText}; border: 1px solid ${verdictColors.badgeBorder};">${block.result.진위}</span>`;
+          return `<span class="text-xs" style="${baseStyle} background: ${verdictColors.badgeBackground}; color: ${verdictColors.badgeText}; border: 1px solid ${verdictColors.badgeBorder};">${block.result.진위}</span>`;
         }
-        return `<span style="${baseStyle} background: rgba(16, 185, 129, 0.18); color: ${text}; border: 1px solid rgba(16, 185, 129, 0.45);">완료</span>`;
+        return `<span class="text-xs" style="${baseStyle} background: rgba(16, 185, 129, 0.18); color: ${text}; border: 1px solid rgba(16, 185, 129, 0.45);">완료</span>`;
       default:
-        return `<span style="${baseStyle} background: rgba(107, 114, 128, 0.25); color: ${textMuted}; border: 1px solid rgba(107, 114, 128, 0.35);">알 수 없음</span>`;
+        return `<span class="text-xs" style="${baseStyle} background: rgba(107, 114, 128, 0.25); color: ${textMuted}; border: 1px solid rgba(107, 114, 128, 0.35);">알 수 없음</span>`;
     }
   }
 
@@ -1149,7 +939,6 @@ class AnalysisPanel {
               color: ${text};
               padding: 8px 16px;
               border-radius: 6px;
-              font-size: 14px;
               border: 1px solid ${primaryButtonBorder};
               cursor: pointer;
               transition: all 0.2s;
@@ -1161,12 +950,11 @@ class AnalysisPanel {
         case 'analyzing':
           actionButtons = `
             <div style="display: flex; gap: 8px; align-items: center; width: 100%;">
-              <div style="
+              <div class="text-xs" style="
                 background: ${primaryButtonHover};
                 color: ${text};
                 padding: 8px 12px;
                 border-radius: 6px;
-                font-size: 12px;
                 flex: 1;
                 display: flex;
                 align-items: center;
@@ -1193,12 +981,11 @@ class AnalysisPanel {
                   white-space: nowrap;
                 ">${this.getTransparentProgress(progress)}</span>
               </div>
-              <button class="stop-analysis-btn" data-id="${id}" style="
+              <button class="stop-analysis-btn text-sm" data-id="${id}" style="
                 background: ${dangerButtonBase};
                 color: ${text};
                 padding: 8px 12px;
                 border-radius: 6px;
-                font-size: 14px;
                 border: 1px solid rgba(239, 68, 68, 0.5);
                 cursor: pointer;
                 transition: all 0.2s;
@@ -1213,12 +1000,11 @@ class AnalysisPanel {
           actionButtons = `
             <div style="display: flex; flex-direction: column; gap: 8px; width: 100%;">
               <div style="display: flex; align-items: center; gap: 8px; width: 100%;">
-                <button class="analyze-current-btn" data-id="${id}" style="
+                <button class="analyze-current-btn text-sm" data-id="${id}" style="
                   background: ${primaryButtonBase};
                   color: ${text};
                   padding: 8px 16px;
                   border-radius: 6px;
-                  font-size: 14px;
                   border: 1px solid ${primaryButtonBorder};
                   cursor: pointer;
                   transition: all 0.2s;
@@ -1226,12 +1012,11 @@ class AnalysisPanel {
                   backdrop-filter: blur(8px);
                 " onmouseover="this.style.background='${primaryButtonHover}'" onmouseout="this.style.background='${primaryButtonBase}'">다시 분석</button>
                 ${isCompleted && !block.crossVerified && id !== 'current' ? `
-                <button class="cross-verify-btn" data-id="${id}" style="
+                <button class="cross-verify-btn text-sm" data-id="${id}" style="
                   background: linear-gradient(135deg, rgba(99, 102, 241, 0.3), rgba(139, 92, 246, 0.3));
                   color: ${text};
                   padding: 8px 16px;
                   border-radius: 6px;
-                  font-size: 14px;
                   border: 1px solid rgba(99, 102, 241, 0.5);
                   cursor: pointer;
                   transition: all 0.2s;
@@ -1241,12 +1026,11 @@ class AnalysisPanel {
                 " onmouseover="this.style.background='linear-gradient(135deg, rgba(99, 102, 241, 0.4), rgba(139, 92, 246, 0.4))'" onmouseout="this.style.background='linear-gradient(135deg, rgba(99, 102, 241, 0.3), rgba(139, 92, 246, 0.3))'">🔄 교차 검증</button>
                 ` : ''}
                 ${isCompleted && block.crossVerified && id !== 'current' ? `
-                <button disabled style="
+                <button disabled class="text-sm" style="
                   background: rgba(99, 102, 241, 0.15);
                   color: rgba(242, 242, 242, 0.5);
                   padding: 8px 16px;
                   border-radius: 6px;
-                  font-size: 14px;
                   border: 1px solid rgba(99, 102, 241, 0.3);
                   cursor: not-allowed;
                   flex: 1;
@@ -1255,12 +1039,11 @@ class AnalysisPanel {
                 ">✓ 검증 완료</button>
                 ` : ''}
                 ${isCompleted ? `
-                <button class="open-site-btn" data-id="${id}" data-url="${encodedUrl}" style="
+                <button class="open-site-btn text-sm" data-id="${id}" data-url="${encodedUrl}" style="
                   background: ${neutralButtonBase};
                   color: ${text};
                   padding: 8px 18px;
                   border-radius: 6px;
-                  font-size: 14px;
                   border: 1px solid ${border};
                   cursor: pointer;
                   transition: all 0.2s;
@@ -1272,13 +1055,12 @@ class AnalysisPanel {
               </div>
               ${isCompleted && verdictColors && block.crossVerified && id !== 'current' ? `
                 <div style="display: flex; gap: 8px; align-items: center;">
-                  <div style="
+                  <div class="text-xs" style="
                     background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(139, 92, 246, 0.2));
                     color: rgba(99, 102, 241, 1);
                     border: 1px solid rgba(99, 102, 241, 0.4);
                     padding: 6px 12px;
                     border-radius: 12px;
-                    font-size: 11px;
                     font-weight: 600;
                     text-align: center;
                     white-space: nowrap;
@@ -1345,12 +1127,11 @@ class AnalysisPanel {
         actionButtons = `
           <div style="display: flex; gap: 8px; align-items: center; width: 100%;">
             ${isCompleted ? `
-            <button class="open-site-btn" data-id="${id}" data-url="${encodedUrl}" style="
+            <button class="open-site-btn text-sm" data-id="${id}" data-url="${encodedUrl}" style="
               background: ${neutralButtonBase};
               color: ${text};
               padding: 8px 16px;
               border-radius: 6px;
-              font-size: 14px;
               border: 1px solid ${border};
               cursor: pointer;
               transition: all 0.2s;
@@ -1360,12 +1141,11 @@ class AnalysisPanel {
             " onmouseover="this.style.background='${neutralButtonHover}'" onmouseout="this.style.background='${neutralButtonBase}'">사이트 이동</button>
             ` : ''}
             <div style="position: relative; flex: 1; z-index: 10;">
-              <button class="more-menu-btn" data-id="${id}" style="
+              <button class="more-menu-btn text-sm" data-id="${id}" style="
                 background: ${primaryButtonBase};
                 color: ${text};
                 padding: 8px 16px;
                 border-radius: 6px;
-                font-size: 14px;
                 border: 1px solid ${primaryButtonBorder};
                 cursor: pointer;
                 transition: all 0.2s;
@@ -1390,13 +1170,12 @@ class AnalysisPanel {
                 backdrop-filter: blur(12px);
               ">
                 ${isCompleted && !block.crossVerified ? `
-                <button class="cross-verify-btn" data-id="${id}" style="
+                <button class="cross-verify-btn text-sm" data-id="${id}" style="
                   background: transparent;
                   color: ${text};
                   padding: 10px 14px;
                   border: none;
                   border-radius: 6px;
-                  font-size: 14px;
                   cursor: pointer;
                   width: 100%;
                   text-align: left;
@@ -1404,25 +1183,23 @@ class AnalysisPanel {
                 " onmouseover="this.style.background='${this.hexToRgba(accent, 0.2)}'" onmouseout="this.style.background='transparent'">🔄 교차 검증</button>
                 ` : ''}
                 ${isCompleted && block.crossVerified ? `
-                <button disabled style="
+                <button disabled class="text-sm" style="
                   background: transparent;
                   color: ${this.hexToRgba(text, 0.5)};
                   padding: 10px 14px;
                   border: none;
                   border-radius: 6px;
-                  font-size: 14px;
                   cursor: not-allowed;
                   width: 100%;
                   text-align: left;
                 ">✓ 검증 완료</button>
                 ` : ''}
-                <button class="compare-btn" data-id="${id}" style="
+                <button class="compare-btn text-sm" data-id="${id}" style="
                   background: transparent;
                   color: ${text};
                   padding: 10px 14px;
                   border: none;
                   border-radius: 6px;
-                  font-size: 14px;
                   cursor: pointer;
                   width: 100%;
                   text-align: left;
@@ -1430,7 +1207,7 @@ class AnalysisPanel {
                 " onmouseover="this.style.background='${this.hexToRgba(accent, 0.2)}'" onmouseout="this.style.background='transparent'">${isCompareMode ? '✕ 비교 취소' : '⚖️ 비교하기'}</button>
               </div>
             </div>
-            <button class="delete-btn" data-id="${id}" style="
+            <button class="delete-btn text-sm" data-id="${id}" style="
               background: ${dangerButtonBase};
               color: ${text};
               padding: 8px 12px;
@@ -1521,9 +1298,8 @@ class AnalysisPanel {
             overflow: hidden;
             width: 100%;
           ">${this.escapeHtml(title)}</h3>
-          <div style="
+          <div class="text-xs" style="
             color: ${textMuted};
-            font-size: 12px;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
@@ -1540,14 +1316,12 @@ class AnalysisPanel {
           overflow: hidden;
           transition: all 0.3s ease;
         ">
-          <div style="
-            font-size: 12px;
+          <div class="text-xs" style="
             color: ${textMuted};
             margin-bottom: 8px;
             font-weight: 500;
           ">실시간 분석 결과</div>
-          <div id="typing-content-${id}" style="
-            font-size: 12px;
+          <div id="typing-content-${id}" class="text-xs" style="
             line-height: 1.45;
             color: ${text};
             word-wrap: break-word;
@@ -4507,6 +4281,10 @@ ${articleContent}
 
     const floatingBtn = document.createElement('button');
     floatingBtn.id = 'floating-news-analysis-btn';
+    floatingBtn.setAttribute('aria-label', '뉴스 분석 패널 열기');
+    floatingBtn.setAttribute('role', 'button');
+    floatingBtn.setAttribute('tabindex', '0');
+    floatingBtn.setAttribute('title', '뉴스 분석 패널');
     floatingBtn.innerHTML = `
       <div style="
         display: flex;
@@ -4515,7 +4293,7 @@ ${articleContent}
         width: 100%;
         height: 100%;
         position: relative;
-      ">
+      " aria-hidden="true">
         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="11" cy="11" r="8"></circle>
           <path d="m21 21-4.35-4.35"></path>
@@ -4529,14 +4307,14 @@ ${articleContent}
       width: 64px;
       height: 64px;
       border-radius: 50%;
-      background: linear-gradient(135deg, #4F46E5 0%, #6366F1 50%, #8B5CF6 100%);
+      background: linear-gradient(135deg, #BF9780 0%, #F2CEA2 50%, #E6B885 100%);
       color: white;
       border: none;
       cursor: pointer;
       box-shadow: 
-        0 8px 25px rgba(99, 102, 241, 0.5),
+        0 8px 25px rgba(191, 151, 128, 0.4),
         0 4px 12px rgba(0, 0, 0, 0.2),
-        inset 0 1px 0 rgba(255, 255, 255, 0.25);
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
       z-index: 999998;
       transform: scale(0);
       transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -4557,21 +4335,21 @@ ${articleContent}
     floatingBtn.addEventListener('mouseenter', () => {
       floatingBtn.style.transform = 'scale(1.15)';
       floatingBtn.style.boxShadow = `
-        0 12px 35px rgba(99, 102, 241, 0.7),
+        0 12px 35px rgba(191, 151, 128, 0.5),
         0 8px 20px rgba(0, 0, 0, 0.25),
-        inset 0 1px 0 rgba(255, 255, 255, 0.35)
+        inset 0 1px 0 rgba(255, 255, 255, 0.3)
       `;
-      floatingBtn.style.background = 'linear-gradient(135deg, #6366F1 0%, #8B5CF6 50%, #A78BFA 100%)';
+      floatingBtn.style.background = 'linear-gradient(135deg, #F2CEA2 0%, #E6B885 50%, #F8E3C4 100%)';
     });
 
     floatingBtn.addEventListener('mouseleave', () => {
       floatingBtn.style.transform = 'scale(1)';
       floatingBtn.style.boxShadow = `
-        0 8px 25px rgba(99, 102, 241, 0.5),
+        0 8px 25px rgba(191, 151, 128, 0.4),
         0 4px 12px rgba(0, 0, 0, 0.2),
-        inset 0 1px 0 rgba(255, 255, 255, 0.25)
+        inset 0 1px 0 rgba(255, 255, 255, 0.2)
       `;
-      floatingBtn.style.background = 'linear-gradient(135deg, #4F46E5 0%, #6366F1 50%, #8B5CF6 100%)';
+      floatingBtn.style.background = 'linear-gradient(135deg, #BF9780 0%, #F2CEA2 50%, #E6B885 100%)';
     });
 
     // 클릭 효과
@@ -4643,6 +4421,14 @@ ${articleContent}
         } else {
           console.error('createEmptyPanel 함수를 찾을 수 없음');
         }
+      }
+    });
+    
+    // 키보드 접근성: Enter 또는 Space 키로 버튼 활성화
+    floatingBtn.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        floatingBtn.click();
       }
     });
   }
@@ -5056,22 +4842,22 @@ ${articleContent}
     
     if (isEdit) {
       modalContent.innerHTML = `
-        <button class="close-modal" style="position: absolute; top: 12px; right: 12px; background: none; border: none; font-size: 24px; color: #737373; cursor: pointer; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: background-color 0.2s;">&times;</button>
-        <h2 style="font-size: 24px; font-weight: bold; margin-bottom: 32px; text-align: center; color: #0D0D0D;">API 키 설정</h2>
-        <div style="background: #F2F2F2; border: 2px solid #BF9780; border-radius: 8px; padding: 16px 20px; margin-bottom: 24px; flex: 1; display: flex; align-items: center; justify-content: center;">
-          <span style="font-family: monospace; font-size: 16px; color: #0D0D0D;">${maskedKey}</span>
+        <button class="close-modal absolute top-3 right-3 bg-transparent border-0 text-2xl text-text-muted cursor-pointer w-8 h-8 flex items-center justify-center rounded-full transition-colors duration-normal hover:bg-surface-hover">&times;</button>
+        <h2 class="text-2xl font-bold mb-8 text-center text-text-primary">API 키 설정</h2>
+        <div class="flex-1 flex items-center justify-center bg-surface border-2 border-primary rounded-lg p-4 px-5 mb-6">
+          <span class="font-mono text-base text-text-primary">${maskedKey}</span>
         </div>
-        <div style="display: flex; gap: 12px;">
-          <button class="edit-key-btn" style="background: #BF9780; color: white; padding: 16px 32px; border-radius: 8px; font-weight: 600; border: none; cursor: pointer; flex: 1; transition: background-color 0.2s; font-size: 16px;">수정</button>
-          <button class="remove-key-btn" style="background: #E74C3C; color: white; padding: 16px 32px; border-radius: 8px; font-weight: 600; border: none; cursor: pointer; flex: 1; transition: background-color 0.2s; font-size: 16px;">해제</button>
+        <div class="flex gap-3">
+          <button class="edit-key-btn flex-1 bg-primary text-white px-8 py-4 rounded-lg font-semibold border-0 cursor-pointer transition-all duration-normal text-base hover:bg-primary-dark active:scale-95">수정</button>
+          <button class="remove-key-btn flex-1 bg-red-500 text-white px-8 py-4 rounded-lg font-semibold border-0 cursor-pointer transition-all duration-normal text-base hover:bg-red-600 active:scale-95">해제</button>
         </div>
       `;
     } else {
       modalContent.innerHTML = `
-        <button class="close-modal" style="position: absolute; top: 12px; right: 12px; background: none; border: none; font-size: 24px; color: #737373; cursor: pointer; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: background-color 0.2s;">&times;</button>
-        <h2 style="font-size: 24px; font-weight: bold; margin-bottom: 32px; text-align: center; color: #0D0D0D;">API 키를 입력하세요</h2>
-        <input class="api-key-input" type="text" placeholder="Gemini API Key" style="border: 2px solid #BF9780; border-radius: 8px; padding: 16px 20px; margin-bottom: 24px; width: 100%; font-size: 16px; box-sizing: border-box; flex: 1; outline: none; transition: border-color 0.2s;" />
-        <button class="submit-key-btn" style="background: #F2CEA2; color: #0D0D0D; padding: 16px 32px; border-radius: 8px; font-weight: 600; border: none; cursor: pointer; width: 100%; transition: background-color 0.2s; font-size: 16px;">확인</button>
+        <button class="close-modal absolute top-3 right-3 bg-transparent border-0 text-2xl text-text-muted cursor-pointer w-8 h-8 flex items-center justify-center rounded-full transition-colors duration-normal hover:bg-surface-hover">&times;</button>
+        <h2 class="text-2xl font-bold mb-8 text-center text-text-primary">API 키를 입력하세요</h2>
+        <input class="api-key-input input-field mb-6" type="password" placeholder="Gemini API Key" />
+        <button class="submit-key-btn btn-primary w-full text-base py-4">확인</button>
       `;
     }
     
@@ -5332,22 +5118,22 @@ ${articleContent}
     
     if (isEdit) {
       modalContent.innerHTML = `
-        <button class="close-modal" style="position: absolute; top: 12px; right: 12px; background: none; border: none; font-size: 24px; color: #737373; cursor: pointer; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: background-color 0.2s;">&times;</button>
-        <h2 style="font-size: 24px; font-weight: bold; margin-bottom: 32px; text-align: center; color: #0D0D0D;">API 키 설정</h2>
-        <div style="background: #F2F2F2; border: 2px solid #BF9780; border-radius: 8px; padding: 16px 20px; margin-bottom: 24px; flex: 1; display: flex; align-items: center; justify-content: center;">
-          <span style="font-family: monospace; font-size: 16px; color: #0D0D0D;">${maskedKey}</span>
+        <button class="close-modal absolute top-3 right-3 bg-transparent border-0 text-2xl text-text-muted cursor-pointer w-8 h-8 flex items-center justify-center rounded-full transition-colors duration-normal hover:bg-surface-hover">&times;</button>
+        <h2 class="text-2xl font-bold mb-8 text-center text-text-primary">API 키 설정</h2>
+        <div class="flex-1 flex items-center justify-center bg-surface border-2 border-primary rounded-lg p-4 px-5 mb-6">
+          <span class="font-mono text-base text-text-primary">${maskedKey}</span>
         </div>
-        <div style="display: flex; gap: 12px;">
-          <button class="edit-key-btn" style="background: #BF9780; color: white; padding: 16px 32px; border-radius: 8px; font-weight: 600; border: none; cursor: pointer; flex: 1; transition: background-color 0.2s; font-size: 16px;">수정</button>
-          <button class="remove-key-btn" style="background: #E74C3C; color: white; padding: 16px 32px; border-radius: 8px; font-weight: 600; border: none; cursor: pointer; flex: 1; transition: background-color 0.2s; font-size: 16px;">해제</button>
+        <div class="flex gap-3">
+          <button class="edit-key-btn flex-1 bg-primary text-white px-8 py-4 rounded-lg font-semibold border-0 cursor-pointer transition-all duration-normal text-base hover:bg-primary-dark active:scale-95">수정</button>
+          <button class="remove-key-btn flex-1 bg-red-500 text-white px-8 py-4 rounded-lg font-semibold border-0 cursor-pointer transition-all duration-normal text-base hover:bg-red-600 active:scale-95">해제</button>
         </div>
       `;
     } else {
       modalContent.innerHTML = `
-        <button class="close-modal" style="position: absolute; top: 12px; right: 12px; background: none; border: none; font-size: 24px; color: #737373; cursor: pointer; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: background-color 0.2s;">&times;</button>
-        <h2 style="font-size: 24px; font-weight: bold; margin-bottom: 32px; text-align: center; color: #0D0D0D;">API 키를 입력하세요</h2>
-        <input class="api-key-input" type="text" placeholder="Gemini API Key" style="border: 2px solid #BF9780; border-radius: 8px; padding: 16px 20px; margin-bottom: 24px; width: 100%; font-size: 16px; box-sizing: border-box; flex: 1; outline: none; transition: border-color 0.2s;" />
-        <button class="submit-key-btn" style="background: #F2CEA2; color: #0D0D0D; padding: 16px 32px; border-radius: 8px; font-weight: 600; border: none; cursor: pointer; width: 100%; transition: background-color 0.2s; font-size: 16px;">확인</button>
+        <button class="close-modal absolute top-3 right-3 bg-transparent border-0 text-2xl text-text-muted cursor-pointer w-8 h-8 flex items-center justify-center rounded-full transition-colors duration-normal hover:bg-surface-hover">&times;</button>
+        <h2 class="text-2xl font-bold mb-8 text-center text-text-primary">API 키를 입력하세요</h2>
+        <input class="api-key-input input-field mb-6" type="password" placeholder="Gemini API Key" />
+        <button class="submit-key-btn btn-primary w-full text-base py-4">확인</button>
       `;
     }
     
