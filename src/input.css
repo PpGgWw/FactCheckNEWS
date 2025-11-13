@@ -12,7 +12,7 @@
   }
   
   button {
-    @apply transition-all duration-normal ease-out;
+    @apply transition-all duration-200 ease-out;
   }
   
   .scrollbar-hide {
@@ -22,29 +22,6 @@
   
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
-  }
-  
-  /* Smooth scrolling */
-  html {
-    scroll-behavior: smooth;
-  }
-  
-  /* Custom scrollbar for webkit browsers */
-  ::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-  }
-  
-  ::-webkit-scrollbar-track {
-    @apply bg-background-dark;
-  }
-  
-  ::-webkit-scrollbar-thumb {
-    @apply bg-border rounded-full;
-  }
-  
-  ::-webkit-scrollbar-thumb:hover {
-    @apply bg-border-dark;
   }
 }
 
@@ -57,26 +34,26 @@
   /* Enhanced Button Styles */
   .btn-primary {
     @apply bg-primary hover:bg-primary-dark text-text-primary font-medium px-4 py-2 rounded-xl 
-           transition-all duration-normal shadow-soft hover:shadow-medium active:scale-95;
+           transition-all duration-200 shadow-soft hover:shadow-medium active:scale-95;
   }
   
   .btn-secondary {
     @apply bg-secondary hover:bg-secondary-dark text-text-primary font-medium px-4 py-2 rounded-xl 
-           transition-all duration-normal shadow-soft hover:shadow-medium active:scale-95;
+           transition-all duration-200 shadow-soft hover:shadow-medium active:scale-95;
   }
   
   .btn-ghost {
     @apply bg-transparent hover:bg-surface-hover text-text-secondary hover:text-text-primary 
-           font-medium px-3 py-2 rounded-lg transition-all duration-fast;
+           font-medium px-3 py-2 rounded-lg transition-all duration-200;
   }
   
   /* Card Components */
   .card {
-    @apply bg-surface border border-border rounded-2xl shadow-soft hover:shadow-medium transition-all duration-normal;
+    @apply bg-surface border border-border rounded-2xl shadow-soft hover:shadow-medium transition-all duration-200;
   }
   
   .card-elevated {
-    @apply bg-surface border-0 rounded-2xl shadow-medium hover:shadow-strong transition-all duration-slow;
+    @apply bg-surface border-0 rounded-2xl shadow-medium hover:shadow-strong transition-all duration-300;
   }
   
   /* Status Cards */
@@ -120,81 +97,26 @@
   .input-field {
     @apply w-full px-4 py-3 bg-surface border border-border rounded-xl 
            focus:border-primary focus:ring-2 focus:ring-primary/20 
-           transition-all duration-fast text-text-primary placeholder:text-text-muted;
+           transition-all duration-200 text-text-primary placeholder:text-text-muted;
   }
   
   /* Loading States */
   .loading-shimmer {
     @apply bg-gradient-to-r from-surface via-surface-hover to-surface 
-           bg-[length:200%_100%] animate-shimmer;
-  }
-  
-  .loading-spinner {
-    @apply w-5 h-5 border-2 border-text-muted border-t-transparent rounded-full animate-spin;
+           bg-[length:200%_100%] animate-pulse;
   }
   
   /* Icon Buttons */
   .icon-btn {
     @apply w-8 h-8 flex items-center justify-center rounded-lg 
            text-text-secondary hover:text-text-primary hover:bg-surface-hover 
-           transition-all duration-fast cursor-pointer;
+           transition-all duration-200 cursor-pointer;
   }
   
   .icon-btn-primary {
     @apply w-8 h-8 flex items-center justify-center rounded-lg 
            bg-primary hover:bg-primary-dark text-text-primary 
-           transition-all duration-normal cursor-pointer shadow-soft;
-  }
-  
-  /* Interactive Buttons with Hover Effects */
-  .btn-hover-lift {
-    @apply transition-all duration-normal hover:translate-y-[-2px] hover:shadow-medium active:translate-y-0;
-  }
-  
-  .btn-hover-scale {
-    @apply transition-transform duration-fast hover:scale-105 active:scale-95;
-  }
-  
-  .btn-hover-glow {
-    @apply transition-all duration-normal hover:shadow-glow;
-  }
-  
-  .btn-setting {
-    @apply px-3 py-2 rounded-md bg-opacity-20 bg-black border border-opacity-20 border-white
-           text-white flex items-center justify-center cursor-pointer
-           transition-all duration-normal hover:bg-opacity-40 hover:scale-105 backdrop-blur-sm;
-  }
-  
-  .btn-close {
-    @apply px-3 py-2 rounded-md bg-opacity-20 bg-black border border-opacity-20 border-white
-           text-white flex items-center justify-center cursor-pointer text-lg font-light
-           transition-all duration-normal hover:bg-status-error hover:bg-opacity-25 hover:scale-105 backdrop-blur-sm;
-  }
-  
-  .btn-analyze {
-    @apply px-4 py-2 rounded-lg border border-secondary border-opacity-50 
-           bg-secondary bg-opacity-20 text-white cursor-pointer
-           transition-all duration-normal hover:bg-opacity-30 active:scale-95;
-  }
-  
-  .btn-mini-action {
-    @apply px-3 py-2 rounded-md border text-xs cursor-pointer
-           transition-all duration-fast flex-1 active:scale-95;
-  }
-  
-  .btn-mini-analyze {
-    @apply btn-mini-action border-secondary border-opacity-40
-           bg-secondary bg-opacity-20 text-white hover:bg-opacity-30;
-  }
-  
-  .btn-mini-open {
-    @apply btn-mini-action border-white border-opacity-20
-           bg-black bg-opacity-50 text-white hover:bg-opacity-65;
-  }
-  
-  /* Summary Item Hover */
-  .summary-item-hover {
-    @apply transition-all duration-normal hover:translate-y-[-2px] hover:shadow-medium cursor-pointer;
+           transition-all duration-200 cursor-pointer shadow-soft;
   }
   
   /* Typography */
@@ -263,76 +185,5 @@
   
   .bg-gradient-subtle {
     background: linear-gradient(135deg, theme('colors.surface'), theme('colors.background-card'));
-  }
-  
-  /* Panel Gradients - 아름답고 부드러운 그라디언트 */
-  .bg-gradient-panel-header {
-    background: linear-gradient(135deg, #8C6E54 0%, #BF9780 100%);
-  }
-  
-  .bg-gradient-panel-surface {
-    background: linear-gradient(180deg, #262626 0%, rgba(38, 38, 38, 0.85) 100%);
-  }
-  
-  .bg-gradient-panel-alt {
-    background: linear-gradient(180deg, #404040 0%, #262626 100%);
-  }
-  
-  .bg-gradient-panel-dark {
-    background: linear-gradient(180deg, #0D0D0D 0%, rgba(13, 13, 13, 0.92) 100%);
-  }
-  
-  .bg-gradient-panel-base {
-    background: linear-gradient(180deg, rgba(13, 13, 13, 0.94) 0%, #0D0D0D 100%);
-  }
-  
-  /* Decorative pattern overlay */
-  .pattern-dots {
-    background-image: radial-gradient(circle at 20% 50%, rgba(242, 242, 242, 0.15) 1px, transparent 1px),
-                      radial-gradient(circle at 80% 50%, rgba(242, 242, 242, 0.15) 1px, transparent 1px);
-    background-size: 50px 50px;
-  }
-  
-  /* Backdrop effects */
-  .backdrop-blur-panel {
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-  }
-  
-  .backdrop-blur-modal {
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-  }
-  
-  /* Line clamp utilities */
-  .line-clamp-1 {
-    display: -webkit-box;
-    -webkit-line-clamp: 1;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-  
-  .line-clamp-2 {
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-  
-  .line-clamp-3 {
-    display: -webkit-box;
-    -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-  }
-  
-  /* Spinner animation */
-  @keyframes spin {
-    from {
-      transform: rotate(0deg);
-    }
-    to {
-      transform: rotate(360deg);
-    }
   }
 }

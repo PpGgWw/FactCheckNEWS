@@ -83,11 +83,7 @@ class VerdictBlock {
         </div>
         <div class="w-full bg-border-light rounded-full h-2 overflow-hidden">
           <div class="${barColor} h-full rounded-full transition-all duration-1000 ease-out" 
-               style="width: ${percentage}%"
-               role="progressbar" 
-               aria-valuenow="${percentage}" 
-               aria-valuemin="0" 
-               aria-valuemax="100"></div>
+               style="width: ${percentage}%"></div>
         </div>
       </div>
     `;
@@ -98,28 +94,16 @@ class VerdictBlock {
     
     return `
       <div class="mt-4">
-        <h5 class="text-sm font-medium text-text-secondary mb-2 flex items-center">
-          <svg class="w-4 h-4 mr-1.5" fill="currentColor" viewBox="0 0 20 20">
-            <path fill-rule="evenodd" d="M12.586 4.586a2 2 0 112.828 2.828l-3 3a2 2 0 01-2.828 0 1 1 0 00-1.414 1.414 4 4 0 005.656 0l3-3a4 4 0 00-5.656-5.656l-1.5 1.5a1 1 0 101.414 1.414l1.5-1.5zm-5 5a2 2 0 012.828 0 1 1 0 101.414-1.414 4 4 0 00-5.656 0l-3 3a4 4 0 105.656 5.656l1.5-1.5a1 1 0 10-1.414-1.414l-1.5 1.5a2 2 0 11-2.828-2.828l3-3z" clip-rule="evenodd"/>
-          </svg>
-          검증 출처
-        </h5>
+        <h5 class="text-sm font-medium text-text-secondary mb-2">검증 출처</h5>
         <div class="space-y-2">
           ${this.sources.map((source, index) => `
-            <div class="flex items-center space-x-2 text-xs group">
-              <div class="w-5 h-5 bg-primary/10 text-primary rounded-full flex items-center justify-center flex-shrink-0 font-medium">
-                ${index + 1}
-              </div>
+            <div class="flex items-center space-x-2 text-xs">
+              <div class="w-1.5 h-1.5 bg-primary rounded-full"></div>
               <a href="${source.url || '#'}" 
-                 class="text-primary hover:text-primary-dark transition-colors truncate group-hover:underline flex-1"
-                 target="_blank"
-                 rel="noopener noreferrer"
-                 aria-label="출처 ${index + 1}: ${source.name || '출처'}">
+                 class="text-primary hover:text-primary-dark transition-colors truncate"
+                 target="_blank">
                 ${source.name || `출처 ${index + 1}`}
               </a>
-              <svg class="w-3 h-3 text-text-muted group-hover:text-primary transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/>
-              </svg>
             </div>
           `).join('')}
         </div>
@@ -133,16 +117,12 @@ class VerdictBlock {
     const config = this.getVerdictConfig();
     
     return `
-      <div class="card-elevated mb-6 overflow-hidden animate-fade-in" 
-           data-verdict-id="${this.id}"
-           role="article"
-           aria-label="진위 판단 결과">
+      <div class="card-elevated mb-6 overflow-hidden animate-fade-in" data-verdict-id="${this.id}">
         <!-- Gradient Header -->
         <div class="bg-gradient-to-r ${config.gradient} p-6 border-b border-border-light">
           <div class="flex items-start space-x-4">
             <!-- Large Icon -->
-            <div class="w-16 h-16 ${config.iconBg} rounded-2xl flex items-center justify-center shadow-medium flex-shrink-0" 
-                 aria-hidden="true">
+            <div class="w-16 h-16 ${config.iconBg} rounded-2xl flex items-center justify-center shadow-medium flex-shrink-0">
               <span class="text-white text-2xl font-bold">${config.icon}</span>
             </div>
             
@@ -155,7 +135,7 @@ class VerdictBlock {
                 </div>
               </div>
               
-              <div class="text-base text-text-primary font-medium leading-relaxed">
+              <div class="text-lg text-text-primary font-medium leading-relaxed">
                 ${this.formatContent(this.content)}
               </div>
               
@@ -169,15 +149,15 @@ class VerdictBlock {
         <div class="p-6">
           <!-- Analysis Details -->
           <div class="grid grid-cols-2 gap-4 mb-4">
-            <div class="text-center p-4 bg-surface rounded-xl hover:shadow-soft transition-shadow">
-              <div class="text-2xl mb-2" aria-hidden="true">${config.emoji}</div>
-              <div class="text-xs text-text-muted font-medium">판정</div>
+            <div class="text-center p-3 bg-surface rounded-xl">
+              <div class="text-2xl mb-1">${config.emoji}</div>
+              <div class="text-xs text-text-muted">판정</div>
             </div>
-            <div class="text-center p-4 bg-surface rounded-xl hover:shadow-soft transition-shadow">
-              <div class="text-lg font-bold text-text-primary mb-2">
+            <div class="text-center p-3 bg-surface rounded-xl">
+              <div class="text-lg font-bold text-text-primary mb-1">
                 ${this.confidence ? this.confidence + '%' : 'N/A'}
               </div>
-              <div class="text-xs text-text-muted font-medium">신뢰도</div>
+              <div class="text-xs text-text-muted">신뢰도</div>
             </div>
           </div>
 
@@ -186,34 +166,21 @@ class VerdictBlock {
 
           <!-- Timestamp -->
           <div class="mt-6 pt-4 border-t border-border-light flex items-center justify-between">
-            <div class="text-xs text-text-muted flex items-center space-x-1.5">
-              <svg class="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
-                <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
-              </svg>
-              <span>${this.timestamp.toLocaleString('ko-KR', {
+            <div class="text-xs text-text-muted">
+              ${this.timestamp.toLocaleString('ko-KR', {
                 year: 'numeric',
                 month: 'short',
                 day: 'numeric',
                 hour: '2-digit',
                 minute: '2-digit'
-              })} 분석 완료</span>
+              })} 분석 완료
             </div>
             <div class="flex space-x-2">
-              <button class="icon-btn" 
-                      onclick="window.shareVerdict('${this.id}')" 
-                      title="공유하기"
-                      aria-label="판정 결과 공유">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"/>
-                </svg>
+              <button class="icon-btn" onclick="window.shareVerdict('${this.id}')" title="공유하기">
+                <span class="text-xs">📤</span>
               </button>
-              <button class="icon-btn" 
-                      onclick="window.saveVerdict('${this.id}')" 
-                      title="저장하기"
-                      aria-label="판정 결과 저장">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/>
-                </svg>
+              <button class="icon-btn" onclick="window.saveVerdict('${this.id}')" title="저장하기">
+                <span class="text-xs">💾</span>
               </button>
             </div>
           </div>

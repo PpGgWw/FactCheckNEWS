@@ -6,9 +6,14 @@ class AnalysisPanel {
     this.newsBlocks = new Map(); // 분석된 뉴스 블록들을 관리하는 Map
     this.currentNews = null; // 현재 페이지의 뉴스
     this.blockIdCounter = 0; // 고유 ID 생성용
+    this.streamingResults = new Map(); // 실시간 스트리밍 결과 저장
     this.analysisTimeouts = new Map(); // 분석 타임아웃 관리
     this.abortControllers = new Map(); // API 요청 중단용 AbortController
     
+    // 실시간 타이핑 효과 관련 속성
+    this.typingSpeed = 30; // 타이핑 속도 (ms)
+    this.currentTypingIntervals = new Map(); // 현재 타이핑 중인 인터벌들
+    this.analysisSteps = ['분석진행', '진위', '근거', '분석', '요약']; // 분석 단계
     this.panelOpacity = this.getPanelOpacitySetting();
     this.isHistoryCollapsed = this.getCollapsedStateSetting(); // localStorage에서 복원
     this.expandedPanelWidth = null;
@@ -164,14 +169,6 @@ class AnalysisPanel {
         return { normalizedResult, verdict: null, suspicious: null };
       }
 
-      // "분석진행" 필드 제거 (사용자에게 표시되지 않아야 함)
-      if (normalizedResult.분석진행) {
-        delete normalizedResult.분석진행;
-      }
-      if (normalizedResult.analysisProcess) {
-        delete normalizedResult.analysisProcess;
-      }
-
       const verdict =
         normalizedResult.진위 ||
         normalizedResult.verdict ||
@@ -283,35 +280,35 @@ class AnalysisPanel {
     const palette = {
       '진짜 뉴스': {
         base: '#22C55E',
-        badgeBackground: 'rgba(34, 197, 94, 0.15)',
+        badgeBackground: 'rgba(34, 197, 94, 0.18)',
         badgeText: '#BBF7D0',
-        badgeBorder: 'rgba(34, 197, 94, 0.5)'
+        badgeBorder: 'rgba(34, 197, 94, 0.55)'
       },
       '가짜일 가능성이 있는 뉴스': {
         base: '#F59E0B',
-        badgeBackground: 'rgba(245, 158, 11, 0.15)',
+        badgeBackground: 'rgba(245, 158, 11, 0.18)',
         badgeText: '#FDE68A',
-        badgeBorder: 'rgba(245, 158, 11, 0.5)'
+        badgeBorder: 'rgba(245, 158, 11, 0.55)'
       },
       '가짜일 가능성이 높은 뉴스': {
         base: '#F97316',
-        badgeBackground: 'rgba(249, 115, 22, 0.15)',
+        badgeBackground: 'rgba(249, 115, 22, 0.18)',
         badgeText: '#FDBA74',
-        badgeBorder: 'rgba(249, 115, 22, 0.5)'
+        badgeBorder: 'rgba(249, 115, 22, 0.55)'
       },
       '가짜 뉴스': {
         base: '#EF4444',
-        badgeBackground: 'rgba(239, 68, 68, 0.15)',
+        badgeBackground: 'rgba(239, 68, 68, 0.18)',
         badgeText: '#FCA5A5',
-        badgeBorder: 'rgba(239, 68, 68, 0.5)'
+        badgeBorder: 'rgba(239, 68, 68, 0.55)'
       }
     };
 
     const selected = palette[verdict] || palette['가짜일 가능성이 있는 뉴스'];
     return {
       ...selected,
-      shadow: this.hexToRgba(selected.base, 0.3),
-      border: this.hexToRgba(selected.base, 0.4)
+      shadow: this.hexToRgba(selected.base, 0.35),
+      border: this.hexToRgba(selected.base, 0.45)
     };
   }
 
@@ -490,7 +487,7 @@ class AnalysisPanel {
       `;
       document.head.appendChild(style);
     }
-  const { base, surface, surfaceAlt, text, textMuted, border } = this.palette;
+  const { base, surface, surfaceAlt, accent, text, textMuted, border } = this.palette;
     const surfaceSoft = this.blendColors(surface, base, 0.35);
     const surfaceAltSoft = this.blendColors(surfaceAlt, base, 0.4);
 
@@ -498,36 +495,105 @@ class AnalysisPanel {
       ${this.renderHeader()}
       
       <!-- 현재 뉴스 블록 (고정) -->
-      <div id="current-news-section" class="analysis-panel-collapsible p-5 bg-gradient-panel-surface border-b flex-shrink-0" style="border-color: ${border};">
-        <div class="flex items-center justify-between mb-4">
-          <h3 class="text-base font-semibold m-0" style="color: ${text};">
+      <div id="current-news-section" class="analysis-panel-collapsible" style="
+        padding: 20px;
+        background: linear-gradient(180deg, ${surface} 0%, ${surfaceAltSoft} 100%);
+        border-bottom: 1px solid ${border};
+        flex-shrink: 0;
+      ">
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+          <h3 style="
+            font-size: 16px;
+            font-weight: 600;
+            color: ${text};
+            margin: 0;
+          ">
             현재 페이지
           </h3>
         </div>
-        <div id="current-news-container" class="rounded-xl border shadow-strong overflow-hidden" style="background: ${surfaceSoft}; border-color: ${border};">
+        <div id="current-news-container" style="
+          background: ${surfaceSoft};
+          border-radius: 12px;
+          border: 1px solid ${border};
+          box-shadow: 0 12px 24px rgba(0, 0, 0, 0.25);
+          overflow: hidden;
+        ">
           ${this.renderCurrentNews()}
         </div>
       </div>
       
       <!-- 분석된 뉴스 리스트 (스크롤) -->
-      <div class="analysis-panel-list-wrapper flex-1 flex flex-col overflow-hidden bg-gradient-panel-dark">
-        <div class="p-5 pb-3 flex-shrink-0 bg-gradient-panel-alt border-b shadow-[inset_0_-1px_0_rgba(0,0,0,0.4)]" style="border-color: ${border};">
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-2">
-              <button id="collapse-history-btn" class="w-8 h-8 bg-secondary/15 border border-secondary/40 rounded-md flex items-center justify-center cursor-pointer transition-all duration-normal backdrop-blur-panel flex-shrink-0 hover:bg-secondary/30 hover:scale-105 active:scale-95" style="color: ${text};">
+      <div class="analysis-panel-list-wrapper" style="
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        background: linear-gradient(180deg, ${base} 0%, rgba(13, 13, 13, 0.92) 100%);
+      ">
+        <div style="
+          padding: 20px 20px 12px 20px;
+          flex-shrink: 0;
+          background: linear-gradient(180deg, ${surfaceAlt} 0%, ${surface} 100%);
+          border-bottom: 1px solid ${border};
+          box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.4);
+        ">
+          <div style="display: flex; align-items: center; justify-content: space-between;">
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <button id="collapse-history-btn" style="
+                width: 32px;
+                height: 32px;
+                background: rgba(140, 110, 84, 0.16);
+                border: 1px solid rgba(140, 110, 84, 0.4);
+                border-radius: 6px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                backdrop-filter: blur(10px);
+                flex-shrink: 0;
+                color: ${text};
+              " onmouseover="this.style.background='rgba(140, 110, 84, 0.3)'; this.style.transform='scale(1.05)';" 
+                 onmouseout="this.style.background='rgba(140, 110, 84, 0.16)'; this.style.transform='scale(1)';">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M9 18l6-6-6-6"></path>
                 </svg>
               </button>
-              <h3 class="analysis-panel-collapsible text-base font-semibold m-0" style="color: ${text};">
+              <h3 class="analysis-panel-collapsible" style="
+                font-size: 16px;
+                font-weight: 600;
+                color: ${text};
+                margin: 0;
+              ">
                 분석 기록
               </h3>
             </div>
-            <span id="analysis-count" class="analysis-panel-collapsible text-xs font-semibold bg-secondary/25 px-2.5 py-1 rounded-xl min-w-[20px] text-center border border-secondary/45" style="color: ${text};">${this.newsBlocks.size}</span>
+            <span id="analysis-count" class="analysis-panel-collapsible" style="
+              background: rgba(140, 110, 84, 0.25);
+              color: ${text};
+              padding: 4px 10px;
+              border-radius: 12px;
+              font-size: 12px;
+              font-weight: 600;
+              min-width: 20px;
+              text-align: center;
+              border: 1px solid rgba(140, 110, 84, 0.45);
+            ">${this.newsBlocks.size}</span>
           </div>
         </div>
-        <div class="analysis-panel-collapsible flex-1 overflow-y-auto overflow-x-hidden p-4 px-5 pb-5 bg-gradient-panel-base">
-          <div id="analyzed-news-container" class="flex flex-col gap-4 w-full">
+        <div class="analysis-panel-collapsible" style="
+          flex: 1;
+          overflow-y: auto;
+          overflow-x: hidden;
+          padding: 16px 20px 20px 20px;
+          background: linear-gradient(180deg, rgba(13, 13, 13, 0.94) 0%, ${base} 100%);
+        ">
+          <div id="analyzed-news-container" style="
+            display: flex; 
+            flex-direction: column; 
+            gap: 16px;
+            width: 100%;
+          ">
             ${this.renderAnalyzedNews()}
           </div>
         </div>
@@ -558,25 +624,60 @@ class AnalysisPanel {
 
   // 헤더 렌더링
   renderHeader() {
-    const { text, textMuted } = this.palette;
+    const { accent, surfaceAlt, surface, text, textMuted, border } = this.palette;
     return `
-      <div class="analysis-panel-collapsible bg-gradient-panel-header p-5 rounded-t-[20px] flex-shrink-0 relative overflow-hidden">
-        <div class="absolute inset-0 pattern-dots pointer-events-none opacity-60"></div>
+      <div class="analysis-panel-collapsible" style="
+        background: linear-gradient(135deg, ${surfaceAlt} 0%, ${accent} 100%);
+        padding: 20px;
+        border-bottom: none;
+        border-radius: 20px 20px 0 0;
+        flex-shrink: 0;
+        position: relative;
+        overflow: hidden;
+      ">
+        <div style="
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background-image: radial-gradient(circle at 20% 50%, rgba(242, 242, 242, 0.15) 1px, transparent 1px),
+                           radial-gradient(circle at 80% 50%, rgba(242, 242, 242, 0.15) 1px, transparent 1px);
+          background-size: 50px 50px;
+          pointer-events: none;
+          opacity: 0.6;
+        "></div>
         
-        <div class="relative z-10">
-          <div class="flex items-center justify-between mb-2">
-            <div class="flex-1">
-              <h2 class="text-xl font-bold tracking-tight m-0 mb-1" style="color: ${text};">뉴스 팩트체크</h2>
-              <p class="text-sm font-medium m-0" style="color: ${textMuted};">AI 기반 실시간 신뢰도 검증</p>
+        <div style="position: relative; z-index: 1;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px;">
+            <div style="flex: 1;">
+              <h2 style="
+                font-size: 20px;
+                font-weight: 700;
+                color: ${text};
+                margin: 0 0 4px 0;
+                letter-spacing: -0.5px;
+              ">뉴스 팩트체크</h2>
+              <p style="
+                font-size: 13px;
+                color: ${textMuted};
+                margin: 0;
+                font-weight: 500;
+              ">AI 기반 실시간 신뢰도 검증</p>
             </div>
             
-            <div class="flex items-center gap-2">
-              <div class="flex items-center gap-1.5 mr-2">
-                <div class="w-2.5 h-2.5 bg-green-500 rounded-full
+            <div style="display: flex; align-items: center; gap: 8px;">
+              <div style="display: flex; align-items: center; gap: 6px; margin-right: 8px;">
+                <div style="
+                  width: 10px;
+                  height: 10px;
+                  background: #10B981;
+                  border-radius: 50%;
                   animation: pulse 2s infinite;
                   box-shadow: 0 0 12px rgba(16, 185, 129, 0.6);
                 "></div>
-                <span class="text-xs" style="
+                <span style="
+                  font-size: 11px;
                   color: ${textMuted};
                   font-weight: 500;
                 ">연결됨</span>
@@ -593,6 +694,7 @@ class AnalysisPanel {
                 justify-content: center;
                 cursor: pointer;
                 transition: all 0.2s ease;
+                font-size: 16px;
                 backdrop-filter: blur(10px);
                 color: ${text};
               " onmouseover="this.style.background='rgba(13, 13, 13, 0.4)'; this.style.transform='scale(1.05)';" 
@@ -603,16 +705,23 @@ class AnalysisPanel {
                 </svg>
               </button>
               
-              <button id="close-panel" class="text-lg" style="
-                <span class="text-xs font-medium" style="color: ${text};">실시간</span>
-              </div>
-              <button id="settings-btn" class="w-9 h-9 bg-black/25 border border-border rounded-lg flex items-center justify-center cursor-pointer transition-all duration-normal backdrop-blur-panel hover:bg-black/40 hover:scale-105" style="color: ${text};">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <circle cx="12" cy="12" r="3"></circle>
-                  <path d="M12 1v6m0 6v6m-9-9h6m6 0h6"></path>
-                </svg>
-              </button>
-              <button id="close-panel-btn" class="w-9 h-9 bg-black/25 border border-border rounded-lg flex items-center justify-center cursor-pointer transition-all duration-normal font-light backdrop-blur-panel hover:bg-red-500/25 hover:scale-105" style="color: ${text};">&times;</button>
+              <button id="close-panel" style="
+                width: 36px;
+                height: 36px;
+                background: rgba(13, 13, 13, 0.25);
+                border: 1px solid ${border};
+                border-radius: 10px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                cursor: pointer;
+                transition: all 0.2s ease;
+                font-size: 18px;
+                font-weight: 300;
+                backdrop-filter: blur(10px);
+                color: ${text};
+              " onmouseover="this.style.background='rgba(239, 68, 68, 0.25)'; this.style.transform='scale(1.05)';" 
+                 onmouseout="this.style.background='rgba(13, 13, 13, 0.25)'; this.style.transform='scale(1)';">&times;</button>
             </div>
           </div>
         </div>
@@ -622,26 +731,42 @@ class AnalysisPanel {
 
   // 빈 상태 렌더링
   renderEmptyState() {
-    const { text, textMuted, border, base, surface } = this.palette;
+    const { surface, surfaceAlt, accent, text, textMuted, border, base } = this.palette;
     const cardBackground = this.blendColors(surface, base, 0.25);
     return `
-      <div class="text-center p-10 rounded-xl border shadow-strong" style="background: ${cardBackground}; border-color: ${border};">
-        <div class="w-16 h-16 bg-gradient-panel-header rounded-2xl flex
+      <div style="
+        text-align: center; 
+        padding: 40px 20px;
+        background: ${cardBackground};
+        border-radius: 12px;
+        border: 1px solid ${border};
+        box-shadow: 0 18px 32px rgba(0, 0, 0, 0.35);
+      ">
+        <div style="
+          width: 64px;
+          height: 64px;
+          background: linear-gradient(135deg, ${surfaceAlt}, ${accent});
+          border-radius: 16px;
+          display: flex;
           align-items: center;
           justify-content: center;
           margin: 0 auto 16px;
           box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
         ">
-          <span class="text-2xl">📰</span>
+          <span style="font-size: 24px;">📰</span>
         </div>
-          items-center justify-center mx-auto mb-6 shadow-medium" aria-hidden="true">
-          <svg width="32" height="32" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-white">
-            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
-            <polyline points="14 2 14 8 20 8"></polyline>
-          </svg>
-        </div>
-        <h4 class="text-base font-semibold m-0 mb-2" style="color: ${text};">분석할 뉴스가 없습니다</h4>
-        <p class="text-sm m-0 leading-snug" style="color: ${textMuted};">뉴스 기사를 선택하면<br>자동으로 분석을 시작합니다</p>
+        <h4 style="
+          font-size: 16px;
+          font-weight: 600;
+          color: ${text};
+          margin: 0 0 8px 0;
+        ">분석할 뉴스가 없습니다</h4>
+        <p style="
+          font-size: 13px;
+          color: ${textMuted};
+          margin: 0;
+          line-height: 1.4;
+        ">뉴스 기사를 선택하면<br>자동으로 분석을 시작합니다</p>
       </div>
     `;
   }
@@ -651,32 +776,17 @@ class AnalysisPanel {
     const { textMuted } = this.palette;
     if (!this.currentNews) {
       return `
-        <div class="text-center py-6 px-4" style="color: ${textMuted};">
-          <p class="text-sm m-0 leading-snug" style="color: ${textMuted};">현재 페이지에서<br>뉴스를 찾을 수 없습니다</p>
-        </div>
-      `;
-    }
-    
-    // 현재 뉴스가 이미 분석 목록에 있는지 확인
-    const normalizeUrl = (urlString) => {
-      try {
-        const urlObj = new URL(urlString);
-        return urlObj.origin + urlObj.pathname;
-      } catch {
-        return urlString;
-      }
-    };
-    
-    const normalizedCurrentUrl = normalizeUrl(this.currentNews.url);
-    const existsInHistory = Array.from(this.newsBlocks.values()).some(block => 
-      normalizeUrl(block.url) === normalizedCurrentUrl
-    );
-    
-    // 분석 목록에 있으면 current 블록 숨김 (중복 방지)
-    if (existsInHistory) {
-      return `
-        <div class="text-center py-6 px-4" style="color: ${textMuted};">
-          <p class="text-sm m-0 leading-snug" style="color: ${textMuted};">이 뉴스는 분석 기록에 있습니다<br><span class='text-xs opacity-80'>아래 분석 기록을 확인하세요</span></p>
+        <div style="
+          text-align: center; 
+          padding: 24px 16px;
+          color: ${textMuted};
+        ">
+          <p style="
+            font-size: 14px;
+            margin: 0;
+            line-height: 1.4;
+            color: ${textMuted};
+          ">현재 페이지에서<br>뉴스를 찾을 수 없습니다</p>
         </div>
       `;
     }
@@ -690,8 +800,20 @@ class AnalysisPanel {
     const cardBackground = this.blendColors(surface, base, 0.25);
     if (this.newsBlocks.size === 0) {
       return `
-        <div class="text-center py-8 px-4 rounded-xl border" style="background: ${cardBackground}; border-color: ${border}; color: ${text};">
-          <p class="text-sm m-0 leading-snug" style="color: ${textMuted};">아직 분석된 뉴스가 없습니다<br><span class='text-xs opacity-80' style='color: ${textMuted};'>뉴스를 선택하여 분석을 시작하세요</span></p>
+        <div style="
+          text-align: center; 
+          padding: 32px 16px;
+          background: ${cardBackground};
+          border-radius: 12px;
+          border: 1px solid ${border};
+          color: ${text};
+        ">
+          <p style="
+            font-size: 14px;
+            color: ${textMuted};
+            margin: 0;
+            line-height: 1.4;
+          ">아직 분석된 뉴스가 없습니다<br><span style='font-size: 12px; color: ${textMuted}; opacity: 0.8;'>뉴스를 선택하여 분석을 시작하세요</span></p>
         </div>
       `;
     }
@@ -703,24 +825,48 @@ class AnalysisPanel {
   }
 
   renderCollapsedSummary() {
-    const { text, textMuted, border } = this.palette;
+    const { surface, base, text, textMuted, border } = this.palette;
     return `
-      <div class="flex flex-col gap-4">
-        <div class="flex items-center justify-between">
-          <span class="text-base font-semibold" style="color: ${text};">간단 보기</span>
-          <div class="flex gap-2">
-            <button id="expand-panel-btn" class="text-xs px-3 py-1.5 rounded-lg border border-secondary/50 bg-secondary/20 cursor-pointer transition-all duration-normal hover:bg-secondary/35 active:scale-95" style="color: ${text};">패널 확장</button>
-            <button id="collapsed-close-btn" class="text-sm w-[30px] h-[30px] rounded-lg border leading-none cursor-pointer transition-all duration-normal hover:bg-surface-dark/70 active:scale-95" style="border-color: ${border}; background: rgba(26, 26, 26, 0.55); color: ${text};">✕</button>
+      <div style="display: flex; flex-direction: column; gap: 16px;">
+        <div style="display: flex; align-items: center; justify-content: space-between;">
+          <span style="font-size: 15px; font-weight: 600; color: ${text};">간단 보기</span>
+          <div style="display: flex; gap: 8px;">
+            <button id="expand-panel-btn" style="
+              padding: 6px 12px;
+              border-radius: 7px;
+              border: 1px solid rgba(140, 110, 84, 0.5);
+              background: rgba(140, 110, 84, 0.22);
+              color: ${text};
+              font-size: 12px;
+              cursor: pointer;
+              transition: all 0.2s ease;
+            " onmouseover="this.style.background='rgba(140, 110, 84, 0.34)';" onmouseout="this.style.background='rgba(140, 110, 84, 0.22)';">패널 확장</button>
+            <button id="collapsed-close-btn" style="
+              width: 30px;
+              height: 30px;
+              border-radius: 8px;
+              border: 1px solid ${border};
+              background: rgba(26, 26, 26, 0.55);
+              color: ${text};
+              font-size: 14px;
+              cursor: pointer;
+              line-height: 1;
+              transition: all 0.2s ease;
+            " onmouseover="this.style.background='rgba(26, 26, 26, 0.7)';" onmouseout="this.style.background='rgba(26, 26, 26, 0.55)';">✕</button>
           </div>
         </div>
         <div id="collapsed-current-container">
           ${this.renderCollapsedCurrentSection()}
         </div>
-        <div class="flex flex-col gap-1.5">
-          <span class="text-base font-semibold" style="color: ${text};">분석 기록</span>
-          <span id="collapsed-summary-count" class="text-xs opacity-90" style="color: ${textMuted};">${this.getCollapsedSummaryCountText()}</span>
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <span style="font-size: 15px; font-weight: 600; color: ${text};">분석 기록</span>
+          <span id="collapsed-summary-count" style="font-size: 12px; color: ${textMuted}; opacity: 0.9;">${this.getCollapsedSummaryCountText()}</span>
         </div>
-        <div id="collapsed-summary-list" class="flex flex-col gap-2.5">
+        <div id="collapsed-summary-list" style="
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        ">
           ${this.renderCollapsedSummaryItems()}
         </div>
       </div>
@@ -731,12 +877,13 @@ class AnalysisPanel {
     const { surface, base, text, textMuted, border } = this.palette;
     if (!this.currentNews) {
       return `
-        <div class="text-sm" style="
+        <div style="
           padding: 14px 16px;
           border-radius: 12px;
           border: 1px solid ${border};
           background: ${this.blendColors(surface, base, 0.24)};
           color: ${textMuted};
+          font-size: 13px;
           text-align: center;
         ">현재 페이지에서 분석할 뉴스를 찾지 못했습니다</div>
       `;
@@ -757,14 +904,30 @@ class AnalysisPanel {
         border: 1px solid ${border};
         background: ${this.blendColors(surface, base, 0.28)};
       ">
-        <div class="flex flex-col gap-1.5">
-          <div class="flex items-center gap-2 flex-wrap">
-            <span class="text-sm font-semibold" style="color: ${text};">현재 페이지</span>
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+            <span style="font-size: 14px; font-weight: 600; color: ${text};">현재 페이지</span>
             ${statusBadge}
           </div>
-          <span class="text-sm line-clamp-2" style="color: ${text};">${safeTitle}</span>
+          <span style="
+            font-size: 13px;
+            color: ${text};
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+            overflow: hidden;
+          ">${safeTitle}</span>
         </div>
-        ${showAnalyzeBtn ? `<button id="collapsed-current-analyze-btn" class="px-3.5 py-2 rounded-lg border border-secondary/50 bg-secondary/25 text-xs cursor-pointer transition-all duration-normal hover:bg-secondary/40 active:scale-95" style="color: ${text};">분석하기</button>` : ''}
+        ${showAnalyzeBtn ? `<button id="collapsed-current-analyze-btn" style="
+          padding: 8px 14px;
+          border-radius: 8px;
+          border: 1px solid rgba(140, 110, 84, 0.5);
+          background: rgba(140, 110, 84, 0.28);
+          color: ${text};
+          font-size: 13px;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        " onmouseover="this.style.background='rgba(140, 110, 84, 0.4)';" onmouseout="this.style.background='rgba(140, 110, 84, 0.28)';">분석하기</button>` : ''}
       </div>
     `;
   }
@@ -776,12 +939,13 @@ class AnalysisPanel {
 
     if (this.newsBlocks.size === 0) {
       return `
-        <div class="text-sm" style="
+        <div style="
           padding: 16px;
           border-radius: 10px;
           border: 1px solid ${border};
           background: ${itemBackground};
           color: ${textMuted};
+          font-size: 13px;
           text-align: center;
         ">아직 저장된 분석이 없습니다</div>
       `;
@@ -797,42 +961,61 @@ class AnalysisPanel {
         const showAnalyze = block.status === 'pending' || block.status === 'error';
         const statusBadge = this.getCollapsedStatusBadge(block);
         const analyzeButton = showAnalyze ? `
-              <button class="mini-action-btn mini-analyze-btn text-xs" data-block-id="${block.id}" style="
+              <button class="mini-action-btn mini-analyze-btn" data-block-id="${block.id}" style="
                 flex: 1 1 110px;
                 padding: 6px 10px;
                 border-radius: 6px;
                 border: 1px solid rgba(140, 110, 84, 0.45);
                 background: rgba(140, 110, 84, 0.22);
                 color: ${text};
+                font-size: 12px;
                 cursor: pointer;
                 transition: all 0.2s ease;
               " onmouseover="this.style.background='rgba(140, 110, 84, 0.34)';" onmouseout="this.style.background='rgba(140, 110, 84, 0.22)';">분석하기</button>` : '';
         const openButton = encodedUrl ? `
-              <button class="mini-action-btn mini-open-btn text-xs" data-url="${encodedUrl}" style="
+              <button class="mini-action-btn mini-open-btn" data-url="${encodedUrl}" style="
                 flex: 1 1 90px;
                 padding: 6px 10px;
                 border-radius: 6px;
                 border: 1px solid rgba(242, 242, 242, 0.2);
                 background: rgba(26, 26, 26, 0.5);
                 color: ${text};
+                font-size: 12px;
                 cursor: pointer;
                 transition: all 0.2s ease;
               " onmouseover="this.style.background='rgba(26, 26, 26, 0.65)';" onmouseout="this.style.background='rgba(26, 26, 26, 0.5)';">원문 열기</button>` : '';
         return `
-          <div class="collapsed-summary-item flex flex-col gap-2 cursor-pointer transition-all duration-normal hover:-translate-y-0.5 hover:shadow-medium" data-block-id="${block.id}" data-url="${encodedUrl}" data-status="${block.status}" style="
+          <div class="collapsed-summary-item" data-block-id="${block.id}" data-url="${encodedUrl}" data-status="${block.status}" style="
             padding: 12px 14px;
             border-radius: 10px;
             border: 1px solid ${shimmerBorder};
             background: ${itemBackground};
-          ">
-            <div class="flex flex-col gap-1">
-              <span class="text-sm line-clamp-2 font-semibold" style="color: ${text};">${title}</span>
-              <div class="flex items-center gap-1.5 flex-wrap">
-                <span class="text-xs" style="color: ${textMuted};">${subtitle}</span>
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+          " onmouseover="this.style.transform='translateY(-2px)'; this.style.boxShadow='0 12px 24px rgba(0,0,0,0.25)';" onmouseout="this.style.transform='translateY(0)'; this.style.boxShadow='none';">
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+              <span style="
+                font-size: 13px;
+                font-weight: 600;
+                color: ${text};
+                display: -webkit-box;
+                -webkit-line-clamp: 2;
+                -webkit-box-orient: vertical;
+                overflow: hidden;
+              ">${title}</span>
+              <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                <span style="font-size: 12px; color: ${textMuted};">${subtitle}</span>
                 ${statusBadge}
               </div>
             </div>
-            <div class="collapsed-summary-actions flex gap-1.5 flex-wrap">
+            <div class="collapsed-summary-actions" style="
+              display: flex;
+              gap: 6px;
+              flex-wrap: wrap;
+            ">
               ${analyzeButton}
               ${openButton}
             </div>
@@ -852,23 +1035,23 @@ class AnalysisPanel {
 
   getCollapsedStatusBadge(block) {
     const { text, accent, textMuted } = this.palette;
-    const baseStyle = `display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 10px; font-weight: 600;`;
+    const baseStyle = `display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 10px; font-size: 11px; font-weight: 600;`;
 
     switch (block.status) {
       case 'pending':
-        return `<span class="text-xs" style="${baseStyle} background: rgba(140, 110, 84, 0.15); color: ${text}; border: 1px solid rgba(140, 110, 84, 0.4);">대기 중</span>`;
+        return `<span style="${baseStyle} background: rgba(140, 110, 84, 0.18); color: ${text}; border: 1px solid rgba(140, 110, 84, 0.45);">대기 중</span>`;
       case 'analyzing':
-        return `<span class="text-xs" style="${baseStyle} background: rgba(59, 130, 246, 0.2); color: ${text}; border: 1px solid rgba(59, 130, 246, 0.4);">분석 중</span>`;
+        return `<span style="${baseStyle} background: rgba(59, 130, 246, 0.2); color: ${text}; border: 1px solid rgba(59, 130, 246, 0.45);">분석 중</span>`;
       case 'error':
-        return `<span class="text-xs" style="${baseStyle} background: rgba(239, 68, 68, 0.2); color: ${text}; border: 1px solid rgba(239, 68, 68, 0.4);">재시도 필요</span>`;
+        return `<span style="${baseStyle} background: rgba(239, 68, 68, 0.2); color: ${text}; border: 1px solid rgba(239, 68, 68, 0.45);">재시도 필요</span>`;
       case 'completed':
         if (block.result && block.result.진위) {
           const verdictColors = this.getVerdictColors(block.result.진위);
-          return `<span class="text-xs" style="${baseStyle} background: ${verdictColors.badgeBackground}; color: ${verdictColors.badgeText}; border: 1px solid ${verdictColors.badgeBorder};">${block.result.진위}</span>`;
+          return `<span style="${baseStyle} background: ${verdictColors.badgeBackground}; color: ${verdictColors.badgeText}; border: 1px solid ${verdictColors.badgeBorder};">${block.result.진위}</span>`;
         }
-        return `<span class="text-xs" style="${baseStyle} background: rgba(16, 185, 129, 0.18); color: ${text}; border: 1px solid rgba(16, 185, 129, 0.45);">완료</span>`;
+        return `<span style="${baseStyle} background: rgba(16, 185, 129, 0.18); color: ${text}; border: 1px solid rgba(16, 185, 129, 0.45);">완료</span>`;
       default:
-        return `<span class="text-xs" style="${baseStyle} background: rgba(107, 114, 128, 0.25); color: ${textMuted}; border: 1px solid rgba(107, 114, 128, 0.35);">알 수 없음</span>`;
+        return `<span style="${baseStyle} background: rgba(107, 114, 128, 0.25); color: ${textMuted}; border: 1px solid rgba(107, 114, 128, 0.35);">알 수 없음</span>`;
     }
   }
 
@@ -966,6 +1149,7 @@ class AnalysisPanel {
               color: ${text};
               padding: 8px 16px;
               border-radius: 6px;
+              font-size: 14px;
               border: 1px solid ${primaryButtonBorder};
               cursor: pointer;
               transition: all 0.2s;
@@ -977,11 +1161,12 @@ class AnalysisPanel {
         case 'analyzing':
           actionButtons = `
             <div style="display: flex; gap: 8px; align-items: center; width: 100%;">
-              <div class="text-xs" style="
+              <div style="
                 background: ${primaryButtonHover};
                 color: ${text};
                 padding: 8px 12px;
                 border-radius: 6px;
+                font-size: 12px;
                 flex: 1;
                 display: flex;
                 align-items: center;
@@ -1008,11 +1193,12 @@ class AnalysisPanel {
                   white-space: nowrap;
                 ">${this.getTransparentProgress(progress)}</span>
               </div>
-              <button class="stop-analysis-btn text-sm" data-id="${id}" style="
+              <button class="stop-analysis-btn" data-id="${id}" style="
                 background: ${dangerButtonBase};
                 color: ${text};
                 padding: 8px 12px;
                 border-radius: 6px;
+                font-size: 14px;
                 border: 1px solid rgba(239, 68, 68, 0.5);
                 cursor: pointer;
                 transition: all 0.2s;
@@ -1027,11 +1213,12 @@ class AnalysisPanel {
           actionButtons = `
             <div style="display: flex; flex-direction: column; gap: 8px; width: 100%;">
               <div style="display: flex; align-items: center; gap: 8px; width: 100%;">
-                <button class="analyze-current-btn text-sm" data-id="${id}" style="
+                <button class="analyze-current-btn" data-id="${id}" style="
                   background: ${primaryButtonBase};
                   color: ${text};
                   padding: 8px 16px;
                   border-radius: 6px;
+                  font-size: 14px;
                   border: 1px solid ${primaryButtonBorder};
                   cursor: pointer;
                   transition: all 0.2s;
@@ -1039,11 +1226,12 @@ class AnalysisPanel {
                   backdrop-filter: blur(8px);
                 " onmouseover="this.style.background='${primaryButtonHover}'" onmouseout="this.style.background='${primaryButtonBase}'">다시 분석</button>
                 ${isCompleted && !block.crossVerified && id !== 'current' ? `
-                <button class="cross-verify-btn text-sm" data-id="${id}" style="
+                <button class="cross-verify-btn" data-id="${id}" style="
                   background: linear-gradient(135deg, rgba(99, 102, 241, 0.3), rgba(139, 92, 246, 0.3));
                   color: ${text};
                   padding: 8px 16px;
                   border-radius: 6px;
+                  font-size: 14px;
                   border: 1px solid rgba(99, 102, 241, 0.5);
                   cursor: pointer;
                   transition: all 0.2s;
@@ -1053,11 +1241,12 @@ class AnalysisPanel {
                 " onmouseover="this.style.background='linear-gradient(135deg, rgba(99, 102, 241, 0.4), rgba(139, 92, 246, 0.4))'" onmouseout="this.style.background='linear-gradient(135deg, rgba(99, 102, 241, 0.3), rgba(139, 92, 246, 0.3))'">🔄 교차 검증</button>
                 ` : ''}
                 ${isCompleted && block.crossVerified && id !== 'current' ? `
-                <button disabled class="text-sm" style="
+                <button disabled style="
                   background: rgba(99, 102, 241, 0.15);
                   color: rgba(242, 242, 242, 0.5);
                   padding: 8px 16px;
                   border-radius: 6px;
+                  font-size: 14px;
                   border: 1px solid rgba(99, 102, 241, 0.3);
                   cursor: not-allowed;
                   flex: 1;
@@ -1066,11 +1255,12 @@ class AnalysisPanel {
                 ">✓ 검증 완료</button>
                 ` : ''}
                 ${isCompleted ? `
-                <button class="open-site-btn text-sm" data-id="${id}" data-url="${encodedUrl}" style="
+                <button class="open-site-btn" data-id="${id}" data-url="${encodedUrl}" style="
                   background: ${neutralButtonBase};
                   color: ${text};
                   padding: 8px 18px;
                   border-radius: 6px;
+                  font-size: 14px;
                   border: 1px solid ${border};
                   cursor: pointer;
                   transition: all 0.2s;
@@ -1082,12 +1272,13 @@ class AnalysisPanel {
               </div>
               ${isCompleted && verdictColors && block.crossVerified && id !== 'current' ? `
                 <div style="display: flex; gap: 8px; align-items: center;">
-                  <div class="text-xs" style="
+                  <div style="
                     background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(139, 92, 246, 0.2));
                     color: rgba(99, 102, 241, 1);
                     border: 1px solid rgba(99, 102, 241, 0.4);
                     padding: 6px 12px;
                     border-radius: 12px;
+                    font-size: 11px;
                     font-weight: 600;
                     text-align: center;
                     white-space: nowrap;
@@ -1154,11 +1345,12 @@ class AnalysisPanel {
         actionButtons = `
           <div style="display: flex; gap: 8px; align-items: center; width: 100%;">
             ${isCompleted ? `
-            <button class="open-site-btn text-sm" data-id="${id}" data-url="${encodedUrl}" style="
+            <button class="open-site-btn" data-id="${id}" data-url="${encodedUrl}" style="
               background: ${neutralButtonBase};
               color: ${text};
               padding: 8px 16px;
               border-radius: 6px;
+              font-size: 14px;
               border: 1px solid ${border};
               cursor: pointer;
               transition: all 0.2s;
@@ -1168,11 +1360,12 @@ class AnalysisPanel {
             " onmouseover="this.style.background='${neutralButtonHover}'" onmouseout="this.style.background='${neutralButtonBase}'">사이트 이동</button>
             ` : ''}
             <div style="position: relative; flex: 1; z-index: 10;">
-              <button class="more-menu-btn text-sm" data-id="${id}" style="
+              <button class="more-menu-btn" data-id="${id}" style="
                 background: ${primaryButtonBase};
                 color: ${text};
                 padding: 8px 16px;
                 border-radius: 6px;
+                font-size: 14px;
                 border: 1px solid ${primaryButtonBorder};
                 cursor: pointer;
                 transition: all 0.2s;
@@ -1197,12 +1390,13 @@ class AnalysisPanel {
                 backdrop-filter: blur(12px);
               ">
                 ${isCompleted && !block.crossVerified ? `
-                <button class="cross-verify-btn text-sm" data-id="${id}" style="
+                <button class="cross-verify-btn" data-id="${id}" style="
                   background: transparent;
                   color: ${text};
                   padding: 10px 14px;
                   border: none;
                   border-radius: 6px;
+                  font-size: 14px;
                   cursor: pointer;
                   width: 100%;
                   text-align: left;
@@ -1210,23 +1404,25 @@ class AnalysisPanel {
                 " onmouseover="this.style.background='${this.hexToRgba(accent, 0.2)}'" onmouseout="this.style.background='transparent'">🔄 교차 검증</button>
                 ` : ''}
                 ${isCompleted && block.crossVerified ? `
-                <button disabled class="text-sm" style="
+                <button disabled style="
                   background: transparent;
                   color: ${this.hexToRgba(text, 0.5)};
                   padding: 10px 14px;
                   border: none;
                   border-radius: 6px;
+                  font-size: 14px;
                   cursor: not-allowed;
                   width: 100%;
                   text-align: left;
                 ">✓ 검증 완료</button>
                 ` : ''}
-                <button class="compare-btn text-sm" data-id="${id}" style="
+                <button class="compare-btn" data-id="${id}" style="
                   background: transparent;
                   color: ${text};
                   padding: 10px 14px;
                   border: none;
                   border-radius: 6px;
+                  font-size: 14px;
                   cursor: pointer;
                   width: 100%;
                   text-align: left;
@@ -1234,7 +1430,7 @@ class AnalysisPanel {
                 " onmouseover="this.style.background='${this.hexToRgba(accent, 0.2)}'" onmouseout="this.style.background='transparent'">${isCompareMode ? '✕ 비교 취소' : '⚖️ 비교하기'}</button>
               </div>
             </div>
-            <button class="delete-btn text-sm" data-id="${id}" style="
+            <button class="delete-btn" data-id="${id}" style="
               background: ${dangerButtonBase};
               color: ${text};
               padding: 8px 12px;
@@ -1325,14 +1521,48 @@ class AnalysisPanel {
             overflow: hidden;
             width: 100%;
           ">${this.escapeHtml(title)}</h3>
-          <div class="text-xs" style="
+          <div style="
             color: ${textMuted};
+            font-size: 12px;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
             width: 100%;
           ">${this.escapeHtml(url)}</div>
         </div>
+
+        ${status === 'analyzing' ? `
+        <div id="typing-area-${id}" style="
+          border-top: 1px solid ${border};
+          padding: 12px 16px;
+          background: ${this.blendColors(surface, base, 0.18)};
+          height: 84px;
+          overflow: hidden;
+          transition: all 0.3s ease;
+        ">
+          <div style="
+            font-size: 12px;
+            color: ${textMuted};
+            margin-bottom: 8px;
+            font-weight: 500;
+          ">실시간 분석 결과</div>
+          <div id="typing-content-${id}" style="
+            font-size: 12px;
+            line-height: 1.45;
+            color: ${text};
+            word-wrap: break-word;
+            height: 48px;
+            overflow-y: auto;
+            overflow-x: hidden;
+            border: 1px solid ${border};
+            border-radius: 6px;
+            padding: 8px;
+            background: rgba(13, 13, 13, 0.45);
+            scrollbar-width: thin;
+            scrollbar-color: ${border} rgba(13, 13, 13, 0.3);
+          " onscroll="this.setAttribute('data-user-scrolled', this.scrollTop < this.scrollHeight - this.offsetHeight ? 'true' : 'false')">분석을 시작합니다...</div>
+        </div>
+        ` : ''}
 
         <div style="
           border-top: 1px solid ${borderColor};
@@ -1440,6 +1670,38 @@ class AnalysisPanel {
   }
 
   // 블록 내부 타이핑 영역 업데이트
+  updateBlockTypingArea(blockId, newText) {
+    const typingContent = document.getElementById(`typing-content-${blockId}`);
+    if (!typingContent) return;
+
+    // 처음 타이핑이 시작되면 "분석을 시작합니다..." 텍스트 제거
+    if (typingContent.textContent === '분석을 시작합니다...') {
+      typingContent.innerHTML = '';
+      this.typingBuffer = this.typingBuffer || new Map();
+      this.typingBuffer.set(blockId, '');
+      // 사용자 스크롤 상태 초기화
+      typingContent.setAttribute('data-user-scrolled', 'false');
+    }
+
+    // 기존 누적된 텍스트에 새 텍스트 추가
+    if (!this.typingBuffer) this.typingBuffer = new Map();
+    const currentBuffer = this.typingBuffer.get(blockId) || '';
+    const updatedBuffer = currentBuffer + newText;
+    this.typingBuffer.set(blockId, updatedBuffer);
+    
+    // 사용자가 수동으로 스크롤했는지 확인
+    const userScrolled = typingContent.getAttribute('data-user-scrolled') === 'true';
+    
+    // 커서와 함께 텍스트 업데이트 (일반 텍스트로, 줄바꿈은 자동)
+  const cursorColor = this.palette.accent;
+  typingContent.innerHTML = `${this.escapeHtml(updatedBuffer)}<span class="typing-cursor" style="display: inline-block; width: 1px; height: 12px; background: ${cursorColor}; margin-left: 2px; animation: blink 1.2s infinite;"></span>`;
+    
+    // 사용자가 수동 스크롤하지 않았으면 자동으로 맨 아래로 스크롤
+    if (!userScrolled) {
+      typingContent.scrollTop = typingContent.scrollHeight;
+    }
+  }
+
   // 현재 뉴스 설정
   setCurrentNews(title, url, content) {
     // URL 정규화
@@ -2167,25 +2429,21 @@ class AnalysisPanel {
       return;
     }
     
+    // 현재 뉴스 상태를 analyzing으로 변경
+    this.currentNews.status = 'analyzing';
+    this.currentNews.progress = '🔍 분석 시작...';
+    this.currentNews.result = null;
+    this.currentNews.crossVerified = false;
+    this.currentNews.crossVerifiedResult = null;
+    this.currentNews.firstAnalysis = null;
+    
+    // UI 즉시 업데이트 (분석 중 상태 표시)
+    this.updatePanel();
+    
     // 현재 뉴스를 분석 목록에 추가 (즉시 analyzing 상태로)
     console.log('[analyzeCurrentNews] 새 뉴스 추가 중... (analyzing 상태로)');
     const newId = this.addNews(this.currentNews.title, this.currentNews.url, this.currentNews.content, true);
     console.log('[analyzeCurrentNews] 추가된 ID:', newId);
-    
-    // currentNews를 새로 생성된 블록으로 대체 (중복 표시 방지)
-    const newBlock = this.newsBlocks.get(newId);
-    if (newBlock) {
-      this.currentNews = {
-        id: 'current',
-        title: newBlock.title,
-        url: newBlock.url,
-        content: newBlock.content,
-        status: newBlock.status,
-        result: newBlock.result,
-        progress: newBlock.progress,
-        timestamp: newBlock.timestamp
-      };
-    }
     
     // 분석 시작
     console.log('[analyzeCurrentNews] 분석 시작 호출');
@@ -2644,43 +2902,6 @@ class AnalysisPanel {
 
 ---
 
-### **[매우 중요] Chain of Thought (단계적 사고) 방식으로 분석하세요**
-다음 순서로 체계적으로 생각하고 분석하세요:
-
-**1단계: 기사 구조 이해하기**
-- 먼저 기사의 제목, 리드문, 본문의 핵심 주장을 파악하세요
-- 이 기사가 어떤 유형인지 식별하세요 (속보/일반기사/칼럼/인터뷰/탐사보도)
-- 전체적인 구조와 흐름을 이해하세요
-
-**2단계: 근거 확인하기**
-- 기사에서 제시된 각 주장을 나열하세요
-- 각 주장을 뒷받침하는 근거가 무엇인지 찾으세요
-- 근거의 출처가 명확한지, 구체적인지 평가하세요
-
-**3단계: 논리적 연결 검토하기**
-- 근거와 결론 사이의 논리적 연결을 확인하세요
-- 중간에 생략된 추론 단계가 있는지 찾으세요
-- 논리적 비약이나 오류가 있는지 검토하세요
-
-**4단계: 표현 방식 평가하기**
-- 감정을 자극하는 단어들을 찾아보세요
-- 단정적이거나 선동적인 표현을 찾으세요
-- 객관적 서술과 주관적 의견을 구분하세요
-
-**5단계: 오탐 방지 점검하기**
-- 전문 용어를 모호한 표현으로 오인하지 않았는지 확인하세요
-- 기사 장르의 특성을 고려했는지 점검하세요
-- 인용문과 기자의 주장을 혼동하지 않았는지 확인하세요
-
-**6단계: 종합 판단하기**
-- 발견한 문제점들 중 가장 심각한 것을 식별하세요
-- 중요도에 따라 최종 판단을 내리세요
-- 판단의 근거를 명확히 정리하세요
-
-이 6단계 과정을 **"분석진행"** 필드에 자세히 기록하세요. 각 단계에서 무엇을 발견했고 어떻게 판단했는지 투명하게 보여주세요.
-
----
-
 ### **[매우 중요] 절대적 분석 원칙: 외부 정보 및 사전 지식 사용 금지**
 1. **오직 텍스트만 분석:** 제공된 기사 원문 **내부의 정보만을** 분석 대상으로 삼습니다.  
 2. **사전 지식 금지:** 당신의 학습 데이터에 저장된 **인물, 직책, 사건, 날짜 등 어떠한 외부 정보도 판단의 근거로 사용해서는 안 됩니다.**  
@@ -2784,6 +3005,35 @@ class AnalysisPanel {
 
 ---
 
+## 단계별 분석 절차
+
+다음 순서로 체계적으로 분석하십시오:
+
+**1단계: 기사 구조 파악**
+- 제목, 리드문, 본문의 핵심 주장 3가지 추출
+- 기사 장르 식별 (속보/일반기사/칼럼/인터뷰)
+
+**2단계: 근거 확인**
+- 각 주장마다 제시된 근거 나열
+- 출처의 명확성 평가 (구체적 이름/기관 vs 모호한 표현)
+
+**3단계: 논리 구조 분석**
+- 근거 → 결론 사이의 논리적 연결 확인
+- 생략된 단계가 있는지 점검
+
+**4단계: 표현 분석**
+- 감정 유발 단어 개수 세기
+- 단정적 표현의 적절성 판단
+
+**5단계: 오탐 체크리스트 확인**
+- 위의 5가지 체크리스트 항목 재확인
+
+**6단계: 종합 판단**
+- 가장 심각한 문제점 식별
+- 해당하는 중요도에 따라 최종 판단
+
+---
+
 ## 자기 검증 절차 (Self-consistency Check)
 
 판단을 내리기 전, 당신은 다음을 반드시 점검해야 합니다:
@@ -2821,7 +3071,7 @@ JSON 외의 문장, 주석, 코드 블록(\\\`\\\`\\\`json\\\`\\\`\\\`)은 절�
     "instruction": "해당 기사는 진위 여부 판단을 목적으로 수집되었습니다. 조건에 따라 종합적으로 검토 후 판단 결과를 진위, 근거, 분석 항목으로 나누어 출력하세요.",
     "input": "주어진 텍스트 전체",
     "output": {
-      "분석진행": "**반드시 다음 6단계를 각각 구체적으로 작성하세요:**<br><br>## 1단계: 기사 구조 이해하기<br>- 제목: [제목 내용]<br>- 핵심 주장 3가지: 1) ... 2) ... 3) ...<br>- 기사 장르: [속보/일반기사/칼럼/인터뷰 등]<br><br>## 2단계: 근거 확인하기<br>- 주장1의 근거: ...<br>- 주장2의 근거: ...<br>- 출처의 명확성: [구체적/모호함]<br><br>## 3단계: 논리적 연결 검토하기<br>- 근거→결론 연결: [논리적/비약적]<br>- 생략된 단계: ...<br><br>## 4단계: 표현 방식 평가하기<br>- 감정 유발 단어: [목록]<br>- 단정적 표현: [있음/없음]<br><br>## 5단계: 오탐 방지 점검하기<br>- 전문 용어 확인: ...<br>- 기사 장르 특성 고려: ...<br>- 문맥 재확인: ...<br><br>## 6단계: 종합 판단하기<br>- 발견된 주요 문제: ...<br>- 최종 판단 근거: ...",
+      "분석진행": "기사 구조 파악 → 근거 확인 → 논리 구조 분석 → 표현 분석 → 오탐 체크리스트 확인 → 종합 판단 순으로 단계별 추론 과정을 작성",
       "진위": "판단 결과('가짜 뉴스' / '가짜일 가능성이 높은 뉴스' / '가짜일 가능성이 있는 뉴스' / '부분적으로 신뢰할 수 있는 뉴스' / '진짜 뉴스')",
       "근거": "탐지된 중요도 조건을 <br> 태그로 반드시 구분하여 나열. 예: 1-1. 기사 내 명백한 내용상 모순<br>3-2. 감정적 표현 사용<br>4-1. 제목과 내용의 불일치",
       "분석": "위 근거들을 종합하여 기사의 어떤 부분이 왜 문제인지 혹은 신뢰할 수 있는지를 구체적으로 설명. 문단 구분이 필요하면 <br><br> 사용",
@@ -2846,43 +3096,6 @@ ${articleContent}
 
 ## 역할
 당신은 두 개의 뉴스 기사를 비교분석하는 **'뉴스 비교분석 전문가'**입니다. 주어진 두 뉴스의 관점, 내용, 신뢰도를 객관적으로 비교하여 분석해주세요.
-
----
-
-### **[매우 중요] Chain of Thought (단계적 사고) 방식으로 비교분석하세요**
-다음 순서로 체계적으로 생각하고 비교하세요:
-
-**1단계: 기본 정보 파악하기**
-- 두 기사가 다루는 주제와 사건을 명확히 파악하세요
-- 각 기사의 발행 시점, 매체, 장르(속보/심층기사/칼럼 등)를 확인하세요
-- 두 기사가 실제로 같은 사건을 다루는지 확인하세요
-
-**2단계: 핵심 주장 비교하기**
-- 기사1의 핵심 주장 3가지를 추출하세요
-- 기사2의 핵심 주장 3가지를 추출하세요
-- 두 기사의 주장이 일치하는지, 다른지, 상충되는지 비교하세요
-
-**3단계: 사실 정보 대조하기**
-- 날짜, 인명, 수치, 인용문 등 구체적 사실을 비교하세요
-- 일치하는 사실과 다른 사실을 명확히 구분하세요
-- 차이가 있다면 그 차이가 중요한지 평가하세요
-
-**4단계: 관점과 프레이밍 분석하기**
-- 같은 사실을 어떤 관점에서 서술하는지 비교하세요
-- 긍정적/부정적 프레이밍의 차이를 식별하세요
-- 의도적인 편향이나 왜곡이 있는지 확인하세요
-
-**5단계: 근거와 출처 비교하기**
-- 각 기사가 제시한 근거의 질과 양을 비교하세요
-- 출처의 명확성과 신뢰성을 비교하세요
-- 어느 기사가 더 많은 근거를 제시하는지 평가하세요
-
-**6단계: 종합 신뢰도 판단하기**
-- 위 5단계의 분석을 종합하세요
-- 두 기사 간의 주요 차이점과 일치점을 정리하세요
-- 전체적인 신뢰도와 일관성을 평가하세요
-
-이 6단계 과정을 **"분석진행"** 필드에 자세히 기록하세요. 각 단계에서 무엇을 발견했고 어떻게 비교했는지 투명하게 보여주세요.
 
 ---
 
@@ -2911,11 +3124,11 @@ ${articleContent}
     "instruction": "해당 기사들은 비교분석을 목적으로 수집되었습니다. 두 기사의 내용 일치성, 관점 차이, 신뢰도를 종합적으로 검토 후 판단 결과를 출력하세요.",
     "input": "주어진 두 뉴스 텍스트 전체",
     "output": {
-      "분석진행": "**반드시 다음 6단계를 각각 구체적으로 작성하세요:**<br><br>## 1단계: 기본 정보 파악하기<br>- 기사1 주제: ...<br>- 기사2 주제: ...<br>- 같은 사건 다루는가: [예/아니오]<br><br>## 2단계: 핵심 주장 비교하기<br>- 기사1 핵심 주장: 1) ... 2) ... 3) ...<br>- 기사2 핵심 주장: 1) ... 2) ... 3) ...<br>- 일치/상충 여부: ...<br><br>## 3단계: 사실 정보 대조하기<br>- 일치하는 사실: ...<br>- 다른 사실: ...<br>- 차이의 중요성: [높음/낮음]<br><br>## 4단계: 관점과 프레이밍 분석하기<br>- 기사1 관점: ...<br>- 기사2 관점: ...<br>- 편향 여부: ...<br><br>## 5단계: 근거와 출처 비교하기<br>- 기사1 출처: ...<br>- 기사2 출처: ...<br>- 신뢰성 비교: ...<br><br>## 6단계: 종합 신뢰도 판단하기<br>- 주요 차이점: ...<br>- 일관성 평가: ...<br>- 최종 판단: ...",
+      "분석진행": "비교분석을 위한 단계별 추론 과정을 작성",
       "진위": "두 뉴스의 비교분석 결과 ('일치하는 진짜 뉴스' / '일부 차이가 있지만 신뢰할 수 있는 뉴스' / '상당한 차이가 있어 주의가 필요한 뉴스' / '상충되는 내용으로 추가 검증 필요')",
-      "근거": "두 뉴스 간의 일치점과 차이점을 <br> 태그로 구분하여 나열",
-      "분석": "두 뉴스의 비교분석 결과를 상세히 서술. 차이가 왜 발생했는지, 어느 기사가 더 신뢰할 수 있는지 설명",
-      "요약": "두 뉴스의 핵심 내용과 주요 차이점을 간결하게 요약. 여러 차이점이 있으면 <br>로 구분"
+      "근거": "두 뉴스 간의 일치점과 차이점을 나열",
+      "분석": "두 뉴스의 비교분석 결과를 상세히 서술",
+      "요약": "두 뉴스의 핵심 내용과 주요 차이점을 간결하게 요약"
     }
   }
 ]
@@ -2971,7 +3184,7 @@ ${comparisonContent}
     "instruction": "아래는 동일한 기사에 대한 1차 AI 분석 결과입니다. 이를 참고하되, 원문을 독립적으로 재평가하여 최종 판단을 내리세요.",
     "input": "원문 기사 + 1차 분석 결과",
     "output": {
-      "분석진행": "**반드시 다음 단계를 각각 구체적으로 작성하세요:**<br><br>## 1단계: 1차 분석 검토<br>- 1차 분석의 진위: ...<br>- 1차 분석의 근거: ...<br>- 근거의 실존 여부: [원문에 존재함/존재하지 않음]<br><br>## 2단계: 원문 재평가<br>- 독립적으로 다시 읽은 인상: ...<br>- 1차 분석이 놓친 부분: ...<br>- 새로 발견한 맥락: ...<br><br>## 3단계: 오류/과도한 판단 확인<br>- 1차 분석의 오류: [있음/없음]<br>- 과도한 판단: [있음/없음]<br>- False Positive 가능성: ...<br><br>## 4단계: 최종 판단 도출<br>- 1차 분석과의 차이: ...<br>- 최종 판단 근거: ...<br>- 신뢰도: ...",
+      "분석진행": "1차 분석 검토 → 원문 재평가 → 오류/과도한 판단 확인 → 최종 판단 도출 과정을 단계별로 작성",
       "진위": "교차 검증 후 최종 판단 ('가짜 뉴스' / '가짜일 가능성이 높은 뉴스' / '가짜일 가능성이 있는 뉴스' / '부분적으로 신뢰할 수 있는 뉴스' / '진짜 뉴스')",
       "근거": "최종 판단의 근거를 나열",
       "분석": "1차 분석의 타당성 검토 + 원문 재평가 결과를 종합하여 상세히 설명",
@@ -3040,7 +3253,7 @@ ${articleContent}
     "instruction": "아래는 동일한 기사에 대한 1차 분석 및 ${currentStep - 1}차 검증 결과입니다. 원문을 기준점으로 이들을 재검토하여 더 정확한 판단을 내리세요.",
     "input": "원문 기사 + 1차 분석 결과 + ${currentStep - 1}차 검증 결과",
     "output": {
-      "분석진행": "**반드시 다음 단계를 각각 구체적으로 작성하세요:**<br><br>## 1단계: 원문 재확인<br>- 원문의 핵심 내용: ...<br>- 주요 주장: ...<br><br>## 2단계: 1차 분석 검토<br>- 1차 분석 평가: ...<br>- 타당성: [높음/중간/낮음]<br><br>## 3단계: ${currentStep - 1}차 검증 검토<br>- ${currentStep - 1}차 검증 평가: ...<br>- 개선된 점: ...<br>- 여전히 놓친 부분: ...<br><br>## 4단계: 놓친 맥락 확인<br>- 새로 발견한 맥락: ...<br>- 중요도: ...<br><br>## 5단계: 최종 정밀화된 판단 도출<br>- 종합 평가: ...<br>- 최종 판단 근거: ...",
+      "분석진행": "원문 재확인 → 1차 분석 검토 → ${currentStep - 1}차 검증 검토 → 놓친 맥락 확인 → 최종 정밀화된 판단 도출 과정을 단계별로 작성",
       "진위": "${currentStep}차 재귀적 검증 후 최종 판단 ('가짜 뉴스' / '가짜일 가능성이 높은 뉴스' / '가짜일 가능성이 있는 뉴스' / '부분적으로 신뢰할 수 있는 뉴스' / '진짜 뉴스')",
       "근거": "최종 판단의 근거를 나열",
       "분석": "원문 기반으로 1차 분석과 ${currentStep - 1}차 검증의 타당성 재검토",
@@ -3164,7 +3377,7 @@ ${articleContent}
     panel.style.overflow = 'hidden';
 
     const result = block.result || {};
-    const analysisProcess = result.분석진행 || result.analysisProcess || '';
+    const analysisProcess = result.분석진행 || '';
     const verdict = result.진위 || '분석 결과 없음';
     const evidence = result.근거 || 'N/A';
     const analysis = result.분석 || 'N/A';
@@ -3196,7 +3409,7 @@ ${articleContent}
     const verdictBorder = this.hexToRgba(verdictColors.base, 0.45);
     const summaryBackground = `linear-gradient(135deg, ${this.hexToRgba(accent, 0.18)} 0%, ${this.hexToRgba(surfaceAlt, 0.15)} 100%)`;
     const safeTitle = this.escapeHtml(block.title || '제목 없음');
-    const showProcessButton = Boolean(analysisProcess && analysisProcess.trim() !== '' && analysisProcess !== 'N/A');
+    const showProcessButton = Boolean(analysisProcess && analysisProcess !== 'N/A');
 
     const overlay = document.createElement('div');
     overlay.className = 'analysis-detail-layer';
@@ -3975,12 +4188,11 @@ ${articleContent}
     `;
     
     const result = block.result;
-    const analysisProcess = result.분석진행 || result.analysisProcess || '';
+    const analysisProcess = result.분석진행 || 'N/A';
     const verdict = result.진위 || 'N/A';
     const evidence = result.근거 || 'N/A';
     const analysis = result.분석 || 'N/A';
     const summary = result.요약 || 'N/A';
-    const showProcessButton = Boolean(analysisProcess && analysisProcess.trim() !== '' && analysisProcess !== 'N/A');
     
     // 진위 여부에 따른 색상 가져오기
     const verdictColors = this.getVerdictColors(verdict);
@@ -4087,26 +4299,18 @@ ${articleContent}
           </div>
         </div>` : ''}
         
-        ${showProcessButton ? `
+        ${block.title.includes('[비교분석]') ? `
         <div style="text-align: center; margin-top: 20px;">
           <button class="show-analysis-process" style="
-            background: linear-gradient(135deg, #BF9780 0%, #8C6E54 100%);
+            background: #BF9780;
             color: white;
             border: none;
-            padding: 12px 24px;
+            padding: 10px 20px;
             border-radius: 8px;
-            font-weight: 600;
+            font-weight: 500;
             cursor: pointer;
             transition: all 0.2s;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            display: inline-flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 14px;
-          ">
-            <span style="font-size: 18px;">🧠</span>
-            <span>AI 추론과정 확인</span>
-          </button>
+          ">추론과정 확인</button>
         </div>` : ''}
       </div>
     `;
@@ -4132,17 +4336,6 @@ ${articleContent}
         e.stopPropagation();
         this.showAnalysisProcessModal(analysisProcess);
       });
-      
-      // 호버 효과
-      analysisProcessBtn.addEventListener('mouseenter', () => {
-        analysisProcessBtn.style.transform = 'translateY(-2px)';
-        analysisProcessBtn.style.boxShadow = '0 6px 12px rgba(0, 0, 0, 0.2)';
-      });
-      
-      analysisProcessBtn.addEventListener('mouseleave', () => {
-        analysisProcessBtn.style.transform = 'translateY(0)';
-        analysisProcessBtn.style.boxShadow = '0 4px 6px rgba(0, 0, 0, 0.1)';
-      });
     }
     
     // 호버 효과
@@ -4160,9 +4353,7 @@ ${articleContent}
   showAnalysisProcessModal(analysisProcess) {
     // 마크다운 렌더링 (검은색 텍스트 강제)
     const renderProcessText = (text) => {
-      if (!text || text === 'N/A' || text.trim() === '') {
-        return '<p style="color: #737373; font-style: italic;">추론과정이 기록되지 않았습니다.</p>';
-      }
+      if (!text) return '추론과정이 없습니다.';
       
       // <br> 태그 보호
       let html = text.replace(/<br\s*\/?>/gi, '|||BR_TAG|||');
@@ -4173,18 +4364,13 @@ ${articleContent}
       // 마크다운 변환 (검은색 강제)
       html = html
         // 제목 (## 제목)
-        .replace(/^### (.+)$/gm, '<h3 style="color: #0D0D0D; font-weight: 600; font-size: 15px; margin: 14px 0 8px 0; border-left: 3px solid #BF9780; padding-left: 10px;">$1</h3>')
-        .replace(/^## (.+)$/gm, '<h2 style="color: #0D0D0D; font-weight: 700; font-size: 17px; margin: 16px 0 10px 0; border-bottom: 2px solid #BF9780; padding-bottom: 6px;">$1</h2>')
+        .replace(/^## (.+)$/gm, '<h2 style="color: #0D0D0D; font-weight: 600; font-size: 16px; margin: 12px 0 6px 0; border-bottom: 1px solid #BF9780; padding-bottom: 4px;">$1</h2>')
         // 강조 (**텍스트**)
-        .replace(/\*\*(.+?)\*\*/g, '<strong style="color: #8C6E54; font-weight: 700; background: rgba(191, 151, 128, 0.15); padding: 2px 4px; border-radius: 3px;">$1</strong>')
-        // 단계 표시 강조 (1단계, 2단계 등)
-        .replace(/(\d+단계|Step \d+|단계 \d+)/g, '<span style="color: #BF9780; font-weight: 700; font-size: 15px;">$1</span>')
-        // 화살표 (→) 강조
-        .replace(/(→|->)/g, '<span style="color: #BF9780; font-weight: 700; margin: 0 4px;">→</span>')
+        .replace(/\*\*(.+?)\*\*/g, '<strong style="color: #0D0D0D; font-weight: 600;">$1</strong>')
         // 숫자 리스트
-        .replace(/^(\d+)\.\s*(.+)$/gm, '<li style="margin: 6px 0; padding-left: 8px; list-style: decimal; color: #0D0D0D; line-height: 1.7;">$2</li>')
+        .replace(/^(\d+)\.\s*(.+)$/gm, '<li style="margin: 6px 0; padding-left: 8px; list-style: decimal; color: #0D0D0D;">$2</li>')
         // 일반 리스트
-        .replace(/^-\s*(.+)$/gm, '<li style="margin: 4px 0; padding-left: 8px; list-style: disc; color: #0D0D0D; line-height: 1.6;">$1</li>')
+        .replace(/^-\s*(.+)$/gm, '<li style="margin: 4px 0; padding-left: 8px; list-style: disc; color: #0D0D0D;">$1</li>')
         // 보호했던 <br> 태그 복원
         .replace(/\|\|\|BR_TAG\|\|\|/g, '<br>')
         // 줄바꿈 처리
@@ -4192,9 +4378,9 @@ ${articleContent}
       
       // 리스트 감싸기
       html = html.replace(/(<li[^>]*list-style: decimal;[^>]*>.*?<\/li>(?:\s*\|\|\|NEWLINE\|\|\|\s*<li[^>]*list-style: decimal;[^>]*>.*?<\/li>)*)/gs, 
-        '<ol style="margin: 10px 0; padding-left: 24px; color: #0D0D0D;">$1</ol>');
+        '<ol style="margin: 8px 0; padding-left: 20px; color: #0D0D0D;">$1</ol>');
       html = html.replace(/(<li[^>]*list-style: disc;[^>]*>.*?<\/li>(?:\s*\|\|\|NEWLINE\|\|\|\s*<li[^>]*list-style: disc;[^>]*>.*?<\/li>)*)/gs, 
-        '<ul style="margin: 8px 0; padding-left: 22px; color: #0D0D0D;">$1</ul>');
+        '<ul style="margin: 8px 0; padding-left: 20px; color: #0D0D0D;">$1</ul>');
       
       // NEWLINE 제거 및 변환
       html = html.replace(/(<[ou]l[^>]*>.*?)\|\|\|NEWLINE\|\|\|(?=\s*<li)/gs, '$1');
@@ -4223,57 +4409,49 @@ ${articleContent}
 
     modal.innerHTML = `
       <div class="modal-content" style="
-        background: linear-gradient(135deg, #F5F5F5 0%, #E8E8E8 100%);
-        border-radius: 16px;
-        padding: 36px;
+        background: #E8E8E8;
+        border-radius: 12px;
+        padding: 32px;
         width: 90%;
-        max-width: 800px;
+        max-width: 700px;
         max-height: 85vh;
         overflow-y: auto;
         position: relative;
         transform: scale(0.8);
         transition: transform 0.3s ease;
-        border: 2px solid #BF9780;
-        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+        border: 1px solid #BF9780;
+        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
       ">
         <button class="close-modal" style="
           position: absolute;
           top: 16px;
           right: 16px;
-          background: rgba(191, 151, 128, 0.15);
+          background: none;
           border: none;
-          font-size: 28px;
+          font-size: 24px;
           color: #737373;
           cursor: pointer;
-          width: 40px;
-          height: 40px;
+          width: 32px;
+          height: 32px;
           display: flex;
           align-items: center;
           justify-content: center;
           border-radius: 50%;
-          transition: all 0.2s;
-          font-weight: 300;
+          transition: background-color 0.2s;
         ">&times;</button>
         
-        <div style="margin-bottom: 24px; padding-right: 50px;">
-          <h2 style="color: #0D0D0D; font-size: 22px; font-weight: 700; margin: 0 0 8px 0; display: flex; align-items: center; gap: 10px;">
-            <span style="font-size: 26px;">🧠</span>
-            <span>AI 추론과정 분석</span>
-          </h2>
-          <p style="color: #737373; font-size: 14px; margin: 0; line-height: 1.5;">
-            Chain of Thought 방식으로 단계별 분석 과정을 확인할 수 있습니다.
-          </p>
-        </div>
+        <h2 style="color: #0D0D0D; font-size: 20px; font-weight: bold; margin-bottom: 20px; padding-right: 40px;">
+          🧠 AI 추론과정
+        </h2>
         
         <div style="
-          background: #FFFFFF;
-          border: 2px solid rgba(191, 151, 128, 0.3);
-          border-radius: 12px;
-          padding: 24px;
-          line-height: 1.7;
+          background: #F2F2F2;
+          border: 1px solid #BF9780;
+          border-radius: 8px;
+          padding: 20px;
+          line-height: 1.6;
           color: #0D0D0D;
           font-size: 14px;
-          box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.06);
         ">${renderProcessText(analysisProcess)}</div>
       </div>
     `;
@@ -4303,14 +4481,10 @@ ${articleContent}
 
     // 호버 효과
     closeBtn.addEventListener('mouseenter', () => {
-      closeBtn.style.backgroundColor = 'rgba(191, 151, 128, 0.3)';
-      closeBtn.style.color = '#0D0D0D';
-      closeBtn.style.transform = 'scale(1.1)';
+      closeBtn.style.backgroundColor = '#BF9780';
     });
     closeBtn.addEventListener('mouseleave', () => {
-      closeBtn.style.backgroundColor = 'rgba(191, 151, 128, 0.15)';
-      closeBtn.style.color = '#737373';
-      closeBtn.style.transform = 'scale(1)';
+      closeBtn.style.backgroundColor = 'transparent';
     });
   }
 
@@ -4333,10 +4507,6 @@ ${articleContent}
 
     const floatingBtn = document.createElement('button');
     floatingBtn.id = 'floating-news-analysis-btn';
-    floatingBtn.setAttribute('aria-label', '뉴스 분석 패널 열기');
-    floatingBtn.setAttribute('role', 'button');
-    floatingBtn.setAttribute('tabindex', '0');
-    floatingBtn.setAttribute('title', '뉴스 분석 패널');
     floatingBtn.innerHTML = `
       <div style="
         display: flex;
@@ -4345,7 +4515,7 @@ ${articleContent}
         width: 100%;
         height: 100%;
         position: relative;
-      " aria-hidden="true">
+      ">
         <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="11" cy="11" r="8"></circle>
           <path d="m21 21-4.35-4.35"></path>
@@ -4359,14 +4529,14 @@ ${articleContent}
       width: 64px;
       height: 64px;
       border-radius: 50%;
-      background: linear-gradient(135deg, #BF9780 0%, #F2CEA2 50%, #E6B885 100%);
+      background: linear-gradient(135deg, #4F46E5 0%, #6366F1 50%, #8B5CF6 100%);
       color: white;
       border: none;
       cursor: pointer;
       box-shadow: 
-        0 8px 25px rgba(191, 151, 128, 0.4),
+        0 8px 25px rgba(99, 102, 241, 0.5),
         0 4px 12px rgba(0, 0, 0, 0.2),
-        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        inset 0 1px 0 rgba(255, 255, 255, 0.25);
       z-index: 999998;
       transform: scale(0);
       transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
@@ -4387,21 +4557,21 @@ ${articleContent}
     floatingBtn.addEventListener('mouseenter', () => {
       floatingBtn.style.transform = 'scale(1.15)';
       floatingBtn.style.boxShadow = `
-        0 12px 35px rgba(191, 151, 128, 0.5),
+        0 12px 35px rgba(99, 102, 241, 0.7),
         0 8px 20px rgba(0, 0, 0, 0.25),
-        inset 0 1px 0 rgba(255, 255, 255, 0.3)
+        inset 0 1px 0 rgba(255, 255, 255, 0.35)
       `;
-      floatingBtn.style.background = 'linear-gradient(135deg, #F2CEA2 0%, #E6B885 50%, #F8E3C4 100%)';
+      floatingBtn.style.background = 'linear-gradient(135deg, #6366F1 0%, #8B5CF6 50%, #A78BFA 100%)';
     });
 
     floatingBtn.addEventListener('mouseleave', () => {
       floatingBtn.style.transform = 'scale(1)';
       floatingBtn.style.boxShadow = `
-        0 8px 25px rgba(191, 151, 128, 0.4),
+        0 8px 25px rgba(99, 102, 241, 0.5),
         0 4px 12px rgba(0, 0, 0, 0.2),
-        inset 0 1px 0 rgba(255, 255, 255, 0.2)
+        inset 0 1px 0 rgba(255, 255, 255, 0.25)
       `;
-      floatingBtn.style.background = 'linear-gradient(135deg, #BF9780 0%, #F2CEA2 50%, #E6B885 100%)';
+      floatingBtn.style.background = 'linear-gradient(135deg, #4F46E5 0%, #6366F1 50%, #8B5CF6 100%)';
     });
 
     // 클릭 효과
@@ -4473,14 +4643,6 @@ ${articleContent}
         } else {
           console.error('createEmptyPanel 함수를 찾을 수 없음');
         }
-      }
-    });
-    
-    // 키보드 접근성: Enter 또는 Space 키로 버튼 활성화
-    floatingBtn.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        floatingBtn.click();
       }
     });
   }
@@ -4894,22 +5056,22 @@ ${articleContent}
     
     if (isEdit) {
       modalContent.innerHTML = `
-        <button class="close-modal absolute top-3 right-3 bg-transparent border-0 text-2xl text-text-muted cursor-pointer w-8 h-8 flex items-center justify-center rounded-full transition-colors duration-normal hover:bg-surface-hover">&times;</button>
-        <h2 class="text-2xl font-bold mb-8 text-center text-text-primary">API 키 설정</h2>
-        <div class="flex-1 flex items-center justify-center bg-surface border-2 border-primary rounded-lg p-4 px-5 mb-6">
-          <span class="font-mono text-base text-text-primary">${maskedKey}</span>
+        <button class="close-modal" style="position: absolute; top: 12px; right: 12px; background: none; border: none; font-size: 24px; color: #737373; cursor: pointer; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: background-color 0.2s;">&times;</button>
+        <h2 style="font-size: 24px; font-weight: bold; margin-bottom: 32px; text-align: center; color: #0D0D0D;">API 키 설정</h2>
+        <div style="background: #F2F2F2; border: 2px solid #BF9780; border-radius: 8px; padding: 16px 20px; margin-bottom: 24px; flex: 1; display: flex; align-items: center; justify-content: center;">
+          <span style="font-family: monospace; font-size: 16px; color: #0D0D0D;">${maskedKey}</span>
         </div>
-        <div class="flex gap-3">
-          <button class="edit-key-btn flex-1 bg-primary text-white px-8 py-4 rounded-lg font-semibold border-0 cursor-pointer transition-all duration-normal text-base hover:bg-primary-dark active:scale-95">수정</button>
-          <button class="remove-key-btn flex-1 bg-red-500 text-white px-8 py-4 rounded-lg font-semibold border-0 cursor-pointer transition-all duration-normal text-base hover:bg-red-600 active:scale-95">해제</button>
+        <div style="display: flex; gap: 12px;">
+          <button class="edit-key-btn" style="background: #BF9780; color: white; padding: 16px 32px; border-radius: 8px; font-weight: 600; border: none; cursor: pointer; flex: 1; transition: background-color 0.2s; font-size: 16px;">수정</button>
+          <button class="remove-key-btn" style="background: #E74C3C; color: white; padding: 16px 32px; border-radius: 8px; font-weight: 600; border: none; cursor: pointer; flex: 1; transition: background-color 0.2s; font-size: 16px;">해제</button>
         </div>
       `;
     } else {
       modalContent.innerHTML = `
-        <button class="close-modal absolute top-3 right-3 bg-transparent border-0 text-2xl text-text-muted cursor-pointer w-8 h-8 flex items-center justify-center rounded-full transition-colors duration-normal hover:bg-surface-hover">&times;</button>
-        <h2 class="text-2xl font-bold mb-8 text-center text-text-primary">API 키를 입력하세요</h2>
-        <input class="api-key-input input-field mb-6" type="password" placeholder="Gemini API Key" />
-        <button class="submit-key-btn btn-primary w-full text-base py-4">확인</button>
+        <button class="close-modal" style="position: absolute; top: 12px; right: 12px; background: none; border: none; font-size: 24px; color: #737373; cursor: pointer; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: background-color 0.2s;">&times;</button>
+        <h2 style="font-size: 24px; font-weight: bold; margin-bottom: 32px; text-align: center; color: #0D0D0D;">API 키를 입력하세요</h2>
+        <input class="api-key-input" type="text" placeholder="Gemini API Key" style="border: 2px solid #BF9780; border-radius: 8px; padding: 16px 20px; margin-bottom: 24px; width: 100%; font-size: 16px; box-sizing: border-box; flex: 1; outline: none; transition: border-color 0.2s;" />
+        <button class="submit-key-btn" style="background: #F2CEA2; color: #0D0D0D; padding: 16px 32px; border-radius: 8px; font-weight: 600; border: none; cursor: pointer; width: 100%; transition: background-color 0.2s; font-size: 16px;">확인</button>
       `;
     }
     
@@ -5170,22 +5332,22 @@ ${articleContent}
     
     if (isEdit) {
       modalContent.innerHTML = `
-        <button class="close-modal absolute top-3 right-3 bg-transparent border-0 text-2xl text-text-muted cursor-pointer w-8 h-8 flex items-center justify-center rounded-full transition-colors duration-normal hover:bg-surface-hover">&times;</button>
-        <h2 class="text-2xl font-bold mb-8 text-center text-text-primary">API 키 설정</h2>
-        <div class="flex-1 flex items-center justify-center bg-surface border-2 border-primary rounded-lg p-4 px-5 mb-6">
-          <span class="font-mono text-base text-text-primary">${maskedKey}</span>
+        <button class="close-modal" style="position: absolute; top: 12px; right: 12px; background: none; border: none; font-size: 24px; color: #737373; cursor: pointer; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: background-color 0.2s;">&times;</button>
+        <h2 style="font-size: 24px; font-weight: bold; margin-bottom: 32px; text-align: center; color: #0D0D0D;">API 키 설정</h2>
+        <div style="background: #F2F2F2; border: 2px solid #BF9780; border-radius: 8px; padding: 16px 20px; margin-bottom: 24px; flex: 1; display: flex; align-items: center; justify-content: center;">
+          <span style="font-family: monospace; font-size: 16px; color: #0D0D0D;">${maskedKey}</span>
         </div>
-        <div class="flex gap-3">
-          <button class="edit-key-btn flex-1 bg-primary text-white px-8 py-4 rounded-lg font-semibold border-0 cursor-pointer transition-all duration-normal text-base hover:bg-primary-dark active:scale-95">수정</button>
-          <button class="remove-key-btn flex-1 bg-red-500 text-white px-8 py-4 rounded-lg font-semibold border-0 cursor-pointer transition-all duration-normal text-base hover:bg-red-600 active:scale-95">해제</button>
+        <div style="display: flex; gap: 12px;">
+          <button class="edit-key-btn" style="background: #BF9780; color: white; padding: 16px 32px; border-radius: 8px; font-weight: 600; border: none; cursor: pointer; flex: 1; transition: background-color 0.2s; font-size: 16px;">수정</button>
+          <button class="remove-key-btn" style="background: #E74C3C; color: white; padding: 16px 32px; border-radius: 8px; font-weight: 600; border: none; cursor: pointer; flex: 1; transition: background-color 0.2s; font-size: 16px;">해제</button>
         </div>
       `;
     } else {
       modalContent.innerHTML = `
-        <button class="close-modal absolute top-3 right-3 bg-transparent border-0 text-2xl text-text-muted cursor-pointer w-8 h-8 flex items-center justify-center rounded-full transition-colors duration-normal hover:bg-surface-hover">&times;</button>
-        <h2 class="text-2xl font-bold mb-8 text-center text-text-primary">API 키를 입력하세요</h2>
-        <input class="api-key-input input-field mb-6" type="password" placeholder="Gemini API Key" />
-        <button class="submit-key-btn btn-primary w-full text-base py-4">확인</button>
+        <button class="close-modal" style="position: absolute; top: 12px; right: 12px; background: none; border: none; font-size: 24px; color: #737373; cursor: pointer; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: background-color 0.2s;">&times;</button>
+        <h2 style="font-size: 24px; font-weight: bold; margin-bottom: 32px; text-align: center; color: #0D0D0D;">API 키를 입력하세요</h2>
+        <input class="api-key-input" type="text" placeholder="Gemini API Key" style="border: 2px solid #BF9780; border-radius: 8px; padding: 16px 20px; margin-bottom: 24px; width: 100%; font-size: 16px; box-sizing: border-box; flex: 1; outline: none; transition: border-color 0.2s;" />
+        <button class="submit-key-btn" style="background: #F2CEA2; color: #0D0D0D; padding: 16px 32px; border-radius: 8px; font-weight: 600; border: none; cursor: pointer; width: 100%; transition: background-color 0.2s; font-size: 16px;">확인</button>
       `;
     }
     
@@ -5195,133 +5357,6 @@ ${articleContent}
     this.attachModalEvents(modal, modalContent, savedApiKey);
     
     return modal;
-  }
-
-  // 에러 모달 표시
-  showErrorModal(errorMessage, blockId) {
-    // 기존 에러 모달이 있으면 제거
-    const existingModal = document.querySelector('.error-modal-overlay');
-    if (existingModal) {
-      existingModal.remove();
-    }
-
-    const modal = document.createElement('div');
-    modal.className = 'error-modal-overlay';
-    modal.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(13, 13, 13, 0.8);
-      backdrop-filter: blur(4px);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 999999;
-      opacity: 0;
-      transition: opacity 0.3s ease;
-    `;
-
-    const modalContent = document.createElement('div');
-    modalContent.className = 'error-modal-content';
-    modalContent.style.cssText = `
-      background: linear-gradient(135deg, #F2F2F2 0%, #E0E0E0 100%);
-      border-radius: 16px;
-      padding: 40px;
-      width: 90%;
-      max-width: 560px;
-      position: relative;
-      display: flex;
-      flex-direction: column;
-      transform: scale(0.8);
-      transition: all 0.3s ease;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-    `;
-
-    // 에러 타입 분석
-    const isNetworkError = errorMessage.includes('fetch') || errorMessage.includes('network');
-    const isParsingError = errorMessage.includes('JSON') || errorMessage.includes('parse');
-    const is429Error = errorMessage.includes('429') || errorMessage.includes('RESOURCE_EXHAUSTED');
-    
-    let errorTitle = 'API 호출 오류';
-    let errorIcon = '⚠️';
-    let errorDescription = '알 수 없는 오류가 발생했습니다.';
-    
-    if (is429Error) {
-      errorTitle = 'API 할당량 초과';
-      errorIcon = '🚫';
-      errorDescription = 'Gemini API 호출 할당량이 초과되었습니다. 잠시 후 다시 시도해주세요.';
-    } else if (isNetworkError) {
-      errorTitle = '네트워크 연결 오류';
-      errorIcon = '🌐';
-      errorDescription = '인터넷 연결을 확인하거나 잠시 후 다시 시도해주세요.';
-    } else if (isParsingError) {
-      errorTitle = 'JSON 파싱 오류';
-      errorIcon = '📄';
-      errorDescription = 'AI 응답 형식이 올바르지 않습니다. 자동으로 3회 재시도했으나 모두 실패했습니다.';
-    }
-
-    modalContent.innerHTML = `
-      <button class="close-error-modal absolute top-3 right-3 bg-transparent border-0 text-2xl text-gray-600 cursor-pointer w-8 h-8 flex items-center justify-center rounded-full transition-all duration-200 hover:bg-gray-300 hover:text-gray-800">&times;</button>
-      
-      <div class="flex flex-col items-center mb-6">
-        <div class="text-6xl mb-4">${errorIcon}</div>
-        <h2 class="text-2xl font-bold text-center text-gray-800">${errorTitle}</h2>
-      </div>
-      
-      <div class="mb-6">
-        <p class="text-base text-gray-700 text-center mb-4">${errorDescription}</p>
-        
-        <details class="mt-4 bg-white rounded-lg p-4 cursor-pointer">
-          <summary class="font-semibold text-gray-800 text-sm mb-2 cursor-pointer select-none">기술적 세부정보</summary>
-          <pre class="text-xs text-gray-600 mt-2 overflow-auto max-h-40 bg-gray-50 p-3 rounded border border-gray-200 font-mono whitespace-pre-wrap break-words">${errorMessage}</pre>
-        </details>
-      </div>
-      
-      <div class="flex gap-3">
-        <button class="retry-btn flex-1 bg-gradient-primary text-white px-6 py-3 rounded-lg font-semibold border-0 cursor-pointer transition-all duration-200 text-base hover:opacity-90 active:scale-95 shadow-md">다시 시도</button>
-        <button class="close-btn flex-1 bg-gray-400 text-white px-6 py-3 rounded-lg font-semibold border-0 cursor-pointer transition-all duration-200 text-base hover:bg-gray-500 active:scale-95 shadow-md">닫기</button>
-      </div>
-    `;
-
-    modal.appendChild(modalContent);
-    document.body.appendChild(modal);
-
-    // 애니메이션 시작
-    requestAnimationFrame(() => {
-      modal.style.opacity = '1';
-      modalContent.style.transform = 'scale(1)';
-    });
-
-    const closeModal = () => {
-      modal.style.opacity = '0';
-      modalContent.style.transform = 'scale(0.8)';
-      setTimeout(() => modal.remove(), 300);
-    };
-
-    // 닫기 버튼
-    modalContent.querySelector('.close-error-modal').addEventListener('click', closeModal);
-    modalContent.querySelector('.close-btn').addEventListener('click', closeModal);
-
-    // 배경 클릭으로 닫기
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) closeModal();
-    });
-
-    // 다시 시도 버튼
-    modalContent.querySelector('.retry-btn').addEventListener('click', () => {
-      closeModal();
-      
-      // 분석 재시작
-      if (blockId) {
-        const block = blockId === 'current' ? this.currentNews : this.newsBlocks.get(blockId);
-        if (block) {
-          console.log('분석 재시도:', blockId);
-          this.proceedWithAnalysis(blockId, block);
-        }
-      }
-    });
   }
 
   // 자동 열기 설정 가져오기
@@ -5887,6 +5922,94 @@ ${articleContent}
     this.updateNewsStatus(blockId, 'analyzing', null, progress);
   }
 
+  // 스트리밍 결과 업데이트 (실시간 타이핑 효과)
+  updateStreamingResult(blockId, partialResult) {
+    console.log('updateStreamingResult 호출됨:', { blockId, partialResult });
+    
+    this.streamingResults.set(blockId, partialResult);
+    
+    // 스트리밍 내용에 따라 진행상황 메시지 업데이트
+    let progressMessage = 'AI가 실시간으로 분석 중...';
+    
+    if (partialResult) {
+      if (partialResult.includes('진위') || partialResult.includes('참') || partialResult.includes('거짓')) {
+        progressMessage = '진위 판정 결과 작성 중...';
+      } else if (partialResult.includes('근거') || partialResult.includes('증거')) {
+        progressMessage = '검증 근거 정리 중...';
+      } else if (partialResult.includes('분석') || partialResult.includes('의견')) {
+        progressMessage = '상세 분석 의견 작성 중...';
+      }
+    }
+    
+    this.updateNewsStatus(blockId, 'analyzing', null, progressMessage);
+    
+    // 새로운 인라인 타이핑 업데이트
+    if (partialResult) {
+      this.updateBlockTypingArea(blockId, partialResult);
+    }
+  }
+
+  // 기존 스트리밍 컨테이너 점진적 업데이트
+  updateExistingStreamingContainer(container, newData) {
+    console.log('기존 컨테이너 업데이트:', newData);
+    
+    Object.keys(newData).forEach(stepName => {
+      const content = newData[stepName];
+      
+      // 해당 단계의 기존 블록 찾기
+      const existingStepBlock = container.querySelector(`[data-step="${stepName}"]`);
+      
+      if (existingStepBlock) {
+        // 기존 단계 업데이트
+        const textElement = existingStepBlock.querySelector('.step-content');
+        if (textElement && content !== '분석 중...') {
+          // 타이핑 효과로 업데이트
+          this.updateStepContent(textElement, content);
+        }
+      } else {
+        // 새로운 단계 추가
+        this.createStepBlock(container, stepName, content, null);
+      }
+    });
+  }
+
+  // 단계 컨텐츠 업데이트
+  updateStepContent(element, newContent) {
+    // 기존 타이핑 효과 중단
+    const existingInterval = element.dataset.typingInterval;
+    if (existingInterval) {
+      clearInterval(parseInt(existingInterval));
+    }
+    
+    // 새로운 내용으로 타이핑 효과 시작
+    let index = 0;
+    element.textContent = '';
+    
+    const cursor = document.createElement('span');
+    cursor.textContent = '|';
+    cursor.style.cssText = `
+      animation: blink 1s infinite;
+      color: #BF9780;
+      font-weight: normal;
+      margin-left: 1px;
+    `;
+    element.appendChild(cursor);
+
+    const typeInterval = setInterval(() => {
+      if (index < newContent.length) {
+        element.textContent = newContent.substring(0, index + 1);
+        element.appendChild(cursor);
+        index++;
+      } else {
+        clearInterval(typeInterval);
+        cursor.remove();
+        delete element.dataset.typingInterval;
+      }
+    }, this.typingSpeed);
+    
+    element.dataset.typingInterval = typeInterval;
+  }
+
   // 텍스트에서 진위, 근거, 분석 키워드 감지하여 파싱
   parseAnalysisText(text) {
     console.log('원본 텍스트:', text);
@@ -5977,6 +6100,38 @@ ${articleContent}
     if (this.abortControllers.has(blockId)) {
       this.abortControllers.delete(blockId);
     }
+    
+    // 실시간 모달이 열려있다면 완료 메시지 표시 후 닫기
+    const streamingModal = document.querySelector(`[data-streaming-modal="${blockId}"]`);
+    if (streamingModal) {
+      const contentDiv = streamingModal.querySelector('.streaming-content');
+      if (contentDiv) {
+        contentDiv.innerHTML = `
+          ${this.streamingResults.get(blockId) || ''}
+          <div style="margin-top: 20px; padding: 15px; background: #e7f5e7; border: 1px solid #4CAF50; border-radius: 8px; color: #2e7d32; text-align: center;">
+            <strong>분석이 완료되었습니다!</strong><br>
+            <small style="color: #666;">분석 기록에서 결과를 확인할 수 있습니다</small>
+          </div>
+        `;
+        
+        // 스크롤을 맨 아래로
+        const scrollContainer = contentDiv.parentElement;
+        scrollContainer.scrollTop = scrollContainer.scrollHeight;
+      }
+      
+      // 1.5초 후 모달 자동 닫기
+      setTimeout(() => {
+        streamingModal.style.opacity = '0';
+        setTimeout(() => {
+          streamingModal.remove();
+          
+          // 닫힌 후 해당 뉴스 블록에 완료 표시 강조 (잠깐 깜빡임)
+          this.highlightCompletedBlock(blockId);
+        }, 300);
+      }, 1500);
+    }
+    
+    this.streamingResults.delete(blockId); // 스트리밍 결과 정리
 
     const { normalizedResult, verdict, suspicious } = this.parseAnalysisResult(result);
     
@@ -6072,15 +6227,7 @@ ${articleContent}
       return;
     }
     
-    // 재시도 카운터 초기화 (첫 검증 시)
-    if (!block.verificationRetryCount) {
-      block.verificationRetryCount = 0;
-    }
-    
-    // 성공 시 재시도 카운터 리셋
-    block.verificationRetryCount = 0;
-    
-    // 현재 단계 증가 (성공한 경우에만)
+    // 현재 단계 증가
     block.currentVerificationStep = (block.currentVerificationStep || 0) + 1;
     
     // 검증 결과를 히스토리에 저장
@@ -6243,6 +6390,8 @@ ${articleContent}
 
   // 분석 실패 (외부에서 호출)
   failAnalysis(blockId, error) {
+    this.streamingResults.delete(blockId); // 스트리밍 결과 정리
+    
     // 429 에러 (할당량 초과) 체크
     const is429Error = error && (
       error.includes('429') || 
@@ -6250,16 +6399,25 @@ ${articleContent}
       error.includes('Resource exhausted')
     );
     
-    // JSON 파싱 에러 체크
-    const isJsonParsingError = error && (
-      error.includes('JSON 파싱 오류') ||
-      error.includes('Unexpected non-whitespace') ||
-      error.includes('JSON.parse') ||
-      error.includes('SyntaxError')
-    );
-    
-    // 교차 검증 중 에러 발생 시 재시도 로직
-    if (this.crossVerificationInProgress.has(blockId)) {
+    // 교차 검증 중 429 에러 발생 시 처리
+    if (is429Error && this.crossVerificationInProgress.has(blockId)) {
+      console.warn('[교차 검증] API 할당량 초과, 진행 중단:', blockId);
+      
+      // 교차 검증 진행 상태 제거
+      this.crossVerificationInProgress.delete(blockId);
+      
+      // 타임아웃 제거
+      if (this.analysisTimeouts.has(blockId)) {
+        clearTimeout(this.analysisTimeouts.get(blockId));
+        this.analysisTimeouts.delete(blockId);
+      }
+      
+      // AbortController 제거
+      if (this.abortControllers.has(blockId)) {
+        this.abortControllers.delete(blockId);
+      }
+      
+      // 현재까지의 검증 결과가 있으면 그것을 사용, 없으면 1차 분석 유지
       let block;
       if (blockId === 'current') {
         block = this.currentNews;
@@ -6267,79 +6425,22 @@ ${articleContent}
         block = this.newsBlocks.get(blockId);
       }
       
-      if (block) {
-        // 재시도 카운터 초기화
-        if (!block.verificationRetryCount) {
-          block.verificationRetryCount = 0;
-        }
+      if (block && block.verificationHistory && block.verificationHistory.length > 0) {
+        // 마지막 성공한 검증 결과 사용
+        const lastSuccessfulResult = block.verificationHistory[block.verificationHistory.length - 1];
+        block.crossVerified = true;
+        block.crossVerifiedResult = lastSuccessfulResult;
+        block.result = lastSuccessfulResult;
+        block.status = 'completed';
         
-        const maxRetries = 3; // 최대 재시도 횟수
-        const currentStep = block.currentVerificationStep + 1;
+        const errorMsg = `⚠️ API 할당량 초과로 ${block.currentVerificationStep}/${this.crossVerificationDepth}차까지만 검증 완료. 마지막 검증 결과를 사용합니다.`;
+        console.warn(errorMsg);
         
-        // JSON 파싱 에러 또는 일반 에러 시 재시도 (429 제외)
-        if (!is429Error && block.verificationRetryCount < maxRetries) {
-          block.verificationRetryCount++;
-          const retryDelay = 1500 * block.verificationRetryCount; // 1.5초, 3초, 4.5초
-          
-          console.warn(`[교차 검증] ${currentStep}차 검증 에러 발생, ${block.verificationRetryCount}/${maxRetries}회 재시도 예정 (${retryDelay}ms 후)`);
-          console.warn(`[교차 검증] 에러 내용:`, error);
-          
-          // 사용자에게 재시도 알림
-          const retryMessage = `⚠️ ${currentStep}차 검증 중 오류 발생\n🔄 ${block.verificationRetryCount}/${maxRetries}회 재시도 중... (${retryDelay/1000}초 후)`;
-          this.updateNewsStatus(blockId, 'analyzing', null, retryMessage);
-          
-          // 딜레이 후 재시도 (단계 증가 없이)
-          setTimeout(() => {
-            const abortController = this.abortControllers.get(blockId);
-            console.log(`[교차 검증] ${currentStep}차 검증 재시도 시작`);
-            this.performRecursiveVerification(blockId, block, abortController);
-          }, retryDelay);
-          
-          return; // 에러 처리 중단, 재시도로 대체
-        }
-        
-        // 최대 재시도 횟수 초과 또는 429 에러
-        if (block.verificationRetryCount >= maxRetries) {
-          console.error(`[교차 검증] ${currentStep}차 검증 최대 재시도 횟수 초과 (${maxRetries}회)`);
-          error = `❌ ${currentStep}차 검증 실패: 최대 재시도 횟수(${maxRetries}회) 초과\n\n마지막 오류: ${error}`;
-        }
-      }
-      
-      // 429 에러 처리 (기존 로직)
-      if (is429Error) {
-        console.warn('[교차 검증] API 할당량 초과, 진행 중단:', blockId);
-        
-        // 교차 검증 진행 상태 제거
-        this.crossVerificationInProgress.delete(blockId);
-        
-        // 타임아웃 제거
-        if (this.analysisTimeouts.has(blockId)) {
-          clearTimeout(this.analysisTimeouts.get(blockId));
-          this.analysisTimeouts.delete(blockId);
-        }
-        
-        // AbortController 제거
-        if (this.abortControllers.has(blockId)) {
-          this.abortControllers.delete(blockId);
-        }
-        
-        if (block && block.verificationHistory && block.verificationHistory.length > 0) {
-          // 마지막 성공한 검증 결과 사용
-          const lastSuccessfulResult = block.verificationHistory[block.verificationHistory.length - 1];
-          block.crossVerified = true;
-          block.crossVerifiedResult = lastSuccessfulResult;
-          block.result = lastSuccessfulResult;
-          block.status = 'completed';
-          
-          const errorMsg = `⚠️ API 할당량 초과로 ${block.currentVerificationStep}/${this.crossVerificationDepth}차까지만 검증 완료. 마지막 검증 결과를 사용합니다.`;
-          console.warn(errorMsg);
-          
-          this.updateNewsStatus(blockId, 'completed', lastSuccessfulResult, errorMsg);
-          return;
-        } else {
-          // 검증 히스토리가 없으면 1차 분석 결과 유지
-          error = `⚠️ API 할당량 초과로 교차 검증 실패. 1차 분석 결과를 유지합니다.\n\n원본 오류: ${error}`;
-        }
+        this.updateNewsStatus(blockId, 'completed', lastSuccessfulResult, errorMsg);
+        return;
+      } else {
+        // 검증 히스토리가 없으면 1차 분석 결과 유지
+        error = `⚠️ API 할당량 초과로 교차 검증 실패. 1차 분석 결과를 유지합니다.\n\n원본 오류: ${error}`;
       }
     }
     
@@ -6979,9 +7080,108 @@ if (!document.getElementById('analysis-panel-animations')) {
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
     }
+    
+    /* 타이핑 영역 스크롤바 스타일 */
+    div[id^="typing-content-"]::-webkit-scrollbar {
+      width: 6px;
+    }
+    
+    div[id^="typing-content-"]::-webkit-scrollbar-track {
+      background: rgba(13, 13, 13, 0.3);
+      border-radius: 3px;
+    }
+    
+    div[id^="typing-content-"]::-webkit-scrollbar-thumb {
+      background: #BF9780;
+      border-radius: 3px;
+    }
+    
+    div[id^="typing-content-"]::-webkit-scrollbar-thumb:hover {
+      background: #A67E69;
+    }
   `;
   document.head.appendChild(style);
 }
 
 // Export for use in content_script.js
 window.AnalysisPanel = AnalysisPanel;
+
+// 테스트용 함수들
+window.testStreamingAnalysis = function() {
+  const panel = window.analysisPanel || new AnalysisPanel();
+  
+  // 테스트 데이터
+  const testData = {
+    '진위': '이 뉴스는 사실로 확인되었습니다.',
+    '근거': '여러 신뢰할 만한 언론사에서 동일한 내용을 보도했으며, 공식 기관의 발표와 일치합니다.',
+    '분석': '종합적으로 검토한 결과, 해당 뉴스의 내용은 팩트체크를 통과했습니다.'
+  };
+  
+  console.log('스트리밍 분석 테스트 시작');
+  panel.startStreamingAnalysis('current', testData);
+};
+
+window.testStreamingText = function() {
+  const panel = window.analysisPanel || new AnalysisPanel();
+  
+  // 실제 스트리밍 형태의 텍스트 테스트
+  const streamingText = '"진위": "이 뉴스는 사실입니다"';
+  
+  console.log('스트리밍 텍스트 테스트 시작');
+  panel.updateStreamingResult('current', streamingText);
+};
+
+window.testProgressiveStreaming = function() {
+  const panel = window.analysisPanel || new AnalysisPanel();
+  
+  // 점진적 스트리밍 시뮬레이션
+  setTimeout(() => {
+    console.log('1단계: 진위 분석 시작');
+    panel.updateStreamingResult('current', '{"진위": ""}');
+  }, 500);
+  
+  setTimeout(() => {
+    console.log('2단계: 진위 결과');
+    panel.updateStreamingResult('current', '{"진위": "이 뉴스는 사실로 확인되었습니다."}');
+  }, 1500);
+  
+  setTimeout(() => {
+    console.log('3단계: 근거 분석 시작');
+    panel.updateStreamingResult('current', '{"진위": "이 뉴스는 사실로 확인되었습니다.", "근거": ""}');
+  }, 3000);
+  
+  setTimeout(() => {
+    console.log('4단계: 근거 결과');
+    panel.updateStreamingResult('current', '{"진위": "이 뉴스는 사실로 확인되었습니다.", "근거": "여러 신뢰할 만한 출처에서 확인되었습니다."}');
+  }, 4500);
+  
+  setTimeout(() => {
+    console.log('5단계: 분석 시작');
+    panel.updateStreamingResult('current', '{"진위": "이 뉴스는 사실로 확인되었습니다.", "근거": "여러 신뢰할 만한 출처에서 확인되었습니다.", "분석": ""}');
+  }, 6000);
+  
+  setTimeout(() => {
+    console.log('6단계: 최종 분석 완료');
+    panel.updateStreamingResult('current', '{"진위": "이 뉴스는 사실로 확인되었습니다.", "근거": "여러 신뢰할 만한 출처에서 확인되었습니다.", "분석": "종합적으로 검토한 결과 신뢰할 만한 뉴스입니다."}');
+  }, 7500);
+};
+
+window.testMessyJsonStreaming = function() {
+  const panel = window.analysisPanel || new AnalysisPanel();
+  
+  // 지저분한 JSON 형식들 테스트
+  const messyFormats = [
+    '"진위":"사실입니다",',
+    '{"진위": "사실입니다", "근거":',
+    '"근거": "출처가 확실합니다"}',
+    '진위: 사실입니다',
+    "'분석': '신뢰할 만합니다'"
+  ];
+  
+  messyFormats.forEach((format, index) => {
+    setTimeout(() => {
+      console.log(`지저분한 JSON 테스트 ${index + 1}:`, format);
+      panel.updateStreamingResult('current', format);
+    }, index * 2000);
+  });
+};

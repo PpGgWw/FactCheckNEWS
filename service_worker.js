@@ -136,8 +136,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         
         const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`;
         
-        // Gemini API 호출 함수 실행 (재시도 로직 포함)
-        callGeminiAPIWithRetry(message.prompt, API_URL, sender.tab.id, message.blockId, 3)
+        // Gemini API 호출 함수 실행 (스트리밍 방식)
+        callGeminiAPIWithStreaming(message.prompt, API_URL, sender.tab.id, message.blockId)
           .then(result => {
             console.log("--- Gemini API 스트리밍 완료 ---");
             console.log(result);
@@ -156,13 +156,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           .catch(error => {
             console.error("Gemini API 처리 중 오류 발생:", error);
             
-            // 오류를 content script로 전송 (blockId 포함, 에러 상세 포함)
+            // 오류를 content script로 전송 (blockId 포함)
             if (isChromeApiAvailable()) {
               chrome.tabs.sendMessage(sender.tab.id, {
                 action: "displayError",
                 error: error.message,
-                blockId: message.blockId,
-                errorType: "API_ERROR"
+                blockId: message.blockId
               }).catch(sendError => console.error("오류 전송 실패:", sendError));
             }
             
@@ -180,49 +179,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 /**
- * Gemini API를 재시도 로직과 함께 호출하는 래퍼 함수
- * @param {string} prompt - API에 전송할 전체 프롬프트
- * @param {string} apiUrl - API URL (키 포함)
- * @param {number} tabId - 탭 ID
- * @param {string} blockId - 블록 ID
- * @param {number} maxRetries - 최대 재시도 횟수 (기본값: 3)
- * @returns {Promise<string>} - API가 반환한 최종 텍스트 결과
- */
-async function callGeminiAPIWithRetry(prompt, apiUrl, tabId, blockId, maxRetries = 3) {
-  let lastError = null;
-  
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      console.log(`API 호출 시도 ${attempt}/${maxRetries}`);
-      
-      // 재시도 시 지수 백오프 대기 (첫 시도는 대기 없음)
-      if (attempt > 1) {
-        const delayMs = Math.pow(2, attempt - 2) * 1000; // 1초, 2초, 4초
-        console.log(`${delayMs}ms 대기 후 재시도...`);
-        await new Promise(resolve => setTimeout(resolve, delayMs));
-      }
-      
-      const result = await callGeminiAPIWithStreaming(prompt, apiUrl, tabId, blockId);
-      console.log(`API 호출 성공 (시도 ${attempt}/${maxRetries})`);
-      return result;
-      
-    } catch (error) {
-      lastError = error;
-      console.error(`API 호출 실패 (시도 ${attempt}/${maxRetries}):`, error.message);
-      
-      // 마지막 시도가 아니면 계속 재시도
-      if (attempt < maxRetries) {
-        console.log('재시도 예정...');
-      }
-    }
-  }
-  
-  // 모든 재시도 실패 시 에러 던지기
-  console.error(`모든 재시도 실패 (${maxRetries}회 시도)`);
-  throw new Error(`API 호출 ${maxRetries}회 재시도 실패: ${lastError.message}`);
-}
-
-/**
  * Gemini API를 스트리밍 방식으로 호출하는 비동기 함수
  * @param {string} prompt - API에 전송할 전체 프롬프트
  * @param {string} apiUrl - API URL (키 포함)
@@ -232,25 +188,7 @@ async function callGeminiAPIWithRetry(prompt, apiUrl, tabId, blockId, maxRetries
  */
 async function callGeminiAPIWithStreaming(prompt, apiUrl, tabId, blockId) {
   try {
-    // 분석 단계별 진행 상황 전송 (간소화)
-    const sendProgressUpdate = (message) => {
-      if (isChromeApiAvailable()) {
-        try {
-          chrome.tabs.sendMessage(tabId, {
-            action: "updateAnalysisProgress",
-            blockId: blockId,
-            message: message
-          }).catch(error => {
-            console.error("진행상황 메시지 전송 오류:", error);
-          });
-        } catch (error) {
-          console.error("Chrome API 호출 오류:", error);
-        }
-      }
-    };
-    
-    sendProgressUpdate('📡 API 요청 중...');
-    
+    // 일단 기본 API로 전체 결과를 받은 후 타이핑 효과 시뮬레이션
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
@@ -270,17 +208,57 @@ async function callGeminiAPIWithStreaming(prompt, apiUrl, tabId, blockId) {
       throw new Error(`API 요청 실패: ${response.status} ${response.statusText} - ${JSON.stringify(errorBody)}`);
     }
 
-    sendProgressUpdate('📥 응답 분석 중...');
-    
     const data = await response.json();
     const fullResult = extractNewsContent(data);
     
-    sendProgressUpdate('✅ 분석 완료!');
+    // 결과를 문자 단위로 타이핑 효과 시뮬레이션
+    if (typeof fullResult === 'string') {
+      await simulateTypingEffect(fullResult, tabId, blockId);
+    } else {
+      // JSON 객체인 경우 문자열로 변환 후 타이핑 효과
+      const resultString = JSON.stringify(fullResult, null, 2);
+      await simulateTypingEffect(resultString, tabId, blockId);
+    }
 
     return fullResult;
   } catch (error) {
     console.error("API 호출 오류:", error);
     throw error;
+  }
+}
+
+/**
+ * 타이핑 효과 시뮬레이션
+ * @param {string} text - 전체 텍스트
+ * @param {number} tabId - 탭 ID
+ * @param {string} blockId - 블록 ID
+ */
+async function simulateTypingEffect(text, tabId, blockId) {
+  const words = text.split(' ');
+  let currentText = '';
+  
+  for (let i = 0; i < words.length; i++) {
+    currentText += (i > 0 ? ' ' : '') + words[i];
+    
+    // 단어별로 실시간 업데이트 전송 (안전 확인)
+    if (isChromeApiAvailable()) {
+      try {
+        chrome.tabs.sendMessage(tabId, {
+          action: "updateStreamingResult",
+          partialResult: currentText,
+          blockId: blockId
+        }).catch(error => {
+          console.error("스트리밍 메시지 전송 오류:", error);
+        });
+      } catch (error) {
+        console.error("Chrome API 호출 오류:", error);
+        break; // 오류 발생 시 루프 중단
+      }
+    }
+    
+    // 타이핑 속도 조절 (단어 길이에 따라 조절)
+    const delay = Math.max(50, Math.min(200, words[i].length * 20));
+    await new Promise(resolve => setTimeout(resolve, delay));
   }
 }
 
