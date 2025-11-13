@@ -634,6 +634,33 @@ function sendToGeminiForAnalysis(blockId) {
 
 ---
 
+### **[매우 중요] Chain of Thought (단계적 사고) 방식으로 분석하세요**
+다음 순서로 체계적으로 생각하며 분석하세요:
+
+**1단계: 기사 이해하기**
+- 먼저 기사의 제목, 도입부, 본문의 핵심 주장을 파악하세요
+- 이 기사가 어떤 유형인지(속보/일반기사/칼럼 등) 생각해보세요
+
+**2단계: 근거 찾기**
+- 기사에서 제시된 각 주장을 나열하세요
+- 각 주장을 뒷받침하는 근거가 무엇인지 찾으세요
+
+**3단계: 논리 검토하기**
+- 근거와 결론 사이의 논리적 연결을 확인하세요
+- 중간에 생략된 추론 단계가 있는지 찾으세요
+
+**4단계: 표현 평가하기**
+- 감정을 자극하는 단어들을 찾아보세요
+- 단정적이거나 선동적인 표현을 찾으세요
+
+**5단계: 종합 판단하기**
+- 위 4단계의 분석을 종합하세요
+- 가장 심각한 문제점을 식별하세요
+
+이 과정을 **"분석진행"** 필드에 기록하세요.
+
+---
+
 ### **[매우 중요] 절대적 분석 원칙: 외부 정보 및 사전 지식 사용 금지**
 1.  **오직 텍스트만 분석:** 당신은 제공된 기사 원문 **내부의 정보만을** 분석 대상으로 삼아야 합니다.
 2.  **사전 지식 금지:** 당신의 학습 데이터에 저장된 **인물, 직책, 사건, 날짜 등 어떠한 외부 정보도 판단의 근거로 사용해서는 안 됩니다.** 예를 들어, 기사에 나온 인물의 직책이나 특정 사건의 발생 시점이 당신의 지식과 다르더라도, 그것을 '오류'나 '가짜 뉴스'의 근거로 삼아서는 **절대 안 됩니다.**
@@ -783,11 +810,16 @@ if (isChromeApiAvailable()) {
           }
         }
       } else if (message.action === "displayError" && message.error) {
-        // 오류를 패널에 표시
+        // 오류를 패널에 표시 및 에러 모달 표시
         const panel = document.getElementById('news-analysis-panel');
         if (panel && panel.__analysisPanel) {
           console.log('분석 오류 표시:', message.blockId, message.error);
           panel.__analysisPanel.failAnalysis(message.blockId, message.error);
+          
+          // API 오류인 경우 에러 모달 표시
+          if (message.errorType === 'API_ERROR') {
+            panel.__analysisPanel.showErrorModal(message.error, message.blockId);
+          }
         }
       } else if (message.action === "updateStreamingResult" && message.partialResult) {
         // 실시간 스트리밍 결과 업데이트

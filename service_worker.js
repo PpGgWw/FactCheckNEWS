@@ -136,8 +136,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         
         const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`;
         
-        // Gemini API 호출 함수 실행 (스트리밍 방식)
-        callGeminiAPIWithStreaming(message.prompt, API_URL, sender.tab.id, message.blockId)
+        // Gemini API 호출 함수 실행 (재시도 로직 포함)
+        callGeminiAPIWithRetry(message.prompt, API_URL, sender.tab.id, message.blockId, 3)
           .then(result => {
             console.log("--- Gemini API 스트리밍 완료 ---");
             console.log(result);
@@ -156,12 +156,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           .catch(error => {
             console.error("Gemini API 처리 중 오류 발생:", error);
             
-            // 오류를 content script로 전송 (blockId 포함)
+            // 오류를 content script로 전송 (blockId 포함, 에러 상세 포함)
             if (isChromeApiAvailable()) {
               chrome.tabs.sendMessage(sender.tab.id, {
                 action: "displayError",
                 error: error.message,
-                blockId: message.blockId
+                blockId: message.blockId,
+                errorType: "API_ERROR"
               }).catch(sendError => console.error("오류 전송 실패:", sendError));
             }
             
@@ -177,6 +178,49 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true; 
   }
 });
+
+/**
+ * Gemini API를 재시도 로직과 함께 호출하는 래퍼 함수
+ * @param {string} prompt - API에 전송할 전체 프롬프트
+ * @param {string} apiUrl - API URL (키 포함)
+ * @param {number} tabId - 탭 ID
+ * @param {string} blockId - 블록 ID
+ * @param {number} maxRetries - 최대 재시도 횟수 (기본값: 3)
+ * @returns {Promise<string>} - API가 반환한 최종 텍스트 결과
+ */
+async function callGeminiAPIWithRetry(prompt, apiUrl, tabId, blockId, maxRetries = 3) {
+  let lastError = null;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`API 호출 시도 ${attempt}/${maxRetries}`);
+      
+      // 재시도 시 지수 백오프 대기 (첫 시도는 대기 없음)
+      if (attempt > 1) {
+        const delayMs = Math.pow(2, attempt - 2) * 1000; // 1초, 2초, 4초
+        console.log(`${delayMs}ms 대기 후 재시도...`);
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+      }
+      
+      const result = await callGeminiAPIWithStreaming(prompt, apiUrl, tabId, blockId);
+      console.log(`API 호출 성공 (시도 ${attempt}/${maxRetries})`);
+      return result;
+      
+    } catch (error) {
+      lastError = error;
+      console.error(`API 호출 실패 (시도 ${attempt}/${maxRetries}):`, error.message);
+      
+      // 마지막 시도가 아니면 계속 재시도
+      if (attempt < maxRetries) {
+        console.log('재시도 예정...');
+      }
+    }
+  }
+  
+  // 모든 재시도 실패 시 에러 던지기
+  console.error(`모든 재시도 실패 (${maxRetries}회 시도)`);
+  throw new Error(`API 호출 ${maxRetries}회 재시도 실패: ${lastError.message}`);
+}
 
 /**
  * Gemini API를 스트리밍 방식으로 호출하는 비동기 함수

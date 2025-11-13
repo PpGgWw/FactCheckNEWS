@@ -2676,6 +2676,43 @@ class AnalysisPanel {
 
 ---
 
+### **[매우 중요] Chain of Thought (단계적 사고) 방식으로 분석하세요**
+다음 순서로 체계적으로 생각하고 분석하세요:
+
+**1단계: 기사 구조 이해하기**
+- 먼저 기사의 제목, 리드문, 본문의 핵심 주장을 파악하세요
+- 이 기사가 어떤 유형인지 식별하세요 (속보/일반기사/칼럼/인터뷰/탐사보도)
+- 전체적인 구조와 흐름을 이해하세요
+
+**2단계: 근거 확인하기**
+- 기사에서 제시된 각 주장을 나열하세요
+- 각 주장을 뒷받침하는 근거가 무엇인지 찾으세요
+- 근거의 출처가 명확한지, 구체적인지 평가하세요
+
+**3단계: 논리적 연결 검토하기**
+- 근거와 결론 사이의 논리적 연결을 확인하세요
+- 중간에 생략된 추론 단계가 있는지 찾으세요
+- 논리적 비약이나 오류가 있는지 검토하세요
+
+**4단계: 표현 방식 평가하기**
+- 감정을 자극하는 단어들을 찾아보세요
+- 단정적이거나 선동적인 표현을 찾으세요
+- 객관적 서술과 주관적 의견을 구분하세요
+
+**5단계: 오탐 방지 점검하기**
+- 전문 용어를 모호한 표현으로 오인하지 않았는지 확인하세요
+- 기사 장르의 특성을 고려했는지 점검하세요
+- 인용문과 기자의 주장을 혼동하지 않았는지 확인하세요
+
+**6단계: 종합 판단하기**
+- 발견한 문제점들 중 가장 심각한 것을 식별하세요
+- 중요도에 따라 최종 판단을 내리세요
+- 판단의 근거를 명확히 정리하세요
+
+이 6단계 과정을 **"분석진행"** 필드에 자세히 기록하세요. 각 단계에서 무엇을 발견했고 어떻게 판단했는지 투명하게 보여주세요.
+
+---
+
 ### **[매우 중요] 절대적 분석 원칙: 외부 정보 및 사전 지식 사용 금지**
 1. **오직 텍스트만 분석:** 제공된 기사 원문 **내부의 정보만을** 분석 대상으로 삼습니다.  
 2. **사전 지식 금지:** 당신의 학습 데이터에 저장된 **인물, 직책, 사건, 날짜 등 어떠한 외부 정보도 판단의 근거로 사용해서는 안 됩니다.**  
@@ -2779,35 +2816,6 @@ class AnalysisPanel {
 
 ---
 
-## 단계별 분석 절차
-
-다음 순서로 체계적으로 분석하십시오:
-
-**1단계: 기사 구조 파악**
-- 제목, 리드문, 본문의 핵심 주장 3가지 추출
-- 기사 장르 식별 (속보/일반기사/칼럼/인터뷰)
-
-**2단계: 근거 확인**
-- 각 주장마다 제시된 근거 나열
-- 출처의 명확성 평가 (구체적 이름/기관 vs 모호한 표현)
-
-**3단계: 논리 구조 분석**
-- 근거 → 결론 사이의 논리적 연결 확인
-- 생략된 단계가 있는지 점검
-
-**4단계: 표현 분석**
-- 감정 유발 단어 개수 세기
-- 단정적 표현의 적절성 판단
-
-**5단계: 오탐 체크리스트 확인**
-- 위의 5가지 체크리스트 항목 재확인
-
-**6단계: 종합 판단**
-- 가장 심각한 문제점 식별
-- 해당하는 중요도에 따라 최종 판단
-
----
-
 ## 자기 검증 절차 (Self-consistency Check)
 
 판단을 내리기 전, 당신은 다음을 반드시 점검해야 합니다:
@@ -2845,7 +2853,7 @@ JSON 외의 문장, 주석, 코드 블록(\\\`\\\`\\\`json\\\`\\\`\\\`)은 절�
     "instruction": "해당 기사는 진위 여부 판단을 목적으로 수집되었습니다. 조건에 따라 종합적으로 검토 후 판단 결과를 진위, 근거, 분석 항목으로 나누어 출력하세요.",
     "input": "주어진 텍스트 전체",
     "output": {
-      "분석진행": "기사 구조 파악 → 근거 확인 → 논리 구조 분석 → 표현 분석 → 오탐 체크리스트 확인 → 종합 판단 순으로 단계별 추론 과정을 작성",
+      "분석진행": "Chain of Thought 방식으로 6단계 분석 과정을 자세히 기록하세요. 1단계(기사 구조 이해) → 2단계(근거 확인) → 3단계(논리적 연결 검토) → 4단계(표현 방식 평가) → 5단계(오탐 방지 점검) → 6단계(종합 판단). 각 단계에서 무엇을 발견했고 어떻게 생각했는지 투명하게 보여주세요.",
       "진위": "판단 결과('가짜 뉴스' / '가짜일 가능성이 높은 뉴스' / '가짜일 가능성이 있는 뉴스' / '부분적으로 신뢰할 수 있는 뉴스' / '진짜 뉴스')",
       "근거": "탐지된 중요도 조건을 <br> 태그로 반드시 구분하여 나열. 예: 1-1. 기사 내 명백한 내용상 모순<br>3-2. 감정적 표현 사용<br>4-1. 제목과 내용의 불일치",
       "분석": "위 근거들을 종합하여 기사의 어떤 부분이 왜 문제인지 혹은 신뢰할 수 있는지를 구체적으로 설명. 문단 구분이 필요하면 <br><br> 사용",
@@ -2870,6 +2878,43 @@ ${articleContent}
 
 ## 역할
 당신은 두 개의 뉴스 기사를 비교분석하는 **'뉴스 비교분석 전문가'**입니다. 주어진 두 뉴스의 관점, 내용, 신뢰도를 객관적으로 비교하여 분석해주세요.
+
+---
+
+### **[매우 중요] Chain of Thought (단계적 사고) 방식으로 비교분석하세요**
+다음 순서로 체계적으로 생각하고 비교하세요:
+
+**1단계: 기본 정보 파악하기**
+- 두 기사가 다루는 주제와 사건을 명확히 파악하세요
+- 각 기사의 발행 시점, 매체, 장르(속보/심층기사/칼럼 등)를 확인하세요
+- 두 기사가 실제로 같은 사건을 다루는지 확인하세요
+
+**2단계: 핵심 주장 비교하기**
+- 기사1의 핵심 주장 3가지를 추출하세요
+- 기사2의 핵심 주장 3가지를 추출하세요
+- 두 기사의 주장이 일치하는지, 다른지, 상충되는지 비교하세요
+
+**3단계: 사실 정보 대조하기**
+- 날짜, 인명, 수치, 인용문 등 구체적 사실을 비교하세요
+- 일치하는 사실과 다른 사실을 명확히 구분하세요
+- 차이가 있다면 그 차이가 중요한지 평가하세요
+
+**4단계: 관점과 프레이밍 분석하기**
+- 같은 사실을 어떤 관점에서 서술하는지 비교하세요
+- 긍정적/부정적 프레이밍의 차이를 식별하세요
+- 의도적인 편향이나 왜곡이 있는지 확인하세요
+
+**5단계: 근거와 출처 비교하기**
+- 각 기사가 제시한 근거의 질과 양을 비교하세요
+- 출처의 명확성과 신뢰성을 비교하세요
+- 어느 기사가 더 많은 근거를 제시하는지 평가하세요
+
+**6단계: 종합 신뢰도 판단하기**
+- 위 5단계의 분석을 종합하세요
+- 두 기사 간의 주요 차이점과 일치점을 정리하세요
+- 전체적인 신뢰도와 일관성을 평가하세요
+
+이 6단계 과정을 **"분석진행"** 필드에 자세히 기록하세요. 각 단계에서 무엇을 발견했고 어떻게 비교했는지 투명하게 보여주세요.
 
 ---
 
@@ -2898,11 +2943,11 @@ ${articleContent}
     "instruction": "해당 기사들은 비교분석을 목적으로 수집되었습니다. 두 기사의 내용 일치성, 관점 차이, 신뢰도를 종합적으로 검토 후 판단 결과를 출력하세요.",
     "input": "주어진 두 뉴스 텍스트 전체",
     "output": {
-      "분석진행": "비교분석을 위한 단계별 추론 과정을 작성",
+      "분석진행": "Chain of Thought 방식으로 6단계 비교분석 과정을 자세히 기록하세요. 1단계(기본 정보 파악) → 2단계(핵심 주장 비교) → 3단계(사실 정보 대조) → 4단계(관점과 프레이밍 분석) → 5단계(근거와 출처 비교) → 6단계(종합 신뢰도 판단). 각 단계에서 무엇을 발견했고 어떻게 비교했는지 투명하게 보여주세요.",
       "진위": "두 뉴스의 비교분석 결과 ('일치하는 진짜 뉴스' / '일부 차이가 있지만 신뢰할 수 있는 뉴스' / '상당한 차이가 있어 주의가 필요한 뉴스' / '상충되는 내용으로 추가 검증 필요')",
-      "근거": "두 뉴스 간의 일치점과 차이점을 나열",
-      "분석": "두 뉴스의 비교분석 결과를 상세히 서술",
-      "요약": "두 뉴스의 핵심 내용과 주요 차이점을 간결하게 요약"
+      "근거": "두 뉴스 간의 일치점과 차이점을 <br> 태그로 구분하여 나열",
+      "분석": "두 뉴스의 비교분석 결과를 상세히 서술. 차이가 왜 발생했는지, 어느 기사가 더 신뢰할 수 있는지 설명",
+      "요약": "두 뉴스의 핵심 내용과 주요 차이점을 간결하게 요약. 여러 차이점이 있으면 <br>로 구분"
     }
   }
 ]
@@ -5143,6 +5188,133 @@ ${articleContent}
     this.attachModalEvents(modal, modalContent, savedApiKey);
     
     return modal;
+  }
+
+  // 에러 모달 표시
+  showErrorModal(errorMessage, blockId) {
+    // 기존 에러 모달이 있으면 제거
+    const existingModal = document.querySelector('.error-modal-overlay');
+    if (existingModal) {
+      existingModal.remove();
+    }
+
+    const modal = document.createElement('div');
+    modal.className = 'error-modal-overlay';
+    modal.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(13, 13, 13, 0.8);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 999999;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    `;
+
+    const modalContent = document.createElement('div');
+    modalContent.className = 'error-modal-content';
+    modalContent.style.cssText = `
+      background: linear-gradient(135deg, #F2F2F2 0%, #E0E0E0 100%);
+      border-radius: 16px;
+      padding: 40px;
+      width: 90%;
+      max-width: 560px;
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      transform: scale(0.8);
+      transition: all 0.3s ease;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    `;
+
+    // 에러 타입 분석
+    const isNetworkError = errorMessage.includes('fetch') || errorMessage.includes('network');
+    const isParsingError = errorMessage.includes('JSON') || errorMessage.includes('parse');
+    const is429Error = errorMessage.includes('429') || errorMessage.includes('RESOURCE_EXHAUSTED');
+    
+    let errorTitle = 'API 호출 오류';
+    let errorIcon = '⚠️';
+    let errorDescription = '알 수 없는 오류가 발생했습니다.';
+    
+    if (is429Error) {
+      errorTitle = 'API 할당량 초과';
+      errorIcon = '🚫';
+      errorDescription = 'Gemini API 호출 할당량이 초과되었습니다. 잠시 후 다시 시도해주세요.';
+    } else if (isNetworkError) {
+      errorTitle = '네트워크 연결 오류';
+      errorIcon = '🌐';
+      errorDescription = '인터넷 연결을 확인하거나 잠시 후 다시 시도해주세요.';
+    } else if (isParsingError) {
+      errorTitle = 'JSON 파싱 오류';
+      errorIcon = '📄';
+      errorDescription = 'AI 응답 형식이 올바르지 않습니다. 자동으로 3회 재시도했으나 모두 실패했습니다.';
+    }
+
+    modalContent.innerHTML = `
+      <button class="close-error-modal absolute top-3 right-3 bg-transparent border-0 text-2xl text-gray-600 cursor-pointer w-8 h-8 flex items-center justify-center rounded-full transition-all duration-200 hover:bg-gray-300 hover:text-gray-800">&times;</button>
+      
+      <div class="flex flex-col items-center mb-6">
+        <div class="text-6xl mb-4">${errorIcon}</div>
+        <h2 class="text-2xl font-bold text-center text-gray-800">${errorTitle}</h2>
+      </div>
+      
+      <div class="mb-6">
+        <p class="text-base text-gray-700 text-center mb-4">${errorDescription}</p>
+        
+        <details class="mt-4 bg-white rounded-lg p-4 cursor-pointer">
+          <summary class="font-semibold text-gray-800 text-sm mb-2 cursor-pointer select-none">기술적 세부정보</summary>
+          <pre class="text-xs text-gray-600 mt-2 overflow-auto max-h-40 bg-gray-50 p-3 rounded border border-gray-200 font-mono whitespace-pre-wrap break-words">${errorMessage}</pre>
+        </details>
+      </div>
+      
+      <div class="flex gap-3">
+        <button class="retry-btn flex-1 bg-gradient-primary text-white px-6 py-3 rounded-lg font-semibold border-0 cursor-pointer transition-all duration-200 text-base hover:opacity-90 active:scale-95 shadow-md">다시 시도</button>
+        <button class="close-btn flex-1 bg-gray-400 text-white px-6 py-3 rounded-lg font-semibold border-0 cursor-pointer transition-all duration-200 text-base hover:bg-gray-500 active:scale-95 shadow-md">닫기</button>
+      </div>
+    `;
+
+    modal.appendChild(modalContent);
+    document.body.appendChild(modal);
+
+    // 애니메이션 시작
+    requestAnimationFrame(() => {
+      modal.style.opacity = '1';
+      modalContent.style.transform = 'scale(1)';
+    });
+
+    const closeModal = () => {
+      modal.style.opacity = '0';
+      modalContent.style.transform = 'scale(0.8)';
+      setTimeout(() => modal.remove(), 300);
+    };
+
+    // 닫기 버튼
+    modalContent.querySelector('.close-error-modal').addEventListener('click', closeModal);
+    modalContent.querySelector('.close-btn').addEventListener('click', closeModal);
+
+    // 배경 클릭으로 닫기
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) closeModal();
+    });
+
+    // 다시 시도 버튼
+    modalContent.querySelector('.retry-btn').addEventListener('click', () => {
+      closeModal();
+      
+      // 분석 재시작
+      if (blockId) {
+        const block = blockId === 'current' ? this.currentNews : this.newsBlocks.get(blockId);
+        if (block) {
+          console.log('분석 재시도:', blockId);
+          this.proceedWithAnalysis(blockId, block);
+        }
+      }
+    });
   }
 
   // 자동 열기 설정 가져오기
