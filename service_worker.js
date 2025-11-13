@@ -1,5 +1,78 @@
 // service_worker.js
 
+// 암호화 유틸리티 함수들 (crypto-utils.js에서 가져온 것)
+const SALT = new Uint8Array([
+  0x49, 0x73, 0x20, 0x74, 0x68, 0x69, 0x73, 0x20,
+  0x73, 0x65, 0x63, 0x75, 0x72, 0x65, 0x3f, 0x21
+]);
+
+async function getDeviceKey() {
+  const userAgent = navigator.userAgent;
+  const language = navigator.language;
+  const platform = navigator.platform;
+  const deviceString = `${userAgent}-${language}-${platform}`;
+  
+  const encoder = new TextEncoder();
+  const data = encoder.encode(deviceString);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  
+  return hashHex;
+}
+
+async function deriveKey(password) {
+  const encoder = new TextEncoder();
+  const passwordBuffer = encoder.encode(password);
+  
+  const keyMaterial = await crypto.subtle.importKey(
+    'raw',
+    passwordBuffer,
+    'PBKDF2',
+    false,
+    ['deriveKey']
+  );
+  
+  return await crypto.subtle.deriveKey(
+    {
+      name: 'PBKDF2',
+      salt: SALT,
+      iterations: 100000,
+      hash: 'SHA-256'
+    },
+    keyMaterial,
+    { name: 'AES-GCM', length: 256 },
+    false,
+    ['encrypt', 'decrypt']
+  );
+}
+
+async function decryptApiKey(encryptedData) {
+  try {
+    const deviceKey = await getDeviceKey();
+    const key = await deriveKey(deviceKey);
+    
+    const combined = Uint8Array.from(atob(encryptedData), c => c.charCodeAt(0));
+    const iv = combined.slice(0, 12);
+    const encrypted = combined.slice(12);
+    
+    const decryptedData = await crypto.subtle.decrypt(
+      {
+        name: 'AES-GCM',
+        iv: iv
+      },
+      key,
+      encrypted
+    );
+    
+    const decoder = new TextDecoder();
+    return decoder.decode(decryptedData);
+  } catch (error) {
+    console.error('복호화 오류:', error);
+    throw new Error('API 키 복호화에 실패했습니다.');
+  }
+}
+
 // Chrome API 안전 확인 함수
 function isChromeApiAvailable() {
   try {
@@ -23,14 +96,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     
     // 저장된 API 키 가져오기
     try {
-      chrome.storage.local.get(['gemini_api_key'], (result) => {
+      chrome.storage.local.get(['gemini_api_key'], async (result) => {
         if (chrome.runtime.lastError) {
           console.error("API 키 로드 오류:", chrome.runtime.lastError);
           sendResponse({ status: "저장소 오류", error: chrome.runtime.lastError.message });
           return;
         }
         
-        const API_KEY = result.gemini_api_key;
+        let API_KEY = result.gemini_api_key;
         
         if (!API_KEY) {
           console.error("API 키가 설정되지 않았습니다.");
@@ -42,6 +115,22 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             }).catch(error => console.error("메시지 전송 오류:", error));
           }
           sendResponse({ status: "API 키 없음", error: "API 키가 설정되지 않았습니다." });
+          return;
+        }
+        
+        // API 키 복호화
+        try {
+          API_KEY = await decryptApiKey(API_KEY);
+        } catch (decryptError) {
+          console.error("API 키 복호화 오류:", decryptError);
+          if (isChromeApiAvailable()) {
+            chrome.tabs.sendMessage(sender.tab.id, {
+              action: "displayError",
+              error: "API 키 복호화에 실패했습니다. API 키를 다시 설정해주세요.",
+              blockId: message.blockId
+            }).catch(error => console.error("메시지 전송 오류:", error));
+          }
+          sendResponse({ status: "복호화 오류", error: "API 키 복호화에 실패했습니다." });
           return;
         }
         

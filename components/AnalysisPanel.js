@@ -5555,31 +5555,41 @@ ${articleContent}
       setTimeout(() => input.focus(), 100);
       
       // 제출 버튼
-      const handleSubmit = () => {
+      const handleSubmit = async () => {
         const apiKey = input.value.trim();
         
         if (apiKey) {
+          // API 키 암호화
+          let encryptedKey;
+          try {
+            encryptedKey = await this.encryptApiKey(apiKey);
+          } catch (error) {
+            console.error('API 키 암호화 오류:', error);
+            alert('API 키 암호화에 실패했습니다. 다시 시도해주세요.');
+            return;
+          }
+          
           if (this.isChromeApiAvailable()) {
             try {
-              chrome.storage.local.set({ gemini_api_key: apiKey }, () => {
+              chrome.storage.local.set({ gemini_api_key: encryptedKey }, () => {
                 if (chrome.runtime.lastError) {
                   console.log('Chrome storage failed, using localStorage:', chrome.runtime.lastError);
-                  localStorage.setItem('gemini_api_key', apiKey);
-                  alert('API 키가 저장되었습니다! (localStorage)');
+                  localStorage.setItem('gemini_api_key', encryptedKey);
+                  alert('API 키가 암호화되어 저장되었습니다! (localStorage)');
                 } else {
-                  alert('API 키가 저장되었습니다!');
+                  alert('API 키가 암호화되어 저장되었습니다!');
                 }
                 closeModal();
               });
             } catch (error) {
               console.log('Chrome storage error, using localStorage:', error);
-              localStorage.setItem('gemini_api_key', apiKey);
-              alert('API 키가 저장되었습니다! (localStorage)');
+              localStorage.setItem('gemini_api_key', encryptedKey);
+              alert('API 키가 암호화되어 저장되었습니다! (localStorage)');
               closeModal();
             }
           } else {
-            localStorage.setItem('gemini_api_key', apiKey);
-            alert('API 키가 저장되었습니다!');
+            localStorage.setItem('gemini_api_key', encryptedKey);
+            alert('API 키가 암호화되어 저장되었습니다!');
             closeModal();
           }
         } else {
@@ -6526,6 +6536,83 @@ ${articleContent}
       console.log('News blocks saved to localStorage');
     } catch (error) {
       console.error('Failed to save to localStorage:', error);
+    }
+  }
+
+  // API 키 암호화 유틸리티 함수들
+  async getDeviceKey() {
+    const userAgent = navigator.userAgent;
+    const language = navigator.language;
+    const platform = navigator.platform;
+    const deviceString = `${userAgent}-${language}-${platform}`;
+    
+    const encoder = new TextEncoder();
+    const data = encoder.encode(deviceString);
+    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    
+    return hashHex;
+  }
+
+  async deriveKey(password) {
+    const SALT = new Uint8Array([
+      0x49, 0x73, 0x20, 0x74, 0x68, 0x69, 0x73, 0x20,
+      0x73, 0x65, 0x63, 0x75, 0x72, 0x65, 0x3f, 0x21
+    ]);
+    
+    const encoder = new TextEncoder();
+    const passwordBuffer = encoder.encode(password);
+    
+    const keyMaterial = await crypto.subtle.importKey(
+      'raw',
+      passwordBuffer,
+      'PBKDF2',
+      false,
+      ['deriveKey']
+    );
+    
+    return await crypto.subtle.deriveKey(
+      {
+        name: 'PBKDF2',
+        salt: SALT,
+        iterations: 100000,
+        hash: 'SHA-256'
+      },
+      keyMaterial,
+      { name: 'AES-GCM', length: 256 },
+      false,
+      ['encrypt', 'decrypt']
+    );
+  }
+
+  async encryptApiKey(apiKey) {
+    try {
+      const deviceKey = await this.getDeviceKey();
+      const key = await this.deriveKey(deviceKey);
+      
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      
+      const encoder = new TextEncoder();
+      const encodedData = encoder.encode(apiKey);
+      
+      const encryptedData = await crypto.subtle.encrypt(
+        {
+          name: 'AES-GCM',
+          iv: iv
+        },
+        key,
+        encodedData
+      );
+      
+      const combined = new Uint8Array(iv.length + encryptedData.byteLength);
+      combined.set(iv, 0);
+      combined.set(new Uint8Array(encryptedData), iv.length);
+      
+      return btoa(String.fromCharCode(...combined));
+    } catch (error) {
+      console.error('암호화 오류:', error);
+      throw new Error('API 키 암호화에 실패했습니다.');
     }
   }
 
