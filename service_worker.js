@@ -179,7 +179,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 /**
- * Gemini API를 스트리밍 방식으로 호출하는 비동기 함수
+ * Gemini API를 스트리밍 방식으로 호출하는 비동기 함수 (재시도 로직 포함)
  * @param {string} prompt - API에 전송할 전체 프롬프트
  * @param {string} apiUrl - API URL (키 포함)
  * @param {number} tabId - 탭 ID
@@ -187,44 +187,75 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
  * @returns {Promise<string>} - API가 반환한 최종 텍스트 결과
  */
 async function callGeminiAPIWithStreaming(prompt, apiUrl, tabId, blockId) {
-  try {
-    // 일단 기본 API로 전체 결과를 받은 후 타이핑 효과 시뮬레이션
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        contents: [{
-          parts: [{
-            text: prompt
+  const MAX_RETRIES = 3;
+  const RETRY_DELAY = 1000; // 1초
+  
+  let lastError = null;
+  
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      console.log(`API 호출 시도 ${attempt}/${MAX_RETRIES}`);
+      
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{
+              text: prompt
+            }]
           }]
-        }]
-      })
-    });
+        })
+      });
 
-    if (!response.ok) {
-      const errorBody = await response.json();
-      throw new Error(`API 요청 실패: ${response.status} ${response.statusText} - ${JSON.stringify(errorBody)}`);
+      if (!response.ok) {
+        const errorBody = await response.json();
+        const errorMsg = `API 요청 실패: ${response.status} ${response.statusText} - ${JSON.stringify(errorBody)}`;
+        throw new Error(errorMsg);
+      }
+
+      const data = await response.json();
+      const fullResult = extractNewsContent(data);
+      
+      // 결과를 문자 단위로 타이핑 효과 시뮬레이션
+      if (typeof fullResult === 'string') {
+        await simulateTypingEffect(fullResult, tabId, blockId);
+      } else {
+        // JSON 객체인 경우 문자열로 변환 후 타이핑 효과
+        const resultString = JSON.stringify(fullResult, null, 2);
+        await simulateTypingEffect(resultString, tabId, blockId);
+      }
+
+      console.log(`API 호출 성공 (시도 ${attempt}/${MAX_RETRIES})`);
+      return fullResult;
+      
+    } catch (error) {
+      lastError = error;
+      console.error(`API 호출 실패 (시도 ${attempt}/${MAX_RETRIES}):`, error.message);
+      
+      // 마지막 시도가 아니면 재시도
+      if (attempt < MAX_RETRIES) {
+        console.log(`${RETRY_DELAY / 1000}초 후 재시도합니다...`);
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+      }
     }
-
-    const data = await response.json();
-    const fullResult = extractNewsContent(data);
-    
-    // 결과를 문자 단위로 타이핑 효과 시뮬레이션
-    if (typeof fullResult === 'string') {
-      await simulateTypingEffect(fullResult, tabId, blockId);
-    } else {
-      // JSON 객체인 경우 문자열로 변환 후 타이핑 효과
-      const resultString = JSON.stringify(fullResult, null, 2);
-      await simulateTypingEffect(resultString, tabId, blockId);
-    }
-
-    return fullResult;
-  } catch (error) {
-    console.error("API 호출 오류:", error);
-    throw error;
   }
+  
+  // 모든 재시도 실패 시 에러 메시지를 content script로 전송
+  const errorMessage = `API 호출에 ${MAX_RETRIES}번 실패했습니다.\n\n오류 내용:\n${lastError.message}`;
+  console.error("최종 실패:", errorMessage);
+  
+  if (isChromeApiAvailable()) {
+    chrome.tabs.sendMessage(tabId, {
+      action: "displayErrorModal",
+      error: errorMessage,
+      blockId: blockId
+    }).catch(error => console.error("에러 모달 전송 오류:", error));
+  }
+  
+  throw lastError;
 }
 
 /**

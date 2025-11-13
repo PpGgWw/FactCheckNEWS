@@ -590,6 +590,105 @@ window.updateHighlightColors = updateHighlightColors;
 window.checkAndApplyExistingAnalysis = checkAndApplyExistingAnalysis;
 window.highlightSuspiciousSentences = highlightSuspiciousSentences;
 
+/**
+ * 에러 모달 표시 함수
+ */
+function showErrorModal(errorMessage) {
+  // 기존 에러 모달 제거
+  const existingModal = document.getElementById('factcheck-error-modal');
+  if (existingModal) {
+    existingModal.remove();
+  }
+  
+  // 에러 모달 생성
+  const modal = document.createElement('div');
+  modal.id = 'factcheck-error-modal';
+  modal.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 999999;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  `;
+  
+  const modalContent = document.createElement('div');
+  modalContent.style.cssText = `
+    background: white;
+    border-radius: 12px;
+    padding: 24px;
+    max-width: 500px;
+    width: 90%;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  `;
+  
+  const title = document.createElement('h2');
+  title.textContent = 'API 호출 실패';
+  title.style.cssText = `
+    margin: 0 0 16px 0;
+    font-size: 20px;
+    font-weight: 600;
+    color: #D32F2F;
+  `;
+  
+  const message = document.createElement('p');
+  message.textContent = errorMessage;
+  message.style.cssText = `
+    margin: 0 0 20px 0;
+    font-size: 14px;
+    line-height: 1.6;
+    color: #333;
+    white-space: pre-wrap;
+  `;
+  
+  const closeButton = document.createElement('button');
+  closeButton.textContent = '확인';
+  closeButton.style.cssText = `
+    background: #D32F2F;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    padding: 10px 20px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    width: 100%;
+    transition: background 0.2s;
+  `;
+  
+  closeButton.onmouseover = () => {
+    closeButton.style.background = '#B71C1C';
+  };
+  
+  closeButton.onmouseout = () => {
+    closeButton.style.background = '#D32F2F';
+  };
+  
+  closeButton.onclick = () => {
+    modal.remove();
+  };
+  
+  // 모달 외부 클릭 시 닫기
+  modal.onclick = (e) => {
+    if (e.target === modal) {
+      modal.remove();
+    }
+  };
+  
+  modalContent.appendChild(title);
+  modalContent.appendChild(message);
+  modalContent.appendChild(closeButton);
+  modal.appendChild(modalContent);
+  document.body.appendChild(modal);
+}
+
+window.showErrorModal = showErrorModal;
+
 // 테스트용 함수들
 window.testHighlightColors = function(verdict) {
   console.log('테스트: 하이라이트 색상 변경 -', verdict);
@@ -788,6 +887,18 @@ if (isChromeApiAvailable()) {
         if (panel && panel.__analysisPanel) {
           console.log('분석 오류 표시:', message.blockId, message.error);
           panel.__analysisPanel.failAnalysis(message.blockId, message.error);
+        }
+      } else if (message.action === "displayErrorModal" && message.error) {
+        // 에러 모달 표시 (3번 재시도 후 최종 실패)
+        const panel = document.getElementById('news-analysis-panel');
+        if (panel && panel.__analysisPanel) {
+          console.log('최종 에러 모달 표시:', message.blockId, message.error);
+          
+          // 분석 실패 처리
+          panel.__analysisPanel.failAnalysis(message.blockId, message.error);
+          
+          // 에러 모달 생성
+          showErrorModal(message.error);
         }
       } else if (message.action === "updateStreamingResult" && message.partialResult) {
         // 실시간 스트리밍 결과 업데이트
