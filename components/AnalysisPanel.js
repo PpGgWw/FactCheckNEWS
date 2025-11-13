@@ -892,6 +892,8 @@ class AnalysisPanel {
     const safeTitle = this.currentNews.title || '제목 없음';
     const status = this.currentNews.status || 'pending';
     const showAnalyzeBtn = status === 'pending' || status === 'error';
+    const isAnalyzing = status === 'analyzing';
+    const progress = this.currentNews.progress || '분석 중...';
     const statusBadge = this.getCollapsedStatusBadge(this.currentNews);
     
     return `
@@ -928,6 +930,36 @@ class AnalysisPanel {
           cursor: pointer;
           transition: all 0.2s ease;
         " onmouseover="this.style.background='rgba(140, 110, 84, 0.4)';" onmouseout="this.style.background='rgba(140, 110, 84, 0.28)';">분석하기</button>` : ''}
+        ${isAnalyzing ? `
+        <div style="
+          padding: 8px 14px;
+          border-radius: 8px;
+          border: 1px solid rgba(140, 110, 84, 0.5);
+          background: rgba(140, 110, 84, 0.28);
+          color: ${text};
+          font-size: 12px;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        ">
+          <div style="
+            width: 10px;
+            height: 10px;
+            border: 2px solid ${text};
+            border-top: 2px solid transparent;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            flex-shrink: 0;
+          "></div>
+          <span class="collapsed-progress-text" style="
+            line-height: 1.2;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            flex: 1;
+          ">${progress}</span>
+        </div>
+        ` : ''}
       </div>
     `;
   }
@@ -1161,7 +1193,7 @@ class AnalysisPanel {
         case 'analyzing':
           actionButtons = `
             <div style="display: flex; gap: 8px; align-items: center; width: 100%;">
-              <div style="
+              <button class="analyzing-progress-btn" data-id="${id}" disabled style="
                 background: ${primaryButtonHover};
                 color: ${text};
                 padding: 8px 12px;
@@ -1175,6 +1207,7 @@ class AnalysisPanel {
                 font-weight: 500;
                 border: 1px solid ${primaryButtonBorder};
                 backdrop-filter: blur(10px);
+                cursor: wait;
               ">
                 <div style="
                   width: 12px;
@@ -1186,13 +1219,13 @@ class AnalysisPanel {
                   animation: spin 1s linear infinite;
                   flex-shrink: 0;
                 "></div>
-                <span style="
+                <span class="progress-text" style="
                   line-height: 1.2;
                   overflow: hidden;
                   text-overflow: ellipsis;
                   white-space: nowrap;
-                ">${this.getTransparentProgress(progress)}</span>
-              </div>
+                ">${progress || '분석 중...'}</span>
+              </button>
               <button class="stop-analysis-btn" data-id="${id}" style="
                 background: ${dangerButtonBase};
                 color: ${text};
@@ -1716,13 +1749,15 @@ class AnalysisPanel {
     
     const normalizedUrl = normalizeUrl(url);
     
-    // 분석 기록에서 동일한 URL의 뉴스 찾기
+    // 분석 기록에서 동일한 URL의 뉴스 찾기 (UI 표시용)
     const existingBlock = Array.from(this.newsBlocks.values()).find(block => 
       normalizeUrl(block.url) === normalizedUrl
     );
     
-    // 이미 분석된 뉴스가 있으면 그 상태를 currentNews에 반영
-    if (existingBlock) {
+    // 기존 분석 결과가 있어도 currentNews는 항상 pending 상태로 시작
+    // (사용자가 원하면 "다시 분석" 버튼을 통해 새로 분석할 수 있음)
+    if (existingBlock && existingBlock.status === 'completed') {
+      // 완료된 분석이 있으면 그 결과를 표시
       this.currentNews = {
         id: 'current',
         title,
@@ -1734,9 +1769,9 @@ class AnalysisPanel {
         error: existingBlock.error,
         timestamp: Date.now()
       };
-      console.log('[setCurrentNews] 기존 분석 결과 발견, 상태 반영:', existingBlock.status);
+      console.log('[setCurrentNews] 기존 완료된 분석 결과 발견, 상태 반영:', existingBlock.status);
     } else {
-      // 새로운 뉴스
+      // 새로운 뉴스 또는 미완료 분석
       this.currentNews = {
         id: 'current',
         title,
@@ -1745,8 +1780,10 @@ class AnalysisPanel {
         status: 'pending',
         result: null,
         progress: null,
+        error: null,
         timestamp: Date.now()
       };
+      console.log('[setCurrentNews] 새 뉴스 또는 미완료 분석, pending 상태로 설정');
     }
     
     this.updatePanel();
@@ -1850,6 +1887,7 @@ class AnalysisPanel {
       return;
     }
     
+    const oldStatus = block.status;
     block.status = status;
     if (progress) block.progress = progress;
     if (result) block.result = result;
@@ -1880,8 +1918,9 @@ class AnalysisPanel {
       this.completeAnalysis(id, result);
     }
     
-    // 분석된 뉴스만 저장 (현재 뉴스는 페이지별로 관리)
-    if (id !== 'current') {
+    // 저장 최적화: analyzing 상태에서는 저장하지 않음 (스트리밍 중)
+    // 상태 변경이나 완료/에러 시에만 저장
+    if (id !== 'current' && (status !== 'analyzing' || oldStatus !== 'analyzing')) {
       this.saveNewsBlocks();
     }
     
@@ -1939,6 +1978,52 @@ class AnalysisPanel {
     this.attachCollapseToggle(panel);
     this.attachCollapsedSummaryEvents(panel);
     this.attachScrollPrevention(panel);
+  }
+
+  // 분석 중단 처리
+  stopAnalysis(blockId) {
+    console.log('[stopAnalysis] 분석 중단 요청:', blockId);
+    
+    // 타이핑 효과 중단
+    if (this.currentTypingIntervals.has(blockId)) {
+      clearInterval(this.currentTypingIntervals.get(blockId));
+      this.currentTypingIntervals.delete(blockId);
+    }
+    
+    // 분석 타임아웃 중단
+    if (this.analysisTimeouts.has(blockId)) {
+      clearTimeout(this.analysisTimeouts.get(blockId));
+      this.analysisTimeouts.delete(blockId);
+    }
+    
+    // 스트리밍 결과 삭제
+    if (this.streamingResults.has(blockId)) {
+      this.streamingResults.delete(blockId);
+    }
+    
+    // service_worker에 중단 요청 전송
+    chrome.runtime.sendMessage({
+      action: "stopAnalysis",
+      blockId: blockId
+    }).catch(error => {
+      console.error('[stopAnalysis] service_worker 메시지 전송 오류:', error);
+    });
+    
+    // 블록 상태를 pending으로 변경
+    let block = blockId === 'current' ? this.currentNews : this.newsBlocks.get(blockId);
+    if (block) {
+      block.status = 'pending';
+      block.progress = null;
+      block.error = '사용자가 분석을 중단했습니다';
+      
+      // 저장 및 패널 업데이트
+      if (blockId !== 'current') {
+        this.saveNewsBlocks();
+      }
+      this.updatePanel();
+    }
+    
+    console.log('[stopAnalysis] 분석 중단 완료:', blockId);
   }
 
   // 패널 스크롤 시 페이지 스크롤 방지
@@ -2429,10 +2514,11 @@ class AnalysisPanel {
       return;
     }
     
-    // 현재 뉴스 상태를 analyzing으로 변경
+    // 현재 뉴스 상태를 analyzing으로 변경 (기존 결과 초기화!)
     this.currentNews.status = 'analyzing';
     this.currentNews.progress = '🔍 분석 시작...';
-    this.currentNews.result = null;
+    this.currentNews.result = null;  // 기존 결과 제거
+    this.currentNews.error = null;
     this.currentNews.crossVerified = false;
     this.currentNews.crossVerifiedResult = null;
     this.currentNews.firstAnalysis = null;
@@ -2440,9 +2526,21 @@ class AnalysisPanel {
     // UI 즉시 업데이트 (분석 중 상태 표시)
     this.updatePanel();
     
-    // 현재 뉴스를 분석 목록에 추가 (즉시 analyzing 상태로)
-    console.log('[analyzeCurrentNews] 새 뉴스 추가 중... (analyzing 상태로)');
-    const newId = this.addNews(this.currentNews.title, this.currentNews.url, this.currentNews.content, true);
+    // 현재 뉴스를 분석 목록에 추가 (새로운 분석이므로 analyzing 상태로, result는 null)
+    console.log('[analyzeCurrentNews] 새 뉴스 추가 중... (analyzing 상태로, result 초기화)');
+    const newsData = {
+      id: ++this.blockIdCounter,
+      title: this.currentNews.title,
+      url: this.currentNews.url,
+      content: this.currentNews.content,
+      status: 'analyzing',
+      result: null,  // 새 분석이므로 null
+      progress: '🔍 분석 시작...',
+      timestamp: Date.now()
+    };
+    
+    this.addNewsBlock(newsData);
+    const newId = newsData.id;
     console.log('[analyzeCurrentNews] 추가된 ID:', newId);
     
     // 분석 시작
@@ -2509,16 +2607,20 @@ class AnalysisPanel {
     this.abortControllers.set(id, abortController);
     
     this.updateNewsStatus(id, 'analyzing', null, '🔍 API 연결 및 인증 확인 중...');
+    this.updateProgressTextInDOM(id, '🔍 API 연결 및 인증 확인 중...');
     
     // API 키 확인
     setTimeout(() => {
       this.updateNewsStatus(id, 'analyzing', null, '📝 기사 내용 파싱 및 분석 준비 중...');
+      this.updateProgressTextInDOM(id, '📝 기사 내용 파싱 및 분석 준비 중...');
       
       setTimeout(() => {
         this.updateNewsStatus(id, 'analyzing', null, '🤖 Gemini AI에 팩트체킹 요청 전송 중...');
+        this.updateProgressTextInDOM(id, '🤖 Gemini AI에 팩트체킹 요청 전송 중...');
         
         setTimeout(() => {
           this.updateNewsStatus(id, 'analyzing', null, '⚡ AI가 기사의 신뢰성을 검증하고 있습니다...');
+          this.updateProgressTextInDOM(id, '⚡ AI가 기사의 신뢰성을 검증하고 있습니다...');
           
           // Gemini 분석 요청
           const fullPrompt = this.generateAnalysisPrompt(block.title, block.content, block.isComparison);
@@ -5934,19 +6036,43 @@ ${articleContent}
     
     if (partialResult) {
       if (partialResult.includes('진위') || partialResult.includes('참') || partialResult.includes('거짓')) {
-        progressMessage = '진위 판정 결과 작성 중...';
+        progressMessage = '✍️ 진위 판정 결과 작성 중...';
       } else if (partialResult.includes('근거') || partialResult.includes('증거')) {
-        progressMessage = '검증 근거 정리 중...';
+        progressMessage = '📊 검증 근거 정리 중...';
       } else if (partialResult.includes('분석') || partialResult.includes('의견')) {
-        progressMessage = '상세 분석 의견 작성 중...';
+        progressMessage = '📝 상세 분석 의견 작성 중...';
       }
     }
     
-    this.updateNewsStatus(blockId, 'analyzing', null, progressMessage);
+    // 블록의 progress만 업데이트 (저장하지 않음 - 성능 최적화)
+    const block = this.newsBlocks.get(blockId);
+    if (block && block.status === 'analyzing') {
+      block.progress = progressMessage;
+      
+      // 진행 상황 텍스트 실시간 업데이트 (전체 패널 렌더링 없이 DOM 직접 조작)
+      this.updateProgressTextInDOM(blockId, progressMessage);
+      
+      // 타이핑 영역만 업데이트
+      if (partialResult) {
+        this.updateBlockTypingArea(blockId, partialResult);
+      }
+      
+      // 패널 전체 렌더링하지 않음 (성능 최적화)
+    }
+  }
+
+  // 진행 상황 텍스트를 DOM에서 직접 업데이트 (성능 최적화)
+  updateProgressTextInDOM(blockId, progressMessage) {
+    // 확장된 뷰의 진행 상황 텍스트 업데이트
+    const progressTextElement = document.querySelector(`.analyzing-progress-btn[data-id="${blockId}"] .progress-text`);
+    if (progressTextElement) {
+      progressTextElement.textContent = progressMessage;
+    }
     
-    // 새로운 인라인 타이핑 업데이트
-    if (partialResult) {
-      this.updateBlockTypingArea(blockId, partialResult);
+    // 축소된 뷰의 진행 상황 텍스트 업데이트
+    const collapsedProgressTextElement = document.querySelector('.collapsed-progress-text');
+    if (collapsedProgressTextElement && blockId === 'current') {
+      collapsedProgressTextElement.textContent = progressMessage;
     }
   }
 
@@ -6497,6 +6623,21 @@ ${articleContent}
     
     // 스트리밍 결과 정리
     this.streamingResults.delete(id);
+    
+    // 타이핑 버퍼 정리
+    if (this.typingBuffer && this.typingBuffer.has(id)) {
+      this.typingBuffer.delete(id);
+    }
+    
+    // service_worker에 중단 요청 전송
+    if (this.isChromeApiAvailable()) {
+      chrome.runtime.sendMessage({
+        action: "stopAnalysis",
+        blockId: id
+      }).catch(error => {
+        console.error('[stopAnalysis] service_worker 메시지 전송 오류:', error);
+      });
+    }
     
     // 에러 상태로 변경
     this.failAnalysis(id, errorMessage);

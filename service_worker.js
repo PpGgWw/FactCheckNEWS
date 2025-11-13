@@ -82,8 +82,27 @@ function isChromeApiAvailable() {
   }
 }
 
+// 활성 중인 타이핑 효과 추적
+const activeTypingEffects = new Map();
+
 // content_script로부터 메시지를 수신하는 리스너
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  // 분석 중단 요청 처리
+  if (message.action === "stopAnalysis") {
+    console.log("[stopAnalysis] 분석 중단 요청 받음, blockId:", message.blockId);
+    
+    // 활성 타이핑 효과 중단
+    if (activeTypingEffects.has(message.blockId)) {
+      const typingState = activeTypingEffects.get(message.blockId);
+      typingState.shouldStop = true;
+      activeTypingEffects.delete(message.blockId);
+      console.log("[stopAnalysis] 타이핑 효과 중단됨:", message.blockId);
+    }
+    
+    sendResponse({ status: "분석 중단 완료" });
+    return true;
+  }
+  
   if (message.action === "analyzeNewsWithGemini") {
     console.log("Content Script로부터 뉴스 분석 요청을 받았습니다. blockId:", message.blockId);
     
@@ -134,10 +153,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           return;
         }
         
-        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${API_KEY}`;
+        const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:streamGenerateContent?alt=sse&key=${API_KEY}`;
         
-        // Gemini API 호출 함수 실행 (스트리밍 방식)
-        callGeminiAPIWithStreaming(message.prompt, API_URL, sender.tab.id, message.blockId)
+        // Gemini API 호출 함수 실행 (실제 스트리밍 방식)
+        callGeminiAPIWithRealStreaming(message.prompt, API_URL, sender.tab.id, message.blockId)
           .then(result => {
             console.log("--- Gemini API 스트리밍 완료 ---");
             console.log(result);
@@ -179,14 +198,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 /**
- * Gemini API를 스트리밍 방식으로 호출하는 비동기 함수 (재시도 로직 포함)
+ * Gemini API를 실제 스트리밍 방식으로 호출하는 비동기 함수 (재시도 로직 포함)
  * @param {string} prompt - API에 전송할 전체 프롬프트
  * @param {string} apiUrl - API URL (키 포함)
  * @param {number} tabId - 탭 ID
  * @param {string} blockId - 블록 ID
  * @returns {Promise<string>} - API가 반환한 최종 텍스트 결과
  */
-async function callGeminiAPIWithStreaming(prompt, apiUrl, tabId, blockId) {
+async function callGeminiAPIWithRealStreaming(prompt, apiUrl, tabId, blockId) {
   const MAX_RETRIES = 3;
   const RETRY_DELAY = 1000; // 1초
   
@@ -194,7 +213,11 @@ async function callGeminiAPIWithStreaming(prompt, apiUrl, tabId, blockId) {
   
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
-      console.log(`API 호출 시도 ${attempt}/${MAX_RETRIES}`);
+      console.log(`API 스트리밍 호출 시도 ${attempt}/${MAX_RETRIES}`);
+      
+      // 타이핑 상태 등록
+      const typingState = { shouldStop: false };
+      activeTypingEffects.set(blockId, typingState);
       
       const response = await fetch(apiUrl, {
         method: 'POST',
@@ -211,29 +234,95 @@ async function callGeminiAPIWithStreaming(prompt, apiUrl, tabId, blockId) {
       });
 
       if (!response.ok) {
-        const errorBody = await response.json();
-        const errorMsg = `API 요청 실패: ${response.status} ${response.statusText} - ${JSON.stringify(errorBody)}`;
+        const errorBody = await response.text();
+        const errorMsg = `API 요청 실패: ${response.status} ${response.statusText} - ${errorBody}`;
         throw new Error(errorMsg);
       }
 
-      const data = await response.json();
-      const fullResult = extractNewsContent(data);
+      // SSE 스트림 읽기
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let fullText = '';
+      let buffer = '';
       
-      // 결과를 문자 단위로 타이핑 효과 시뮬레이션
-      if (typeof fullResult === 'string') {
-        await simulateTypingEffect(fullResult, tabId, blockId);
-      } else {
-        // JSON 객체인 경우 문자열로 변환 후 타이핑 효과
-        const resultString = JSON.stringify(fullResult, null, 2);
-        await simulateTypingEffect(resultString, tabId, blockId);
+      while (true) {
+        // 중단 요청 확인
+        if (typingState.shouldStop) {
+          console.log('[callGeminiAPIWithRealStreaming] 스트리밍 중단됨:', blockId);
+          reader.cancel();
+          activeTypingEffects.delete(blockId);
+          throw new Error('사용자가 분석을 중단했습니다.');
+        }
+        
+        const { done, value } = await reader.read();
+        
+        if (done) {
+          break;
+        }
+        
+        // 청크를 텍스트로 변환
+        buffer += decoder.decode(value, { stream: true });
+        
+        // SSE 형식 파싱 (data: 로 시작하는 라인들)
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || ''; // 마지막 불완전한 라인은 버퍼에 보관
+        
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const jsonStr = line.slice(6); // 'data: ' 제거
+            
+            if (jsonStr.trim() === '') continue;
+            
+            try {
+              const data = JSON.parse(jsonStr);
+              
+              // 응답에서 텍스트 추출
+              if (data.candidates && data.candidates[0] && 
+                  data.candidates[0].content && 
+                  data.candidates[0].content.parts && 
+                  data.candidates[0].content.parts[0]) {
+                const text = data.candidates[0].content.parts[0].text;
+                
+                if (text) {
+                  fullText += text;
+                  
+                  // 실시간으로 content script에 전송
+                  if (isChromeApiAvailable()) {
+                    chrome.tabs.sendMessage(tabId, {
+                      action: "updateStreamingResult",
+                      partialResult: fullText,
+                      blockId: blockId
+                    }).catch(error => {
+                      console.error("스트리밍 메시지 전송 오류:", error);
+                    });
+                  }
+                }
+              }
+            } catch (parseError) {
+              console.warn('JSON 파싱 오류 (스트림 중):', parseError, 'Line:', jsonStr);
+            }
+          }
+        }
       }
-
-      console.log(`API 호출 성공 (시도 ${attempt}/${MAX_RETRIES})`);
-      return fullResult;
+      
+      // 타이핑 상태 제거
+      activeTypingEffects.delete(blockId);
+      
+      // 최종 결과 파싱
+      const finalResult = extractNewsContentFromText(fullText);
+      
+      console.log(`API 스트리밍 호출 성공 (시도 ${attempt}/${MAX_RETRIES})`);
+      return finalResult;
       
     } catch (error) {
       lastError = error;
-      console.error(`API 호출 실패 (시도 ${attempt}/${MAX_RETRIES}):`, error.message);
+      activeTypingEffects.delete(blockId);
+      console.error(`API 스트리밍 호출 실패 (시도 ${attempt}/${MAX_RETRIES}):`, error.message);
+      
+      // 사용자가 중단한 경우 재시도하지 않음
+      if (error.message.includes('중단')) {
+        throw error;
+      }
       
       // 마지막 시도가 아니면 재시도
       if (attempt < MAX_RETRIES) {
@@ -259,16 +348,27 @@ async function callGeminiAPIWithStreaming(prompt, apiUrl, tabId, blockId) {
 }
 
 /**
- * 타이핑 효과 시뮬레이션
+ * 타이핑 효과 시뮬레이션 (폴백용 - 실제 스트리밍 실패 시 사용)
  * @param {string} text - 전체 텍스트
  * @param {number} tabId - 탭 ID
  * @param {string} blockId - 블록 ID
  */
 async function simulateTypingEffect(text, tabId, blockId) {
+  // 타이핑 상태 등록
+  const typingState = { shouldStop: false };
+  activeTypingEffects.set(blockId, typingState);
+  
   const words = text.split(' ');
   let currentText = '';
   
   for (let i = 0; i < words.length; i++) {
+    // 중단 요청 확인
+    if (typingState.shouldStop) {
+      console.log('[simulateTypingEffect] 타이핑 중단됨:', blockId);
+      activeTypingEffects.delete(blockId);
+      return;
+    }
+    
     currentText += (i > 0 ? ' ' : '') + words[i];
     
     // 단어별로 실시간 업데이트 전송 (안전 확인)
@@ -283,6 +383,7 @@ async function simulateTypingEffect(text, tabId, blockId) {
         });
       } catch (error) {
         console.error("Chrome API 호출 오류:", error);
+        activeTypingEffects.delete(blockId);
         break; // 오류 발생 시 루프 중단
       }
     }
@@ -291,6 +392,9 @@ async function simulateTypingEffect(text, tabId, blockId) {
     const delay = Math.max(50, Math.min(200, words[i].length * 20));
     await new Promise(resolve => setTimeout(resolve, delay));
   }
+  
+  // 타이핑 완료 후 상태 제거
+  activeTypingEffects.delete(blockId);
 }
 
 /**
