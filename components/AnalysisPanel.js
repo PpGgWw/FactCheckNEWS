@@ -3478,26 +3478,6 @@ ${articleContent}
         ">
           <section>
             <h3 style="
-              font-size: 13px;
-              font-weight: 600;
-              margin: 0 0 12px 0;
-              color: ${mutedText};
-              text-transform: uppercase;
-              letter-spacing: 0.05em;
-            ">제목</h3>
-            <div style="
-              background: ${cardBackground};
-              border: 1px solid ${border};
-              border-radius: 10px;
-              padding: 18px;
-              line-height: 1.6;
-              font-size: 14px;
-              color: ${text};
-            ">${safeTitle}</div>
-          </section>
-
-          <section>
-            <h3 style="
               font-size: 15px;
               font-weight: 600;
               margin: 0 0 12px 0;
@@ -3547,6 +3527,45 @@ ${articleContent}
 
           <section>
             <h3 style="
+              font-size: 13px;
+              font-weight: 600;
+              margin: 0 0 12px 0;
+              color: ${mutedText};
+              text-transform: uppercase;
+              letter-spacing: 0.05em;
+            ">제목</h3>
+            <div style="
+              background: ${cardBackground};
+              border: 1px solid ${border};
+              border-radius: 10px;
+              padding: 18px;
+              line-height: 1.6;
+              font-size: 14px;
+              color: ${text};
+            ">${safeTitle}</div>
+          </section>
+
+          <section>
+            <h3 style="
+              font-size: 15px;
+              font-weight: 600;
+              margin: 0 0 12px 0;
+              color: ${text};
+            ">핵심 요약</h3>
+            <div style="
+              background: ${summaryBackground};
+              border: 1px solid ${this.hexToRgba(accent, 0.35)};
+              border-radius: 10px;
+              padding: 18px;
+              line-height: 1.6;
+              font-size: 14px;
+              color: ${text};
+              font-weight: 500;
+            ">${this.renderMarkdown(summary)}</div>
+          </section>
+
+          <section>
+            <h3 style="
               font-size: 15px;
               font-weight: 600;
               margin: 0 0 12px 0;
@@ -3580,24 +3599,6 @@ ${articleContent}
               color: ${text};
             ">${this.renderMarkdown(analysis)}</div>
           </section>
-
-          <section>
-            <h3 style="
-              font-size: 15px;
-              font-weight: 600;
-              margin: 0 0 12px 0;
-              color: ${text};
-            ">핵심 요약</h3>
-            <div style="
-              background: ${summaryBackground};
-              border: 1px solid ${this.hexToRgba(accent, 0.35)};
-              border-radius: 10px;
-              padding: 18px;
-              line-height: 1.6;
-              font-size: 14px;
-              color: ${text};
-              font-weight: 500;
-            ">${this.renderMarkdown(summary)}</div>
           </section>
 
           ${suspiciousEntries ? `
