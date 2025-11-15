@@ -13,7 +13,9 @@ class NaverNewsParser {
    * 현재 URL이 네이버 뉴스 페이지인지 확인
    */
   canParse(url) {
-    return url.includes('n.news.naver.com/article/');
+    // 다양한 네이버 뉴스 URL 형식 지원
+    return url.includes('n.news.naver.com/article/') || 
+           url.includes('n.news.naver.com/mnews/');
   }
 
   /**

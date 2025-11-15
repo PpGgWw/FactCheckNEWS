@@ -87,6 +87,34 @@ const activeTypingEffects = new Map();
 
 // content_script로부터 메시지를 수신하는 리스너
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  // CORS 우회 크롤링 요청 처리
+  if (message.action === "fetchWithCORS") {
+    console.log("[fetchWithCORS] 크롤링 요청:", message.url);
+    
+    fetch(message.url, {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      }
+    })
+      .then(response => {
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+        return response.text();
+      })
+      .then(html => {
+        console.log("[fetchWithCORS] 크롤링 성공, 길이:", html.length);
+        sendResponse({ success: true, html: html });
+      })
+      .catch(error => {
+        console.error("[fetchWithCORS] 크롤링 실패:", error);
+        sendResponse({ success: false, error: error.message });
+      });
+    
+    return true; // 비동기 응답
+  }
+  
   // 분석 중단 요청 처리
   if (message.action === "stopAnalysis") {
     console.log("[stopAnalysis] 분석 중단 요청 받음, blockId:", message.blockId);

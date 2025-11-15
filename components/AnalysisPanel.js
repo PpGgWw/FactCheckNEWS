@@ -48,6 +48,14 @@ class AnalysisPanel {
     this.crossVerificationInProgress = new Set(); // 교차 검증 중인 블록 ID들
     this.crossVerificationDepth = this.getCrossVerificationDepthSetting(); // 교차 검증 단계 수 (기본 3)
     
+    // Google Search API 관련
+    this.searchCache = new Map(); // 메모리 캐시 (세션 내)
+    this.USE_REAL_API = this.getGoogleSearchEnabled();
+    this.searchInProgress = new Set();
+    
+    // 영구 저장소 (localStorage) - API 효율성
+    this.loadPersistentCache(); // 검색 결과 및 크롤링 결과 로드
+    
     // 저장된 뉴스 블록 데이터 로드
     this.loadSavedNewsBlocks();
   }
@@ -136,7 +144,22 @@ class AnalysisPanel {
         if (!data) return null;
 
         if (typeof data === 'string') {
-          const trimmed = data.trim();
+          let trimmed = data.trim();
+
+          if (typeof this.extractJsonFromAiResponse === 'function') {
+            const extracted = this.extractJsonFromAiResponse(trimmed);
+            if (extracted) {
+              return unwrap(extracted);
+            }
+          }
+
+          // 마크다운 코드 블록 제거 (```json ... ```)
+          const fencedRegex = /^```(?:json)?[\t ]*\r?\n?([\s\S]*?)\r?\n?```$/i;
+          const jsonFenceMatch = trimmed.replace(/\r\n/g, '\n').match(fencedRegex);
+          if (jsonFenceMatch) {
+            trimmed = jsonFenceMatch[1].trim();
+          }
+          
           if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
             try {
               return unwrap(JSON.parse(trimmed));
@@ -1415,7 +1438,7 @@ class AnalysisPanel {
                 border: 1px solid ${border};
                 border-radius: 8px;
                 padding: 4px;
-                min-width: 140px;
+                min-width: 210px;
                 max-height: 300px;
                 overflow-y: auto;
                 z-index: 9999;
@@ -1434,6 +1457,7 @@ class AnalysisPanel {
                   width: 100%;
                   text-align: left;
                   transition: background 0.2s;
+                  white-space: nowrap;
                 " onmouseover="this.style.background='${this.hexToRgba(accent, 0.2)}'" onmouseout="this.style.background='transparent'">🔄 교차 검증</button>
                 ` : ''}
                 ${isCompleted && block.crossVerified ? `
@@ -1447,7 +1471,66 @@ class AnalysisPanel {
                   cursor: not-allowed;
                   width: 100%;
                   text-align: left;
+                  white-space: nowrap;
                 ">✓ 검증 완료</button>
+                ` : ''}
+                ${isCompleted ? `
+                <button class="find-similar-btn" data-id="${id}" style="
+                  background: transparent;
+                  color: ${text};
+                  padding: 10px 14px;
+                  border: none;
+                  border-radius: 6px;
+                  font-size: 14px;
+                  cursor: pointer;
+                  width: 100%;
+                  text-align: left;
+                  transition: background 0.2s;
+                  white-space: nowrap;
+                " onmouseover="this.style.background='${this.hexToRgba(accent, 0.2)}'" onmouseout="this.style.background='transparent'">📰 유사 기사 찾기</button>
+                ${block.factCheckResult ? `
+                <button disabled style="
+                  background: transparent;
+                  color: ${this.hexToRgba(text, 0.5)};
+                  padding: 10px 14px;
+                  border: none;
+                  border-radius: 6px;
+                  font-size: 14px;
+                  cursor: not-allowed;
+                  width: 100%;
+                  text-align: left;
+                  white-space: nowrap;
+                ">✓ 사실 검증 완료</button>
+                ` : `
+                <button class="fact-check-search-btn" data-id="${id}" style="
+                  background: transparent;
+                  color: ${text};
+                  padding: 10px 14px;
+                  border: none;
+                  border-radius: 6px;
+                  font-size: 14px;
+                  cursor: pointer;
+                  width: 100%;
+                  text-align: left;
+                  transition: background 0.2s;
+                  white-space: nowrap;
+                " onmouseover="this.style.background='${this.hexToRgba(accent, 0.2)}'" onmouseout="this.style.background='transparent'">🔍 사실 검증</button>
+                `}
+                ` : ''}
+                ${isCompleted ? `
+                <button class="debug-result-btn" data-id="${id}" style="
+                  background: transparent;
+                  color: ${text};
+                  padding: 10px 14px;
+                  border: none;
+                  border-radius: 6px;
+                  font-size: 14px;
+                  cursor: pointer;
+                  width: 100%;
+                  text-align: left;
+                  transition: background 0.2s;
+                  white-space: nowrap;
+                " onmouseover="this.style.background='${this.hexToRgba(accent, 0.2)}'" onmouseout="this.style.background='transparent'">🐛 디버그 정보</button>
                 ` : ''}
                 <button class="compare-btn" data-id="${id}" style="
                   background: transparent;
@@ -1460,6 +1543,7 @@ class AnalysisPanel {
                   width: 100%;
                   text-align: left;
                   transition: background 0.2s;
+                  white-space: nowrap;
                 " onmouseover="this.style.background='${this.hexToRgba(accent, 0.2)}'" onmouseout="this.style.background='transparent'">${isCompareMode ? '✕ 비교 취소' : '⚖️ 비교하기'}</button>
               </div>
             </div>
@@ -2411,6 +2495,36 @@ class AnalysisPanel {
       });
     });
 
+    // 유사 기사 찾기 버튼
+    container.querySelectorAll('.find-similar-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = parseInt(btn.dataset.id);
+        console.log('유사 기사 찾기 버튼 클릭, ID:', id);
+        this.findSimilarArticles(id);
+      });
+    });
+
+    // 사실 검증 버튼
+    container.querySelectorAll('.fact-check-search-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = parseInt(btn.dataset.id);
+        console.log('사실 검증 버튼 클릭, ID:', id);
+        this.searchFactCheck(id);
+      });
+    });
+
+    // 디버그 정보 버튼
+    container.querySelectorAll('.debug-result-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = parseInt(btn.dataset.id);
+        console.log('디버그 정보 버튼 클릭, ID:', id);
+        this.showDebugModal(id);
+      });
+    });
+
     // 사이트 이동 버튼
     container.querySelectorAll('.open-site-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
@@ -2738,14 +2852,22 @@ class AnalysisPanel {
       ? null  // 첫 검증은 1차 분석만 참조
       : block.verificationHistory[currentStep - 2];
     
-    // 교차 검증 프롬프트 생성 (항상 기준점인 1차 분석 + 직전 검증 결과 포함)
+    // 사실 검증 결과 가져오기 (있으면 포함)
+    const factCheckData = block.factCheckResult ? {
+      articles: block.factCheckResult.articles,
+      verification: block.factCheckResult.verification,
+      timestamp: block.factCheckResult.timestamp
+    } : null;
+    
+    // 교차 검증 프롬프트 생성 (항상 기준점인 1차 분석 + 직전 검증 결과 + 사실 검증 결과 포함)
     const crossVerifyPrompt = this.generateCrossVerificationPrompt(
       block.title,
       block.content,
       block.baselineAnalysis,  // 1차 분석 결과 (고정 기준점)
       previousResult,          // 직전 검증 결과 (첫 번째는 null)
       currentStep,
-      depth
+      depth,
+      factCheckData            // 사실 검증 결과 (있으면 포함)
     );
     
     console.log(`[재귀 검증] ${currentStep}/${depth}차 API 요청 전송, blockId: ${id}`);
@@ -3177,7 +3299,9 @@ JSON 외의 문장, 주석, 코드 블록(\\\`\\\`\\\`json\\\`\\\`\\\`)은 절�
       "진위": "판단 결과('가짜 뉴스' / '가짜일 가능성이 높은 뉴스' / '가짜일 가능성이 있는 뉴스' / '부분적으로 신뢰할 수 있는 뉴스' / '진짜 뉴스')",
       "근거": "탐지된 중요도 조건을 <br> 태그로 반드시 구분하여 나열. 예: 1-1. 기사 내 명백한 내용상 모순<br>3-2. 감정적 표현 사용<br>4-1. 제목과 내용의 불일치",
       "분석": "위 근거들을 종합하여 기사의 어떤 부분이 왜 문제인지 혹은 신뢰할 수 있는지를 구체적으로 설명. 문단 구분이 필요하면 <br><br> 사용",
-      "요약": "기사의 핵심 내용을 간결하고 정확하게 요약. 여러 핵심 내용이 있으면 <br>로 구분"
+      "요약": "기사의 핵심 내용을 간결하고 정확하게 요약 (50-100자 이내, HTML 태그 사용 금지). 한 문장으로 핵심만 간결하게 작성",
+      "키워드": "기사의 핵심 키워드 3-5개를 추출 (쉼표로 구분, HTML 태그 사용 금지). 예: 정치, 한동훈, 국민의힘, 대장동 사건, 여론",
+      "검색어": "유사 기사 검색 또는 사실 검증에 적합한 검색어 1개 (20-50자, 고유명사 + 핵심 사건/주제 조합, HTML 태그 사용 금지). 예: 한동훈 대장동 사건 항소 포기"
     }
   }
 ]
@@ -3242,9 +3366,38 @@ ${comparisonContent}
   }
 
   // 2차 교차 검증용 프롬프트 생성
-  generateCrossVerificationPrompt(title, content, baselineAnalysis, previousVerification = null, currentStep = 1, totalDepth = 1) {
+  generateCrossVerificationPrompt(title, content, baselineAnalysis, previousVerification = null, currentStep = 1, totalDepth = 1, factCheckData = null) {
     const articleContent = `${title}\n${content}`;
     const currentDateTime = this.getCurrentDateTime();
+    
+    // 사실 검증 정보 섹션 생성 (토큰 최적화)
+    let factCheckSection = '';
+    if (factCheckData && factCheckData.articles && factCheckData.articles.length > 0) {
+      factCheckSection = `
+
+---
+
+[사실 검증 결과 (외부 기사 비교)]
+
+**검증된 기사 수: ${factCheckData.articles.length}개**
+
+${factCheckData.articles.map((article, index) => `
+**비교 기사 ${index + 1}:**
+- 제목: ${article.title}
+- 출처: ${article.displayLink}
+- 요약: ${article.snippet}
+${article.crawledContent ? `- 핵심 내용: ${article.crawledContent.substring(0, 300)}...` : '- 본문: (크롤링 실패)'}
+`).join('\n')}
+
+**AI 비교 검증 결과:**
+- ✅ 일치: ${factCheckData.verification?.일치하는_사실?.length || 0}개
+- ❌ 불일치: ${factCheckData.verification?.불일치하는_사실?.length || 0}개
+- 평가: ${factCheckData.verification?.종합_평가 || 'N/A'}
+
+**[참고]** 위 검증 결과는 이미 AI가 분석 완료했으므로, 교차 검증 시 참고만 하세요.
+
+---`;
+    }
     
     // 첫 번째 검증 (1차 분석 결과만 검토)
     if (currentStep === 1) {
@@ -3300,8 +3453,7 @@ ${comparisonContent}
 
 [원문 기사]
 ${articleContent}
-
----
+${factCheckSection}
 
 [1차 AI 분석 결과]
 진위: ${baselineAnalysis.진위 || 'N/A'}
@@ -3369,8 +3521,7 @@ ${articleContent}
 
 [원문 기사]
 ${articleContent}
-
----
+${factCheckSection}
 
 [1차 AI 분석 결과 (기준점)]
 진위: ${baselineAnalysis.진위 || 'N/A'}
@@ -3598,7 +3749,20 @@ ${articleContent}
                 border-radius: 8px;
                 font-size: 11px;
                 font-weight: 600;
-              ">🔄 2차 검증 완료</span>
+                letter-spacing: 0.3px;
+              ">✅ 교차 검증됨</span>
+              ` : ''}
+              ${result.사실검증완료 ? `
+              <span style="
+                background: linear-gradient(135deg, rgba(16, 185, 129, 0.25), rgba(5, 150, 105, 0.25));
+                color: rgba(5, 150, 105, 1);
+                border: 1px solid rgba(16, 185, 129, 0.5);
+                padding: 4px 10px;
+                border-radius: 8px;
+                font-size: 11px;
+                font-weight: 600;
+                letter-spacing: 0.3px;
+              ">✅ 사실 검증 완료</span>
               ` : ''}
             </h3>
             <div style="
@@ -3716,8 +3880,71 @@ ${articleContent}
             </div>
           </section>` : ''}
 
-          ${showProcessButton ? `
-          <div style="text-align: center; margin-top: 8px;">
+          ${result.키워드 ? `
+          <section>
+            <h3 style="
+              font-size: 15px;
+              font-weight: 600;
+              margin: 0 0 12px 0;
+              color: ${text};
+            ">🔖 핵심 키워드</h3>
+            <div style="
+              display: flex;
+              flex-wrap: wrap;
+              gap: 8px;
+            ">
+              ${result.키워드.split(',').map(keyword => `
+                <span style="
+                  background: ${this.hexToRgba(accent, 0.15)};
+                  color: ${text};
+                  border: 1px solid ${this.hexToRgba(accent, 0.3)};
+                  padding: 6px 12px;
+                  border-radius: 16px;
+                  font-size: 13px;
+                  font-weight: 500;
+                ">${this.escapeHtml(keyword.trim())}</span>
+              `).join('')}
+            </div>
+          </section>
+          ` : ''}
+
+          ${result.검색어 ? `
+          <section>
+            <h3 style="
+              font-size: 15px;
+              font-weight: 600;
+              margin: 0 0 12px 0;
+              color: ${text};
+            ">🔍 추천 검색어</h3>
+            <div style="
+              background: ${this.hexToRgba(surfaceAlt, 0.2)};
+              border: 1px solid ${this.hexToRgba(accent, 0.4)};
+              border-radius: 10px;
+              padding: 16px;
+              line-height: 1.6;
+              font-size: 14px;
+              color: ${text};
+              font-weight: 500;
+              display: flex;
+              align-items: center;
+              gap: 10px;
+            ">
+              <span style="font-size: 18px;">💡</span>
+              <span>${this.escapeHtml(result.검색어)}</span>
+            </div>
+          </section>
+          ` : ''}
+
+          ${showProcessButton || block.factCheckResult ? `
+          <div style="
+            text-align: center; 
+            margin-top: 8px;
+            display: flex;
+            gap: 12px;
+            justify-content: center;
+            flex-wrap: wrap;
+          ">
+            ${showProcessButton ? `
             <button type="button" class="detail-analysis-process" style="
               display: inline-flex;
               align-items: center;
@@ -3733,7 +3960,27 @@ ${articleContent}
               transition: transform 0.2s ease, box-shadow 0.2s ease;
               box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
             ">추론과정 확인</button>
-          </div>` : ''}
+            ` : ''}
+            
+            ${block.factCheckResult && block.factCheckResult.articles ? `
+            <button type="button" class="view-compared-articles" data-block-id="${block.id}" style="
+              display: inline-flex;
+              align-items: center;
+              justify-content: center;
+              gap: 6px;
+              padding: 12px 22px;
+              border-radius: 10px;
+              border: none;
+              background: linear-gradient(135deg, rgba(16, 185, 129, 0.9) 0%, rgba(5, 150, 105, 0.9) 100%);
+              color: white;
+              font-weight: 600;
+              cursor: pointer;
+              transition: transform 0.2s ease, box-shadow 0.2s ease;
+              box-shadow: 0 10px 24px rgba(0, 0, 0, 0.25);
+            ">📰 비교 검증된 뉴스 보기 (${block.factCheckResult.articles.length})</button>
+            ` : ''}
+          </div>
+          ` : ''}
         </div>
       </div>
     `;
@@ -3808,6 +4055,24 @@ ${articleContent}
       processButton.addEventListener('mouseleave', () => {
         processButton.style.transform = 'translateY(0)';
         processButton.style.boxShadow = '0 10px 24px rgba(0, 0, 0, 0.35)';
+      });
+    }
+
+    const comparisonButton = overlay.querySelector('.view-compared-articles');
+    if (comparisonButton && block.factCheckResult) {
+      comparisonButton.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        const btnBlockId = comparisonButton.dataset.blockId;
+        this.showComparisonNewsPanel(btnBlockId);
+      });
+      comparisonButton.addEventListener('mouseenter', () => {
+        comparisonButton.style.transform = 'translateY(-2px)';
+        comparisonButton.style.boxShadow = '0 14px 28px rgba(0, 0, 0, 0.3)';
+      });
+      comparisonButton.addEventListener('mouseleave', () => {
+        comparisonButton.style.transform = 'translateY(0)';
+        comparisonButton.style.boxShadow = '0 10px 24px rgba(0, 0, 0, 0.25)';
       });
     }
 
@@ -4423,6 +4688,7 @@ ${articleContent}
     const analysisProcessBtn = modal.querySelector('.show-analysis-process');
     
     const closeModal = () => {
+      this.closeBrandSelectionMenu();
       modal.style.opacity = '0';
       setTimeout(() => modal.remove(), 300);
     };
@@ -4453,6 +4719,278 @@ ${articleContent}
   }
 
   // 분석진행 모달 표시
+  // 비교 뉴스 패널 표시
+  showComparisonNewsPanel(blockId) {
+    // blockId 타입 변환 (문자열 → 숫자)
+    const numericBlockId = typeof blockId === 'string' ? parseInt(blockId, 10) : blockId;
+    
+    console.log('[showComparisonNewsPanel] blockId:', blockId, '→', numericBlockId);
+    console.log('[showComparisonNewsPanel] newsBlocks keys:', Array.from(this.newsBlocks.keys()));
+    
+    const block = this.newsBlocks.get(numericBlockId);
+    
+    if (!block) {
+      console.warn('[showComparisonNewsPanel] Block not found, blockId:', numericBlockId);
+      return;
+    }
+    
+    console.log('[showComparisonNewsPanel] block.factCheckResult:', block.factCheckResult);
+    
+    if (!block.factCheckResult || !block.factCheckResult.articles) {
+      console.warn('[showComparisonNewsPanel] No fact check articles found');
+      return;
+    }
+
+    const articles = block.factCheckResult.articles;
+    console.log('[showComparisonNewsPanel] articles:', articles.length, '개');
+    
+    // 테마 색상 가져오기
+    const { base, surface, surfaceAlt, accent, text, textAlt, border } = this.palette;
+    
+    // textAlt가 없으면 textMuted 사용
+    const textAltColor = textAlt || this.palette.textMuted || this.hexToRgba(text, 0.7);
+    const cardBackground = this.hexToRgba(surface, 0.95);
+
+    // 오버레이 생성
+    const overlay = document.createElement('div');
+    overlay.className = 'comparison-news-overlay';
+    overlay.style.cssText = `
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(13,13,13,0.6);
+      z-index: 2147483650;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+    `;
+
+    // 패널 컨테이너
+    const panelContainer = document.createElement('div');
+    panelContainer.style.cssText = `
+      background: ${cardBackground};
+      border-radius: 16px;
+      width: 90%;
+      max-width: 600px;
+      max-height: 85vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+      border: 1px solid ${border};
+      transform: translateX(100%);
+      transition: transform 0.4s ease;
+      overflow: hidden;
+    `;
+
+    // 헤더
+    const header = document.createElement('div');
+    header.style.cssText = `
+      padding: 24px;
+      border-bottom: 1px solid ${border};
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    `;
+    header.innerHTML = `
+      <h3 style="
+        margin: 0;
+        font-size: 18px;
+        font-weight: 700;
+        color: ${text};
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      ">
+        <span style="
+          background: linear-gradient(135deg, rgba(16, 185, 129, 0.25), rgba(5, 150, 105, 0.25));
+          padding: 6px 10px;
+          border-radius: 8px;
+          border: 1px solid rgba(16, 185, 129, 0.4);
+        ">📰</span>
+        비교 검증된 뉴스
+        <span style="
+          font-size: 14px;
+          font-weight: 500;
+          color: ${textAltColor};
+          background: ${surfaceAlt}40;
+          padding: 4px 8px;
+          border-radius: 6px;
+        ">${articles.length}개</span>
+      </h3>
+      <button class="close-panel-btn" style="
+        background: none;
+        border: none;
+        font-size: 28px;
+        color: ${textAltColor};
+        cursor: pointer;
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        transition: all 0.2s;
+      ">&times;</button>
+    `;
+
+    // 기사 목록
+    const articlesList = document.createElement('div');
+    articlesList.style.cssText = `
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 24px;
+    `;
+
+    articles.forEach((article, index) => {
+      const articleItem = document.createElement('div');
+      articleItem.style.cssText = `
+        background: ${surface};
+        border: 1px solid ${border};
+        border-radius: 12px;
+        padding: 16px;
+        margin-bottom: 12px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: flex;
+        gap: 14px;
+      `;
+      articleItem.addEventListener('mouseenter', () => {
+        articleItem.style.transform = 'translateY(-2px)';
+        articleItem.style.boxShadow = `0 8px 16px ${border}80`;
+      });
+      articleItem.addEventListener('mouseleave', () => {
+        articleItem.style.transform = 'translateY(0)';
+        articleItem.style.boxShadow = 'none';
+      });
+      articleItem.addEventListener('click', () => {
+        window.open(article.link, '_blank');
+      });
+
+      // 썸네일
+      let thumbnailHtml = '';
+      if (article.pagemap?.cse_thumbnail?.[0]?.src) {
+        thumbnailHtml = `
+          <img src="${article.pagemap.cse_thumbnail[0].src}" style="
+            width: 80px;
+            height: 80px;
+            object-fit: cover;
+            border-radius: 8px;
+            flex-shrink: 0;
+          " alt="thumbnail">
+        `;
+      } else if (article.pagemap?.cse_image?.[0]?.src) {
+        thumbnailHtml = `
+          <img src="${article.pagemap.cse_image[0].src}" style="
+            width: 80px;
+            height: 80px;
+            object-fit: cover;
+            border-radius: 8px;
+            flex-shrink: 0;
+          " alt="thumbnail">
+        `;
+      }
+
+      articleItem.innerHTML = `
+        ${thumbnailHtml}
+        <div style="flex: 1; min-width: 0;">
+          <div style="
+            display: inline-block;
+            background: ${surfaceAlt}40;
+            color: ${accent};
+            font-size: 11px;
+            font-weight: 600;
+            padding: 3px 8px;
+            border-radius: 6px;
+            margin-bottom: 6px;
+          ">#${index + 1}</div>
+          <h4 style="
+            margin: 0 0 8px 0;
+            font-size: 15px;
+            font-weight: 600;
+            color: ${text};
+            line-height: 1.4;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+          ">${this.escapeHtml(article.title)}</h4>
+          <p style="
+            margin: 0 0 8px 0;
+            font-size: 13px;
+            color: ${textAltColor};
+            line-height: 1.5;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+          ">${this.escapeHtml(article.snippet)}</p>
+          <a href="${article.link}" target="_blank" style="
+            font-size: 12px;
+            color: ${accent};
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+          ">
+            <span>${this.escapeHtml(article.displayLink)}</span>
+            <span style="font-size: 10px;">↗</span>
+          </a>
+        </div>
+      `;
+
+      articlesList.appendChild(articleItem);
+    });
+
+    panelContainer.appendChild(header);
+    panelContainer.appendChild(articlesList);
+    overlay.appendChild(panelContainer);
+    document.body.appendChild(overlay);
+
+    // 애니메이션 시작
+    requestAnimationFrame(() => {
+      overlay.style.opacity = '1';
+      panelContainer.style.transform = 'translateX(0)';
+    });
+
+    // 닫기 버튼 이벤트
+    const closeBtn = header.querySelector('.close-panel-btn');
+    closeBtn.addEventListener('click', () => {
+      overlay.style.opacity = '0';
+      panelContainer.style.transform = 'translateX(100%)';
+      setTimeout(() => {
+        document.body.removeChild(overlay);
+      }, 300);
+    });
+    closeBtn.addEventListener('mouseenter', () => {
+      closeBtn.style.background = `${surfaceAlt}60`;
+    });
+    closeBtn.addEventListener('mouseleave', () => {
+      closeBtn.style.background = 'none';
+    });
+
+    // 오버레이 클릭 시 닫기
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) {
+        closeBtn.click();
+      }
+    });
+
+    // ESC 키로 닫기
+    const escHandler = (e) => {
+      if (e.key === 'Escape') {
+        closeBtn.click();
+        document.removeEventListener('keydown', escHandler);
+      }
+    };
+    document.addEventListener('keydown', escHandler);
+  }
+
   showAnalysisProcessModal(analysisProcess) {
     // 마크다운 렌더링 (검은색 텍스트 강제)
     const renderProcessText = (text) => {
@@ -4802,9 +5340,9 @@ ${articleContent}
     }
   }
 
-  // 뉴스 브랜드 옵션 렌더링
-  renderNewsBrandOptions() {
-    const brands = [
+  // 뉴스 브랜드 정의
+  getNewsBrandDefinitions() {
+    return [
       { id: 'yonhap', name: '연합뉴스', icon: '연' },
       { id: 'chosun', name: '조선일보', icon: '조' },
       { id: 'joongang', name: '중앙일보', icon: '중' },
@@ -4816,43 +5354,216 @@ ${articleContent}
       { id: 'mbc', name: 'MBC', icon: 'M' },
       { id: 'jtbc', name: 'JTBC', icon: 'J' }
     ];
-    
+  }
+
+  getNewsBrandSelectionLabel(selectedBrands = null) {
+    const currentSelection = selectedBrands || this.getSelectedNewsBrands();
+    const allBrands = this.getNewsBrandDefinitions();
+    if (!currentSelection || currentSelection.length === 0 || currentSelection.length === allBrands.length) {
+      return '전체 뉴스 사용 중';
+    }
+    if (currentSelection.length === 1) {
+      const brandInfo = allBrands.find((brand) => brand.id === currentSelection[0]);
+      return brandInfo ? `${brandInfo.name}만 사용` : '1개 뉴스만 사용';
+    }
+    return `${currentSelection.length}/${allBrands.length}개 뉴스 사용`;
+  }
+
+  toggleBrandSelectionMenu(triggerEl) {
+    if (this.activeBrandSelectionMenu && this.activeBrandSelectionMenu.trigger === triggerEl) {
+      this.closeBrandSelectionMenu();
+      return;
+    }
+    this.openBrandSelectionMenu(triggerEl);
+  }
+
+  openBrandSelectionMenu(triggerEl) {
+    this.closeBrandSelectionMenu();
+
+    const brands = this.getNewsBrandDefinitions();
     const selectedBrands = this.getSelectedNewsBrands();
-    
-    return brands.map(brand => {
-      const isSelected = selectedBrands.includes(brand.id);
-      return `
-        <button class="news-brand-option" data-brand="${brand.id}" style="
-          display: flex;
-          align-items: center;
-          gap: 8px;
-          padding: 10px 14px;
-          border: 2px solid ${isSelected ? '#BF9780' : '#D1D5DB'};
-          background: ${isSelected ? '#F2CEA2' : '#FFFFFF'};
-          border-radius: 8px;
+    const modalContent = triggerEl.closest('.settings-panel-content');
+    const container = modalContent || document.body;
+    const menu = document.createElement('div');
+    menu.className = 'brand-selection-menu';
+    menu.style.cssText = `
+      position: absolute;
+      width: 280px;
+      background: #FFFFFF;
+      border: 1px solid rgba(0, 0, 0, 0.08);
+      border-radius: 12px;
+      padding: 14px;
+      box-shadow: 0 18px 36px rgba(0, 0, 0, 0.18);
+      z-index: 10000;
+      opacity: 0;
+      transform: translateY(-6px);
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    `;
+
+    const buttonRect = triggerEl.getBoundingClientRect();
+    const containerRect = container.getBoundingClientRect();
+    const left = Math.min(
+      Math.max(16, buttonRect.left - containerRect.left),
+      (container.clientWidth || 540) - 300
+    );
+    const top = buttonRect.bottom - containerRect.top + 8;
+    menu.style.left = `${left}px`;
+    menu.style.top = `${top}px`;
+
+    menu.innerHTML = `
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;">
+        <div style="font-size: 14px; font-weight: 600; color: #0D0D0D;">뉴스 브랜드 선택</div>
+        <button type="button" class="brand-menu-close" style="
+          background: none;
+          border: none;
+          color: #6B7280;
+          font-size: 18px;
           cursor: pointer;
-          transition: all 0.2s ease;
-          font-size: 14px;
-          font-weight: ${isSelected ? '600' : '500'};
-          color: ${isSelected ? '#0D0D0D' : '#6B7280'};
-        ">
-          <div style="
-            width: 24px;
-            height: 24px;
-            background: ${isSelected ? '#BF9780' : '#E5E7EB'};
-            color: ${isSelected ? '#FFFFFF' : '#9CA3AF'};
-            border-radius: 4px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 700;
-            font-size: 12px;
-          ">${brand.icon}</div>
-          <span>${brand.name}</span>
-          ${isSelected ? '<span style="margin-left: auto;">✓</span>' : ''}
-        </button>
+          width: 28px;
+          height: 28px;
+          border-radius: 50%;
+          transition: background-color 0.2s ease;
+        ">&times;</button>
+      </div>
+      <p style="font-size: 12px; color: #6B7280; margin: 0 0 12px 0;">사용할 뉴스 출처를 선택하세요. 최소 1개 이상 유지해야 합니다.</p>
+    `;
+
+    const listWrapper = document.createElement('div');
+    listWrapper.style.cssText = 'display: flex; flex-direction: column; gap: 6px; max-height: 240px; overflow-y: auto; padding-right: 4px;';
+
+    brands.forEach((brand) => {
+      const row = document.createElement('label');
+      row.style.cssText = `
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 13px;
+        color: #0D0D0D;
+        padding: 6px 6px;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: background-color 0.15s ease;
       `;
-    }).join('');
+      row.addEventListener('mouseenter', () => {
+        row.style.backgroundColor = 'rgba(191, 151, 128, 0.12)';
+      });
+      row.addEventListener('mouseleave', () => {
+        row.style.backgroundColor = 'transparent';
+      });
+
+      const checkbox = document.createElement('input');
+      checkbox.type = 'checkbox';
+      checkbox.dataset.brand = brand.id;
+      checkbox.checked = selectedBrands.includes(brand.id);
+      checkbox.style.cssText = 'width: 16px; height: 16px; accent-color: #BF9780; flex-shrink: 0;';
+      checkbox.addEventListener('change', (event) => {
+        this.handleBrandSelectionChange(brand.id, event.target.checked, event.target, triggerEl);
+      });
+
+      const icon = document.createElement('div');
+      icon.textContent = brand.icon;
+      icon.style.cssText = `
+        width: 24px;
+        height: 24px;
+        border-radius: 6px;
+        background: rgba(191, 151, 128, 0.15);
+        color: #8B5E3C;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 12px;
+        font-weight: 700;
+        flex-shrink: 0;
+      `;
+
+      const label = document.createElement('span');
+      label.textContent = brand.name;
+      label.style.cssText = 'flex: 1;';
+
+      row.appendChild(checkbox);
+      row.appendChild(icon);
+      row.appendChild(label);
+      listWrapper.appendChild(row);
+    });
+
+    menu.appendChild(listWrapper);
+
+    container.appendChild(menu);
+    requestAnimationFrame(() => {
+      menu.style.opacity = '1';
+      menu.style.transform = 'translateY(0)';
+    });
+
+    const closeBtn = menu.querySelector('.brand-menu-close');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => this.closeBrandSelectionMenu());
+      closeBtn.addEventListener('mouseenter', () => {
+        closeBtn.style.backgroundColor = 'rgba(13, 13, 13, 0.08)';
+      });
+      closeBtn.addEventListener('mouseleave', () => {
+        closeBtn.style.backgroundColor = 'transparent';
+      });
+    }
+
+    const outsideHandler = (event) => {
+      if (!menu.contains(event.target) && event.target !== triggerEl) {
+        this.closeBrandSelectionMenu();
+      }
+    };
+
+    const keyHandler = (event) => {
+      if (event.key === 'Escape') {
+        this.closeBrandSelectionMenu();
+      }
+    };
+
+    document.addEventListener('mousedown', outsideHandler, true);
+    document.addEventListener('keydown', keyHandler, true);
+
+    this.activeBrandSelectionMenu = {
+      menu,
+      trigger: triggerEl,
+      outsideHandler,
+      keyHandler
+    };
+  }
+
+  closeBrandSelectionMenu() {
+    if (!this.activeBrandSelectionMenu) return;
+    const { menu, outsideHandler, keyHandler } = this.activeBrandSelectionMenu;
+    if (menu && menu.parentElement) {
+      menu.parentElement.removeChild(menu);
+    }
+    if (outsideHandler) {
+      document.removeEventListener('mousedown', outsideHandler, true);
+    }
+    if (keyHandler) {
+      document.removeEventListener('keydown', keyHandler, true);
+    }
+    this.activeBrandSelectionMenu = null;
+  }
+
+  handleBrandSelectionChange(brandId, isChecked, checkboxEl, triggerEl) {
+    let selectedBrands = this.getSelectedNewsBrands();
+    if (isChecked) {
+      if (!selectedBrands.includes(brandId)) {
+        selectedBrands.push(brandId);
+      }
+    } else {
+      if (selectedBrands.length <= 1) {
+        checkboxEl.checked = true;
+        alert('최소 한 개 이상의 뉴스 브랜드를 유지해야 합니다.');
+        return;
+      }
+      selectedBrands = selectedBrands.filter((id) => id !== brandId);
+    }
+    this.setSelectedNewsBrands(selectedBrands);
+    this.updateBrandSelectorButtonLabel(triggerEl);
+  }
+
+  updateBrandSelectorButtonLabel(buttonEl) {
+    if (!buttonEl) return;
+    buttonEl.textContent = this.getNewsBrandSelectionLabel();
   }
 
   // 선택된 뉴스 브랜드 가져오기
@@ -4860,10 +5571,18 @@ ${articleContent}
     // 항상 localStorage에서 동기적으로 가져오기
     try {
       const stored = localStorage.getItem('selectedNewsBrands');
-      return stored ? JSON.parse(stored) : ['yonhap', 'chosun', 'joongang', 'sbs', 'kbs'];
+      const defaultBrands = this.getNewsBrandDefinitions().map((brand) => brand.id);
+      if (!stored) {
+        return defaultBrands;
+      }
+      const parsed = JSON.parse(stored);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+      return defaultBrands;
     } catch (error) {
       console.error('Failed to get selected news brands:', error);
-      return ['yonhap', 'chosun', 'joongang', 'sbs', 'kbs'];
+      return this.getNewsBrandDefinitions().map((brand) => brand.id);
     }
   }
 
@@ -4897,6 +5616,7 @@ ${articleContent}
     
     const isApiKeySet = !!savedApiKey;
     const maskedKey = savedApiKey ? `${savedApiKey.substring(0, 8)}...${savedApiKey.substring(savedApiKey.length - 4)}` : '';
+    const brandSelectionLabel = this.getNewsBrandSelectionLabel();
     
     const modalContent = document.createElement('div');
     modalContent.className = 'settings-panel-content';
@@ -4976,63 +5696,170 @@ ${articleContent}
         ">${isApiKeySet ? '수정' : '설정'}</button>
       </div>
       
-      <!-- 패널 자동 열기 -->
+      <!-- Google Search API 사용 설정 -->
       <div style="
-        display: flex; 
-        align-items: center; 
-        justify-content: space-between; 
         padding: 16px 0;
         border-bottom: 1px solid #E5E5E5;
       ">
-        <div>
+        <div style="
+          display: flex; 
+          align-items: center; 
+          justify-content: space-between; 
+          margin-bottom: 12px;
+        ">
+          <div>
+            <div style="
+              font-size: 16px; 
+              font-weight: 600; 
+              color: #0D0D0D; 
+              margin-bottom: 4px;
+            ">Google Search API 사용</div>
+            <div style="
+              font-size: 13px; 
+              color: #737373;
+            ">유사 기사 찾기, 사실 검증 기능 활성화</div>
+          </div>
+          <button class="google-search-toggle-btn" style="
+            background: ${this.getGoogleSearchEnabled() ? '#10B981' : '#9CA3AF'}; 
+            color: white; 
+            padding: 8px 16px; 
+            border-radius: 6px; 
+            font-weight: 600; 
+            border: none; 
+            cursor: pointer; 
+            transition: background-color 0.2s; 
+            font-size: 14px;
+          ">${this.getGoogleSearchEnabled() ? '켜짐' : '꺼짐'}</button>
+        </div>
+        
+        <div class="google-api-key-section" style="
+          display: ${this.getGoogleSearchEnabled() ? 'block' : 'none'};
+          margin-top: 12px;
+          padding: 12px;
+          background: rgba(191, 151, 128, 0.08);
+          border-radius: 8px;
+        ">
           <div style="
-            font-size: 16px; 
+            font-size: 14px; 
             font-weight: 600; 
             color: #0D0D0D; 
-            margin-bottom: 4px;
-          ">패널 자동 열기</div>
+            margin-bottom: 8px;
+          ">Google Search API Key</div>
           <div style="
             font-size: 13px; 
             color: #737373;
-          ">뉴스 페이지 방문 시 자동으로 패널 표시</div>
+            margin-bottom: 8px;
+          " id="google-api-key-status">API 키 확인 중...</div>
+          <button class="google-api-key-btn" style="
+            background: #BF9780; 
+            color: white; 
+            padding: 8px 16px; 
+            border-radius: 6px; 
+            font-weight: 600; 
+            border: none; 
+            cursor: pointer; 
+            transition: background-color 0.2s; 
+            font-size: 14px;
+            width: 100%;
+            margin-bottom: 12px;
+          ">API 키 설정</button>
+          <div style="
+            margin-top: 12px;
+            padding: 12px;
+            background: rgba(255, 255, 255, 0.6);
+            border-radius: 8px;
+            border: 1px solid rgba(191, 151, 128, 0.25);
+          ">
+            <div style="
+              font-size: 14px;
+              font-weight: 600;
+              color: #0D0D0D;
+              margin-bottom: 4px;
+            ">뉴스 브랜드 선택</div>
+            <div style="
+              font-size: 12px;
+              color: #6B7280;
+              margin-bottom: 10px;
+            ">Google Search API가 사용할 뉴스 출처를 선택합니다.</div>
+            <button class="brand-selector-btn" style="
+              width: 100%;
+              text-align: left;
+              background: #FFFFFF;
+              border: 1px solid rgba(0, 0, 0, 0.1);
+              border-radius: 8px;
+              padding: 10px 12px;
+              font-size: 13px;
+              color: #0D0D0D;
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              gap: 8px;
+              cursor: pointer;
+              transition: border-color 0.2s ease, box-shadow 0.2s ease;
+            ">
+              <span>${brandSelectionLabel}</span>
+              <span style="font-size: 16px; color: #9CA3AF;">▾</span>
+            </button>
+          </div>
+          
+          <div style="margin-top: 16px; padding-top: 16px; border-top: 1px solid rgba(191, 151, 128, 0.2);">
+            <div style="
+              font-size: 14px; 
+              font-weight: 600; 
+              color: #0D0D0D; 
+              margin-bottom: 8px;
+            ">Custom Search Engine ID</div>
+            <div style="
+              font-size: 12px; 
+              color: #737373;
+              line-height: 1.5;
+              background: rgba(139, 115, 85, 0.08);
+              padding: 8px;
+              border-radius: 4px;
+            ">
+              <div style="margin-bottom: 4px;">
+                <strong>뉴스 검색:</strong> Daum 뉴스 전용
+              </div>
+              <div>
+                <strong>사실 검증:</strong> 전체 웹 검색
+              </div>
+            </div>
+          </div>
         </div>
-        <button class="auto-open-btn" style="
-          background: ${this.getAutoOpenSetting() ? '#10B981' : '#9CA3AF'}; 
-          color: white; 
-          padding: 8px 16px; 
-          border-radius: 6px; 
-          font-weight: 600; 
-          border: none; 
-          cursor: pointer; 
-          transition: background-color 0.2s; 
-          font-size: 14px;
-        ">${this.getAutoOpenSetting() ? '켜짐' : '꺼짐'}</button>
       </div>
 
-      <!-- 뉴스 브랜드 선택 -->
-      <div style="
-        padding: 16px 0;
-        border-bottom: 1px solid #E5E5E5;
-      ">
+        <!-- 패널 자동 열기 -->
         <div style="
-          font-size: 16px; 
-          font-weight: 600; 
-          color: #0D0D0D; 
-          margin-bottom: 8px;
-        ">뉴스 브랜드 선택</div>
-        <div style="
-          font-size: 13px; 
-          color: #737373;
-          margin-bottom: 12px;
-        ">분석할 뉴스 사이트를 선택하세요</div>
-        <div class="news-brand-grid" style="
-          display: grid;
-          grid-template-columns: repeat(2, 1fr);
-          gap: 8px;
+          display: flex; 
+          align-items: center; 
+          justify-content: space-between; 
+          padding: 16px 0;
+          border-bottom: 1px solid #E5E5E5;
         ">
-          ${this.renderNewsBrandOptions()}
+          <div>
+            <div style="
+              font-size: 16px; 
+              font-weight: 600; 
+              color: #0D0D0D; 
+              margin-bottom: 4px;
+            ">패널 자동 열기</div>
+            <div style="
+              font-size: 13px; 
+              color: #737373;
+            ">뉴스 페이지 방문 시 자동으로 패널 표시</div>
+          </div>
+          <button class="auto-open-btn" style="
+            background: ${this.getAutoOpenSetting() ? '#10B981' : '#9CA3AF'}; 
+            color: white; 
+            padding: 8px 16px; 
+            border-radius: 6px; 
+            font-weight: 600; 
+            border: none; 
+            cursor: pointer; 
+            transition: background-color 0.2s; 
+            font-size: 14px;
+          ">${this.getAutoOpenSetting() ? '켜짐' : '꺼짐'}</button>
         </div>
-      </div>
 
       <!-- 패널 투명도 조절 -->
       <div style="
@@ -5266,59 +6093,109 @@ ${articleContent}
       });
     }
 
-    // 뉴스 브랜드 선택 버튼들
-    const brandButtons = modalContent.querySelectorAll('.news-brand-option');
-    brandButtons.forEach(button => {
-      button.addEventListener('click', () => {
-        const brandId = button.dataset.brand;
-        const selectedBrands = this.getSelectedNewsBrands();
+    // 뉴스 브랜드 선택 버튼
+    const brandSelectorBtn = modalContent.querySelector('.brand-selector-btn');
+    if (brandSelectorBtn) {
+      brandSelectorBtn.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        this.toggleBrandSelectionMenu(brandSelectorBtn);
+      });
+      brandSelectorBtn.addEventListener('mouseenter', () => {
+        brandSelectorBtn.style.borderColor = '#BF9780';
+        brandSelectorBtn.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.08)';
+      });
+      brandSelectorBtn.addEventListener('mouseleave', () => {
+        brandSelectorBtn.style.borderColor = 'rgba(0, 0, 0, 0.1)';
+        brandSelectorBtn.style.boxShadow = 'none';
+      });
+    }
+
+    // Google Search API 토글 버튼
+    const googleSearchToggleBtn = modalContent.querySelector('.google-search-toggle-btn');
+    const googleApiKeySection = modalContent.querySelector('.google-api-key-section');
+    
+    if (googleSearchToggleBtn) {
+      // 초기 상태 설정
+      const isEnabled = this.getGoogleSearchEnabled();
+      googleSearchToggleBtn.textContent = isEnabled ? '켜짐' : '꺼짐';
+      googleSearchToggleBtn.style.backgroundColor = isEnabled ? '#10B981' : '#9CA3AF';
+      if (googleApiKeySection) {
+        googleApiKeySection.style.display = isEnabled ? 'block' : 'none';
+      }
+
+      googleSearchToggleBtn.addEventListener('click', () => {
+        const newSetting = !this.getGoogleSearchEnabled();
+        this.setGoogleSearchEnabled(newSetting);
         
-        // 토글 처리
-        const index = selectedBrands.indexOf(brandId);
-        if (index > -1) {
-          // 이미 선택됨 - 제거
-          if (selectedBrands.length > 1) { // 최소 1개는 선택되어 있어야 함
-            selectedBrands.splice(index, 1);
-          }
-        } else {
-          // 선택되지 않음 - 추가
-          selectedBrands.push(brandId);
+        // 버튼 상태 업데이트
+        googleSearchToggleBtn.textContent = newSetting ? '켜짐' : '꺼짐';
+        googleSearchToggleBtn.style.backgroundColor = newSetting ? '#10B981' : '#9CA3AF';
+        
+        // API 키 섹션 표시/숨김
+        if (googleApiKeySection) {
+          googleApiKeySection.style.display = newSetting ? 'block' : 'none';
         }
-        
-        // 저장
-        this.setSelectedNewsBrands(selectedBrands);
-        
-        // UI 업데이트
-        const isSelected = selectedBrands.includes(brandId);
-        button.style.border = `2px solid ${isSelected ? '#BF9780' : '#D1D5DB'}`;
-        button.style.background = isSelected ? '#F2CEA2' : '#FFFFFF';
-        button.style.fontWeight = isSelected ? '600' : '500';
-        button.style.color = isSelected ? '#0D0D0D' : '#6B7280';
-        
-        const icon = button.querySelector('div');
-        if (icon) {
-          icon.style.background = isSelected ? '#BF9780' : '#E5E7EB';
-          icon.style.color = isSelected ? '#FFFFFF' : '#9CA3AF';
-        }
-        
-        const checkmark = button.querySelector('span:last-child');
-        if (isSelected && !checkmark) {
-          button.innerHTML += '<span style="margin-left: auto;">✓</span>';
-        } else if (!isSelected && checkmark && checkmark.textContent === '✓') {
-          checkmark.remove();
+        if (!newSetting) {
+          this.closeBrandSelectionMenu();
         }
       });
-      
+
       // 호버 효과
-      button.addEventListener('mouseenter', () => {
-        button.style.transform = 'translateY(-2px)';
-        button.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
+      googleSearchToggleBtn.addEventListener('mouseenter', () => {
+        googleSearchToggleBtn.style.transform = 'translateY(-2px)';
+        googleSearchToggleBtn.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
       });
-      button.addEventListener('mouseleave', () => {
-        button.style.transform = 'translateY(0)';
-        button.style.boxShadow = 'none';
+      googleSearchToggleBtn.addEventListener('mouseleave', () => {
+        googleSearchToggleBtn.style.transform = 'translateY(0)';
+        googleSearchToggleBtn.style.boxShadow = 'none';
       });
-    });
+    }
+
+    // Google API 키 설정 버튼
+    const googleApiKeyBtn = modalContent.querySelector('.google-api-key-btn');
+    const googleApiKeyStatus = modalContent.querySelector('#google-api-key-status');
+    
+    if (googleApiKeyBtn) {
+      // 초기 API 키 상태 확인
+      this.getGoogleApiKey().then(key => {
+        if (googleApiKeyStatus) {
+          googleApiKeyStatus.textContent = key ? 'API 키 설정됨 ✓' : 'API 키 없음';
+          googleApiKeyStatus.style.color = key ? '#10B981' : '#9CA3AF';
+        }
+      });
+
+      googleApiKeyBtn.addEventListener('click', async () => {
+        const inputKey = prompt('Google Custom Search API 키를 입력하세요:');
+        if (inputKey && inputKey.trim()) {
+          try {
+            await this.saveGoogleApiKey(inputKey.trim());
+            if (googleApiKeyStatus) {
+              googleApiKeyStatus.textContent = 'API 키 설정됨 ✓';
+              googleApiKeyStatus.style.color = '#10B981';
+            }
+            alert('API 키가 저장되었습니다.');
+          } catch (error) {
+            console.error('API 키 저장 실패:', error);
+            alert('API 키 저장에 실패했습니다.');
+          }
+        }
+      });
+
+      // 호버 효과
+      googleApiKeyBtn.addEventListener('mouseenter', () => {
+        googleApiKeyBtn.style.transform = 'translateY(-2px)';
+        googleApiKeyBtn.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
+      });
+      googleApiKeyBtn.addEventListener('mouseleave', () => {
+        googleApiKeyBtn.style.transform = 'translateY(0)';
+        googleApiKeyBtn.style.boxShadow = 'none';
+      });
+    }
+
+    // Google CSE ID 설정 버튼 제거됨 (기본값 사용)
+    // - 뉴스 검색: a6724cd0397f24747 (Daum 뉴스 전용)
+    // - 사실 검증: 241358ac91fe04cd8 (전체 웹)
 
     // 패널 투명도 슬라이더
     const opacitySlider = modalContent.querySelector('.panel-opacity-slider');
@@ -5482,6 +6359,33 @@ ${articleContent}
       console.error('Failed to save auto open setting:', error);
     }
   }
+
+  // Google Search API 사용 설정 가져오기
+  getGoogleSearchEnabled() {
+    try {
+      const setting = localStorage.getItem('factcheck_google_search_enabled');
+      return setting !== null ? JSON.parse(setting) : false; // 기본값: false (꺼짐)
+    } catch (error) {
+      console.error('Failed to get Google Search setting:', error);
+      return false;
+    }
+  }
+
+  // Google Search API 사용 설정 저장
+  setGoogleSearchEnabled(value) {
+    try {
+      localStorage.setItem('factcheck_google_search_enabled', JSON.stringify(value));
+      console.log('Google Search API setting updated:', value);
+      // USE_REAL_API 플래그도 동기화
+      this.USE_REAL_API = value;
+    } catch (error) {
+      console.error('Failed to save Google Search setting:', error);
+    }
+  }
+
+  // Google CSE ID는 기본값으로 고정됨 (함수 제거)
+  // - 뉴스: a6724cd0397f24747 (Daum 뉴스)
+  // - 일반: 241358ac91fe04cd8 (전체 웹)
 
   // 축소 상태 설정 가져오기
   getCollapsedStateSetting() {
@@ -6758,6 +7662,33 @@ ${articleContent}
     }
   }
 
+  async decryptApiKey(encryptedData) {
+    try {
+      const deviceKey = await this.getDeviceKey();
+      const key = await this.deriveKey(deviceKey);
+      
+      const combined = Uint8Array.from(atob(encryptedData), c => c.charCodeAt(0));
+      
+      const iv = combined.slice(0, 12);
+      const data = combined.slice(12);
+      
+      const decryptedData = await crypto.subtle.decrypt(
+        {
+          name: 'AES-GCM',
+          iv: iv
+        },
+        key,
+        data
+      );
+      
+      const decoder = new TextDecoder();
+      return decoder.decode(decryptedData);
+    } catch (error) {
+      console.error('복호화 오류:', error);
+      throw new Error('API 키 복호화에 실패했습니다.');
+    }
+  }
+
   // Chrome API 사용 가능 여부 확인
   isChromeApiAvailable() {
     try {
@@ -7327,3 +8258,1436 @@ window.testMessyJsonStreaming = function() {
     }, index * 2000);
   });
 };
+
+// =============================================================================
+// Google Search API 통합 기능 (BACKUP에서 이식)
+// =============================================================================
+
+AnalysisPanel.prototype.findSimilarArticles = async function(blockId) {
+  console.log('[findSimilarArticles] 시작, blockId:', blockId);
+  
+  const block = this.newsBlocks.get(blockId);
+  if (!block) {
+    console.error('블록을 찾을 수 없음:', blockId);
+    return;
+  }
+
+  if (block.status !== 'completed' || !block.result) {
+    alert('분석이 완료된 뉴스만 유사 기사를 찾을 수 있습니다.');
+    return;
+  }
+
+  // 이미 검색 중인지 확인
+  if (this.searchInProgress.has(blockId)) {
+    alert('이미 검색이 진행 중입니다.');
+    return;
+  }
+
+  // Google API 키 확인
+  const apiKey = await this.getGoogleApiKey();
+  if (!apiKey && this.USE_REAL_API) {
+    alert('Google Custom Search API 키가 필요합니다.\n설정에서 API 키를 입력해주세요.');
+    return;
+  }
+
+  this.searchInProgress.add(blockId);
+  
+  // 로딩 인디케이터 표시
+  this.showSearchLoading(blockId, 'similar');
+  
+  try {
+    // 검색 쿼리 생성: AI 생성 검색어 > 키워드 > 요약 > 제목 순서로 우선
+    let rawQuery = block.result.검색어 || block.result.키워드 || block.result.요약 || block.title;
+    const searchQuery = this.refineSearchQuery(rawQuery);
+    const cacheKey = `similar_${searchQuery}`;
+
+    // 영구 캐시 확인 (API 절약)
+    const cachedResults = this.getFromSearchCache(cacheKey);
+    if (cachedResults) {
+      console.log('[findSimilarArticles] ✅ 캐시에서 결과 반환');
+      this.hideSearchLoading(blockId);
+      this.showSearchResults(blockId, cachedResults, 'similar');
+      this.searchInProgress.delete(blockId);
+      return;
+    }
+
+    console.log('[findSimilarArticles] 원본 쿼리:', rawQuery);
+    console.log('[findSimilarArticles] 정제된 쿼리:', searchQuery);
+    console.log('[findSimilarArticles] USE_REAL_API:', this.USE_REAL_API);
+
+    let results;
+    if (this.USE_REAL_API) {
+      // 실제 Google Search API 호출
+      results = await this.callGoogleSearchAPI(searchQuery, 'news', 4);
+    } else {
+      // Mock 데이터 반환
+      console.log('[findSimilarArticles] Mock 데이터 사용');
+      results = this.getMockSimilarArticles();
+    }
+
+    console.log('[findSimilarArticles] 검색 결과:', results);
+
+    // 영구 캐시에 저장 (API 절약)
+    this.saveToSearchCache(cacheKey, results);
+
+    // 로딩 숨김 및 결과 표시
+    this.hideSearchLoading(blockId);
+    this.showSearchResults(blockId, results, 'similar');
+
+  } catch (error) {
+    console.error('[findSimilarArticles] 오류:', error);
+    this.hideSearchLoading(blockId);
+    
+    // 에러 메시지 처리
+    const errorMessage = this.getSearchErrorMessage(error.message);
+    alert(errorMessage);
+  } finally {
+    this.searchInProgress.delete(blockId);
+  }
+};
+
+AnalysisPanel.prototype.searchFactCheck = async function(blockId) {
+  console.log('[searchFactCheck] 시작, blockId:', blockId);
+  
+  const block = this.newsBlocks.get(blockId);
+  if (!block) {
+    console.error('블록을 찾을 수 없음:', blockId);
+    return;
+  }
+
+  if (block.status !== 'completed' || !block.result) {
+    alert('분석이 완료된 뉴스만 사실 검증을 할 수 있습니다.');
+    return;
+  }
+
+  // 이미 검색 중인지 확인
+  if (this.searchInProgress.has(blockId)) {
+    alert('이미 검색이 진행 중입니다.');
+    return;
+  }
+
+  // Google API 키 확인
+  const apiKey = await this.getGoogleApiKey();
+  if (!apiKey && this.USE_REAL_API) {
+    alert('Google Custom Search API 키가 필요합니다.\n설정에서 API 키를 입력해주세요.');
+    return;
+  }
+
+  this.searchInProgress.add(blockId);
+  
+  // 로딩 인디케이터 표시 + 실시간 상황 업데이트
+  this.showSearchLoading(blockId, 'fact');
+  this.updateFactCheckStatus(blockId, '🔍 검색 중...');
+  
+  try {
+    // 검색 쿼리 생성
+    let rawQuery = block.result.검색어 || block.result.키워드 || block.result.근거 || block.result.요약 || block.title;
+    const searchQuery = this.refineSearchQuery(rawQuery);
+    
+    console.log('[searchFactCheck] 검색어:', searchQuery);
+    this.updateFactCheckStatus(blockId, `🔎 "${searchQuery.substring(0, 30)}..." 검색 중`);
+
+    let results;
+    if (this.USE_REAL_API) {
+      results = await this.callGoogleSearchAPI(searchQuery, 'keyword', 2);
+    } else {
+      results = this.getMockFactCheckResults();
+    }
+
+    if (!results || results.length === 0) {
+      this.updateFactCheckStatus(blockId, '❌ 검색 결과 없음');
+      setTimeout(() => this.clearFactCheckStatus(blockId), 3000);
+      return;
+    }
+
+    console.log('[searchFactCheck] 검색 결과:', results.length, '개');
+    this.updateFactCheckStatus(blockId, `📄 ${results.length}개 기사 발견, 크롤링 중...`);
+    
+    // 각 기사 크롤링 및 분석
+    const crawledArticles = [];
+    for (let i = 0; i < results.length; i++) {
+      const article = results[i];
+      this.updateFactCheckStatus(blockId, `📰 ${i + 1}/${results.length}: "${article.title.substring(0, 25)}..." 분석 중`);
+      
+      try {
+        // 크롤링 시도
+        const crawledContent = await this.crawlArticleContent(article.link);
+        
+        if (crawledContent) {
+          crawledArticles.push({
+            ...article,
+            crawledContent: crawledContent
+          });
+          this.updateFactCheckStatus(blockId, `✅ ${i + 1}/${results.length}: 크롤링 완료`);
+        } else {
+          crawledArticles.push(article);
+          this.updateFactCheckStatus(blockId, `⚠️ ${i + 1}/${results.length}: 크롤링 실패 (요약만 사용)`);
+        }
+        
+        await this.delay(500); // 크롤링 간격
+      } catch (error) {
+        console.error('[searchFactCheck] 크롤링 오류:', error);
+        crawledArticles.push(article);
+      }
+    }
+
+    this.updateFactCheckStatus(blockId, '🤖 AI 비교 검증 중...');
+    
+    // AI 분석 요청 (원본 뉴스와 크롤링된 기사들 비교)
+    const verificationResult = await this.verifyFactsWithAI(block, crawledArticles);
+    
+    this.updateFactCheckStatus(blockId, '✨ 전체 재분석 중...');
+    
+    // Gemini로 전체 재분석 (기존 분석 + 본문 + 사실 검증 결과)
+    const reanalyzedResult = await this.reanalyzeWithFactCheck(block, crawledArticles, verificationResult);
+    
+    this.updateFactCheckStatus(blockId, '🎉 검증 완료!');
+    
+    // 결과를 블록에 저장
+    block.factCheckResult = {
+      articles: crawledArticles,
+      verification: verificationResult,
+      reanalyzed: reanalyzedResult,
+      timestamp: Date.now()
+    };
+    
+    console.log('[searchFactCheck] factCheckResult 저장 완료:', block.factCheckResult);
+    
+    // 재분석 결과로 블록 업데이트
+    block.result = reanalyzedResult;
+    this.newsBlocks.set(blockId, block);
+    
+    // 영구 저장 (chrome.storage + localStorage)
+    this.saveNewsBlocks();
+    console.log('[searchFactCheck] 블록 저장 완료 (영구 저장)');
+    
+    // 상세 패널이 열려있으면 새로고침
+    if (this.activeDetailOverlay) {
+      console.log('[searchFactCheck] 상세 패널 새로고침');
+      this.closeDetailInPanel(true);
+      setTimeout(() => {
+        this.showDetailInPanel(block);
+      }, 100);
+    }
+    
+    // UI 업데이트
+    this.hideSearchLoading(blockId);
+    setTimeout(() => this.clearFactCheckStatus(blockId), 2000);
+
+  } catch (error) {
+    console.error('[searchFactCheck] 오류:', error);
+    this.hideSearchLoading(blockId);
+    this.updateFactCheckStatus(blockId, '❌ 오류 발생');
+    
+    const errorMessage = this.getSearchErrorMessage(error.message);
+    alert(errorMessage);
+    
+    setTimeout(() => this.clearFactCheckStatus(blockId), 3000);
+  } finally {
+    this.searchInProgress.delete(blockId);
+  }
+};
+
+AnalysisPanel.prototype.getGoogleApiKey = async function() {
+  // localStorage를 우선 사용 (Extension context invalidated 오류 방지)
+  try {
+    const encryptedKey = localStorage.getItem('google_search_api_key');
+    if (encryptedKey) {
+      const decrypted = await this.decryptApiKey(encryptedKey);
+      if (decrypted) {
+        return decrypted;
+      }
+    }
+  } catch (error) {
+    console.error('localStorage에서 Google API 키 조회 실패:', error);
+  }
+  
+  // localStorage 실패 시 chrome.storage 시도
+  return new Promise((resolve) => {
+    try {
+      chrome.storage.local.get(['google_search_api_key'], (result) => {
+        if (chrome.runtime.lastError) {
+          console.error('chrome.storage API 키 조회 오류:', chrome.runtime.lastError);
+          resolve(null);
+          return;
+        }
+        const encryptedKey = result.google_search_api_key;
+        if (encryptedKey) {
+          this.decryptApiKey(encryptedKey).then(decrypted => resolve(decrypted)).catch(() => resolve(null));
+        } else {
+          resolve(null);
+        }
+      });
+    } catch (error) {
+      console.error('chrome.storage 접근 실패:', error);
+      resolve(null);
+    }
+  });
+};
+
+AnalysisPanel.prototype.saveGoogleApiKey = async function(apiKey) {
+  if (!apiKey) return false;
+  
+  try {
+    const encryptedKey = await this.encryptApiKey(apiKey);
+    
+    // localStorage에 우선 저장 (Extension context invalidated 오류 방지)
+    try {
+      localStorage.setItem('google_search_api_key', encryptedKey);
+      console.log('API 키가 localStorage에 저장되었습니다.');
+    } catch (error) {
+      console.error('localStorage 저장 실패:', error);
+    }
+    
+    // chrome.storage에도 저장 시도 (백업)
+    try {
+      await new Promise((resolve) => {
+        chrome.storage.local.set({ google_search_api_key: encryptedKey }, () => {
+          if (chrome.runtime.lastError) {
+            console.log('chrome.storage 저장 실패:', chrome.runtime.lastError);
+          } else {
+            console.log('API 키가 chrome.storage에도 저장되었습니다.');
+          }
+          resolve(true);
+        });
+      });
+    } catch (error) {
+      console.error('chrome.storage 접근 실패:', error);
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Google API 키 저장 오류:', error);
+    return false;
+  }
+};
+
+AnalysisPanel.prototype.callGoogleSearchAPI = async function(query, type, limit) {
+  console.log('[callGoogleSearchAPI] 호출:', query, type, limit);
+  
+  // CSE ID 고정값 사용
+  const CSE_ID_NEWS = "a6724cd0397f24747";      // Daum 뉴스 전용
+  const CSE_ID_KEYWORD = "241358ac91fe04cd8";   // 전체 웹 검색
+  const cseId = type === 'news' ? CSE_ID_NEWS : CSE_ID_KEYWORD;
+  
+  // API 키 확인
+  const apiKey = await this.getGoogleApiKey();
+  if (!apiKey) {
+    throw new Error('API_KEY_MISSING');
+  }
+  
+  const url = `https://www.googleapis.com/customsearch/v1?key=${encodeURIComponent(apiKey)}&cx=${cseId}&q=${encodeURIComponent(query)}&num=${limit}`;
+  
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'Accept': 'application/json'
+      }
+    });
+    
+    // 상태 코드별 에러 처리
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      
+      if (response.status === 403) {
+        // API 키 문제 또는 쿼터 초과
+        if (errorData.error && errorData.error.message && errorData.error.message.includes('quota')) {
+          throw new Error('QUOTA_EXCEEDED');
+        }
+        throw new Error('API_KEY_INVALID');
+      } else if (response.status === 429) {
+        // Too Many Requests: 할당량 초과
+        throw new Error('QUOTA_EXCEEDED');
+      } else if (response.status === 400) {
+        throw new Error('INVALID_REQUEST');
+      } else if (response.status === 404) {
+        throw new Error('CSE_NOT_FOUND');
+      } else if (response.status >= 500) {
+        throw new Error('SERVER_ERROR');
+      }
+      
+      throw new Error(`API_ERROR_${response.status}`);
+    }
+    
+    const data = await response.json();
+    
+    // 검색 결과 없음
+    if (!data.items || data.items.length === 0) {
+      console.log('[callGoogleSearchAPI] 검색 결과 없음');
+      return [];
+    }
+    
+    // 결과 포맷팅
+    return data.items.map(item => ({
+      title: item.title || '제목 없음',
+      snippet: item.snippet || '요약 없음',
+      link: item.link || '',
+      displayLink: item.displayLink || '',
+      pagemap: item.pagemap || {}
+    }));
+    
+  } catch (error) {
+    console.error('[callGoogleSearchAPI] 요청 실패:', error);
+    
+    // 네트워크 오류
+    if (error.message === 'Failed to fetch' || error.name === 'TypeError') {
+      throw new Error('NETWORK_ERROR');
+    }
+    
+    throw error;
+  }
+};
+
+// 검색 에러 메시지 변환
+AnalysisPanel.prototype.getSearchErrorMessage = function(errorCode) {
+  const messages = {
+    'API_KEY_MISSING': '⚠️ Google Search API 키가 설정되지 않았습니다.\n\n설정 → Google Search API → API 키 설정에서 키를 입력해주세요.',
+    'API_KEY_INVALID': '🔑 API 키가 유효하지 않습니다.\n\nAPI 키를 확인하고 다시 입력해주세요.',
+    'QUOTA_EXCEEDED': '📊 일일 API 사용량 한도를 초과했습니다.\n\n📌 무료 플랜: 하루 100개 쿼리\n🕒 리셋 시간: 매일 자정 (PST 기준)\n\n💡 해결 방법:\n• 내일 다시 시도\n• 유료 플랜: $5 per 1,000 queries',
+    'CSE_NOT_FOUND': '🔍 검색 엔진(CSE) ID를 찾을 수 없습니다.\n\nCSE ID를 확인하고 다시 입력해주세요.',
+    'INVALID_REQUEST': '❌ 잘못된 검색 요청입니다.\n\n검색어나 설정을 확인해주세요.',
+    'SERVER_ERROR': '🌐 Google 서버에 일시적인 문제가 발생했습니다.\n\n잠시 후 다시 시도해주세요.',
+    'NETWORK_ERROR': '📡 네트워크 연결에 문제가 있습니다.\n\n인터넷 연결을 확인해주세요.',
+    'NO_RESULTS': '📭 검색 결과가 없습니다.\n\n다른 검색어로 시도해보세요.'
+  };
+  
+  return messages[errorCode] || `⚠️ 검색 중 오류가 발생했습니다.\n\n오류 코드: ${errorCode}`;
+};
+
+AnalysisPanel.prototype.showSearchResults = function(blockId, results, type) {
+  console.log('[showSearchResults] 결과 표시:', blockId, type, results);
+  
+  const typeName = type === 'similar' ? '유사 기사' : '사실 검증';
+  const icon = type === 'similar' ? '📰' : '🔍';
+  
+  // 검색 결과를 HTML로 렌더링
+  const renderResults = () => {
+    if (!results || results.length === 0) {
+      return '<p style="color: #737373; text-align: center; padding: 20px;">검색 결과가 없습니다.</p>';
+    }
+    
+    return results.map((r, i) => {
+      // 썸네일 이미지 추출 (유사 기사일 때만)
+      let thumbnailHtml = '';
+      if (type === 'similar' && r.pagemap) {
+        const thumbnail = r.pagemap.cse_thumbnail?.[0]?.src || r.pagemap.cse_image?.[0]?.src;
+        if (thumbnail) {
+          thumbnailHtml = `
+            <img src="${this.escapeHtml(thumbnail)}" alt="썸네일" style="
+              width: 80px;
+              height: 80px;
+              object-fit: cover;
+              border-radius: 6px;
+              flex-shrink: 0;
+            " onerror="this.style.display='none'">
+          `;
+        }
+      }
+      
+      return `
+      <div style="
+        background: #F2F2F2;
+        border: 1px solid #BF9780;
+        border-radius: 8px;
+        padding: 16px;
+        margin-bottom: 12px;
+        transition: transform 0.2s, box-shadow 0.2s;
+        cursor: pointer;
+        display: flex;
+        gap: 12px;
+      " class="search-result-item" data-url="${this.escapeHtml(r.link)}">
+        ${thumbnailHtml}
+        
+        <div style="flex: 1; min-width: 0;">
+          <div style="
+            color: #BF9780;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 6px;
+          ">${i + 1}번째 결과</div>
+          
+          <h3 style="
+            color: #0D0D0D;
+            font-size: 15px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            line-height: 1.4;
+          ">${this.escapeHtml(r.title)}</h3>
+          
+          <p style="
+            color: #404040;
+            font-size: 13px;
+            line-height: 1.5;
+            margin-bottom: 8px;
+          ">${this.escapeHtml(r.snippet)}</p>
+          
+          <a href="${this.escapeHtml(r.link)}" target="_blank" rel="noopener noreferrer" style="
+            color: #8B7355;
+            font-size: 12px;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            transition: color 0.2s;
+          " onclick="event.stopPropagation();">
+            🔗 ${this.escapeHtml(r.displayLink || r.link.substring(0, 30) + '...')}
+          </a>
+        </div>
+      </div>
+    `}).join('');
+  };
+  
+  const modal = document.createElement('div');
+  modal.className = 'search-results-modal';
+  modal.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(13,13,13,0.6);
+    z-index: 2147483649;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  `;
+
+  modal.innerHTML = `
+    <div class="modal-content" style="
+      background: #E8E8E8;
+      border-radius: 12px;
+      padding: 32px;
+      width: 90%;
+      max-width: 700px;
+      max-height: 85vh;
+      overflow-y: auto;
+      position: relative;
+      transform: scale(0.8);
+      transition: transform 0.3s ease;
+      border: 1px solid #BF9780;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+    ">
+      <button class="close-modal" style="
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        background: none;
+        border: none;
+        font-size: 24px;
+        color: #737373;
+        cursor: pointer;
+        width: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        transition: background-color 0.2s;
+      ">&times;</button>
+      
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-right: 40px;">
+        <h2 style="color: #0D0D0D; font-size: 20px; font-weight: bold; margin: 0;">
+          ${icon} ${typeName} 검색 결과 (${results.length}개)
+        </h2>
+      </div>
+      
+      ${results.length === 0 ? `
+        <div style="
+          text-align: center;
+          padding: 60px 20px;
+          color: #737373;
+        ">
+          <div style="font-size: 48px; margin-bottom: 16px;">📭</div>
+          <div style="font-size: 16px; font-weight: 600; margin-bottom: 8px;">검색 결과가 없습니다</div>
+          <div style="font-size: 14px;">다른 검색어로 시도해보세요</div>
+        </div>
+      ` : `
+        <div class="search-results-container">
+          ${renderResults()}
+        </div>
+      `}
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  // 애니메이션
+  setTimeout(() => {
+    modal.style.opacity = '1';
+    const modalContent = modal.querySelector('.modal-content');
+    if (modalContent) {
+      modalContent.style.transform = 'scale(1)';
+    }
+  }, 10);
+
+  // 검색 결과 항목 클릭 이벤트
+  const resultItems = modal.querySelectorAll('.search-result-item');
+  resultItems.forEach(item => {
+    item.addEventListener('click', () => {
+      const url = item.getAttribute('data-url');
+      if (url) {
+        window.open(url, '_blank', 'noopener,noreferrer');
+      }
+    });
+    
+    // 호버 효과
+    item.addEventListener('mouseenter', () => {
+      item.style.transform = 'translateY(-2px)';
+      item.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
+    });
+    item.addEventListener('mouseleave', () => {
+      item.style.transform = 'translateY(0)';
+      item.style.boxShadow = 'none';
+    });
+  });
+
+  // 닫기 이벤트
+  const closeBtn = modal.querySelector('.close-modal');
+  const closeModal = () => {
+    modal.style.opacity = '0';
+    setTimeout(() => modal.remove(), 300);
+  };
+
+  closeBtn.addEventListener('click', closeModal);
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) closeModal();
+  });
+
+  // ESC 키로 닫기
+  const escHandler = (e) => {
+    if (e.key === 'Escape') {
+      closeModal();
+      document.removeEventListener('keydown', escHandler);
+    }
+  };
+  document.addEventListener('keydown', escHandler);
+
+  // 호버 효과
+  closeBtn.addEventListener('mouseenter', () => {
+    closeBtn.style.backgroundColor = '#BF9780';
+  });
+  closeBtn.addEventListener('mouseleave', () => {
+    closeBtn.style.backgroundColor = 'transparent';
+  });
+};
+
+AnalysisPanel.prototype.getMockSimilarArticles = function() {
+  return [
+    {
+      title: '[유사 기사 1] 관련 뉴스 제목',
+      snippet: '이것은 유사한 내용을 다루는 기사입니다. Mock 데이터입니다.',
+      link: 'https://news.example.com/article1'
+    },
+    {
+      title: '[유사 기사 2] 비슷한 보도 내용',
+      snippet: '같은 주제를 다른 관점에서 다룬 기사입니다.',
+      link: 'https://news.example.com/article2'
+    },
+    {
+      title: '[유사 기사 3] 관련 언론 보도',
+      snippet: '비슷한 사건에 대한 다른 언론사의 보도입니다.',
+      link: 'https://news.example.com/article3'
+    },
+    {
+      title: '[유사 기사 4] 후속 보도',
+      snippet: '이 사건의 후속 보도 내용입니다.',
+      link: 'https://news.example.com/article4'
+    }
+  ];
+};
+
+AnalysisPanel.prototype.getMockFactCheckResults = function() {
+  return [
+    {
+      title: '[팩트체크 1] 공식 발표 자료',
+      snippet: '정부 기관에서 발표한 공식 자료입니다. 해당 주장은 사실로 확인되었습니다.',
+      link: 'https://factcheck.example.com/verify1'
+    },
+    {
+      title: '[팩트체크 2] 전문가 검증 의견',
+      snippet: '전문가들이 검증한 결과 일부 과장된 내용이 포함되어 있습니다.',
+      link: 'https://factcheck.example.com/verify2'
+    }
+  ];
+};
+
+// 검색 쿼리 정제 함수
+AnalysisPanel.prototype.refineSearchQuery = function(rawQuery) {
+  if (!rawQuery) return '';
+  
+  let refined = rawQuery;
+  
+  // HTML 태그 제거
+  refined = refined.replace(/<[^>]*>/g, ' ');
+  
+  // 특수 문자 제거 (단, 공백과 한글, 영문, 숫자는 유지)
+  refined = refined.replace(/[^\w\sㄱ-ㅎㅏ-ㅣ가-힣]/g, ' ');
+  
+  // 연속된 공백을 하나로
+  refined = refined.replace(/\s+/g, ' ').trim();
+  
+  // 길이 제한 (100자)
+  if (refined.length > 100) {
+    refined = refined.substring(0, 100);
+    // 마지막 단어가 잘리지 않도록 마지막 공백까지만
+    const lastSpace = refined.lastIndexOf(' ');
+    if (lastSpace > 50) {
+      refined = refined.substring(0, lastSpace);
+    }
+  }
+  
+  return refined;
+};
+
+// 검색 로딩 인디케이터 표시
+AnalysisPanel.prototype.showSearchLoading = function(blockId, type) {
+  const typeName = type === 'similar' ? '유사 기사' : '사실 검증';
+  const icon = type === 'similar' ? '📰' : '🔍';
+  
+  const loading = document.createElement('div');
+  loading.id = `search-loading-${blockId}`;
+  loading.style.cssText = `
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background: rgba(13, 13, 13, 0.9);
+    color: #F2F2F2;
+    padding: 24px 32px;
+    border-radius: 12px;
+    border: 1px solid #BF9780;
+    z-index: 2147483650;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 14px;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+  `;
+  
+  loading.innerHTML = `
+    <div style="
+      width: 20px;
+      height: 20px;
+      border: 3px solid #BF9780;
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    "></div>
+    <span>${icon} ${typeName} 검색 중...</span>
+    <style>
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+    </style>
+  `;
+  
+  document.body.appendChild(loading);
+};
+
+// 검색 로딩 인디케이터 숨김
+AnalysisPanel.prototype.hideSearchLoading = function(blockId) {
+  const loading = document.getElementById(`search-loading-${blockId}`);
+  if (loading) {
+    loading.remove();
+  }
+};
+
+// 디버그 정보 모달 표시
+AnalysisPanel.prototype.showDebugModal = function(blockId) {
+  const block = this.newsBlocks.get(blockId);
+  if (!block || !block.result) {
+    alert('분석 결과가 없습니다.');
+    return;
+  }
+
+  const result = block.result;
+  
+  // JSON을 HTML로 포맷팅
+  const formatValue = (value) => {
+    if (value === null || value === undefined) {
+      return '<span style="color: #9CA3AF;">null</span>';
+    }
+    if (typeof value === 'boolean') {
+      return `<span style="color: #10B981;">${value}</span>`;
+    }
+    if (typeof value === 'number') {
+      return `<span style="color: #3B82F6;">${value}</span>`;
+    }
+    if (typeof value === 'string') {
+      // HTML 태그를 실제로 렌더링하지 않고 보여주기 위해 이스케이프
+      const escaped = this.escapeHtml(value);
+      return `<span style="color: #0D0D0D;">${escaped}</span>`;
+    }
+    if (typeof value === 'object') {
+      return '<span style="color: #F59E0B;">object</span>';
+    }
+    return String(value);
+  };
+
+  const renderResultRows = () => {
+    return Object.entries(result).map(([key, value]) => `
+      <tr style="border-bottom: 1px solid #D4D4D4;">
+        <td style="
+          padding: 12px 16px;
+          font-weight: 600;
+          color: #BF9780;
+          white-space: nowrap;
+          vertical-align: top;
+          width: 120px;
+        ">${this.escapeHtml(key)}</td>
+        <td style="
+          padding: 12px 16px;
+          color: #0D0D0D;
+          word-break: break-word;
+          line-height: 1.6;
+        ">${formatValue(value)}</td>
+      </tr>
+    `).join('');
+  };
+
+  const modal = document.createElement('div');
+  modal.className = 'debug-modal';
+  modal.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(13,13,13,0.6);
+    z-index: 2147483649;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+  `;
+
+  modal.innerHTML = `
+    <div class="modal-content" style="
+      background: #E8E8E8;
+      border-radius: 12px;
+      padding: 32px;
+      width: 90%;
+      max-width: 800px;
+      max-height: 85vh;
+      overflow-y: auto;
+      position: relative;
+      transform: scale(0.8);
+      transition: transform 0.3s ease;
+      border: 1px solid #BF9780;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+    ">
+      <button class="close-modal" style="
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        background: none;
+        border: none;
+        font-size: 24px;
+        color: #737373;
+        cursor: pointer;
+        width: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 50%;
+        transition: background-color 0.2s;
+      ">&times;</button>
+      
+      <h2 style="color: #0D0D0D; font-size: 20px; font-weight: bold; margin-bottom: 8px; padding-right: 40px;">
+        🐛 디버그 정보
+      </h2>
+      
+      <p style="color: #737373; font-size: 13px; margin-bottom: 20px;">
+        Block ID: ${blockId} | 분석 결과 원본 데이터
+      </p>
+      
+      <div style="
+        background: #F2F2F2;
+        border: 1px solid #BF9780;
+        border-radius: 8px;
+        overflow: hidden;
+      ">
+        <table style="
+          width: 100%;
+          border-collapse: collapse;
+        ">
+          <thead>
+            <tr style="background: #BF9780;">
+              <th style="
+                padding: 12px 16px;
+                text-align: left;
+                color: #F2F2F2;
+                font-weight: 600;
+                font-size: 14px;
+              ">필드</th>
+              <th style="
+                padding: 12px 16px;
+                text-align: left;
+                color: #F2F2F2;
+                font-weight: 600;
+                font-size: 14px;
+              ">값</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${renderResultRows()}
+          </tbody>
+        </table>
+      </div>
+      
+      <div style="
+        margin-top: 20px;
+        padding: 16px;
+        background: #FEF3C7;
+        border: 1px solid #F59E0B;
+        border-radius: 8px;
+      ">
+        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+          <span style="font-size: 16px;">💡</span>
+          <strong style="color: #92400E; font-size: 14px;">개발자 팁</strong>
+        </div>
+        <p style="color: #78350F; font-size: 13px; line-height: 1.5; margin: 0;">
+          이 정보는 AI가 반환한 원본 결과입니다. 콘솔에서도 확인할 수 있습니다.
+        </p>
+      </div>
+    </div>
+  `;
+
+  document.body.appendChild(modal);
+
+  // 애니메이션
+  setTimeout(() => {
+    modal.style.opacity = '1';
+    const modalContent = modal.querySelector('.modal-content');
+    if (modalContent) {
+      modalContent.style.transform = 'scale(1)';
+    }
+  }, 10);
+
+  // 닫기 이벤트
+  const closeBtn = modal.querySelector('.close-modal');
+  const closeModal = () => {
+    modal.style.opacity = '0';
+    setTimeout(() => modal.remove(), 300);
+  };
+
+  closeBtn.addEventListener('click', closeModal);
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) closeModal();
+  });
+
+  // 호버 효과
+  closeBtn.addEventListener('mouseenter', () => {
+    closeBtn.style.backgroundColor = '#BF9780';
+  });
+  closeBtn.addEventListener('mouseleave', () => {
+    closeBtn.style.backgroundColor = 'transparent';
+  });
+
+  // 콘솔에도 출력
+  console.log('[Debug Modal] Block ID:', blockId);
+  console.log('[Debug Modal] Result:', result);
+};
+
+// 실시간 사실 검증 상황 표시 함수들
+AnalysisPanel.prototype.updateFactCheckStatus = function(blockId, statusText) {
+  const block = this.newsBlocks.get(blockId);
+  if (!block) return;
+  
+  // 블록의 더보기 버튼 영역에 상황 텍스트 표시
+  const moreBtn = document.querySelector(`[data-block-id="${blockId}"] .show-more-btn`);
+  if (moreBtn) {
+    // 기존 상황 표시 요소 찾기 또는 생성
+    let statusEl = moreBtn.parentElement.querySelector('.fact-check-status');
+    if (!statusEl) {
+      statusEl = document.createElement('div');
+      statusEl.className = 'fact-check-status';
+      statusEl.style.cssText = `
+        margin-top: 8px;
+        padding: 8px 12px;
+        background: rgba(191, 151, 128, 0.1);
+        border-left: 3px solid #BF9780;
+        border-radius: 4px;
+        font-size: 13px;
+        color: #0D0D0D;
+        font-weight: 500;
+        animation: fadeIn 0.3s ease;
+      `;
+      moreBtn.parentElement.appendChild(statusEl);
+    }
+    statusEl.textContent = statusText;
+  }
+};
+
+AnalysisPanel.prototype.clearFactCheckStatus = function(blockId) {
+  const statusEl = document.querySelector(`[data-block-id="${blockId}"] .fact-check-status`);
+  if (statusEl) {
+    statusEl.style.opacity = '0';
+    statusEl.style.transition = 'opacity 0.3s ease';
+    setTimeout(() => statusEl.remove(), 300);
+  }
+};
+
+// 뉴스 기사 크롤링 함수
+AnalysisPanel.prototype.crawlArticleContent = async function(url) {
+  console.log('[crawlArticleContent] 크롤링 시작:', url);
+  
+  // 영구 캐시 확인 (크롤링 절약)
+  const cachedContent = this.getFromCrawlCache(url);
+  if (cachedContent) {
+    console.log('[crawlArticleContent] ✅ 캐시에서 반환');
+    return cachedContent;
+  }
+  
+  try {
+    // Service Worker를 통한 CORS 우회 크롤링
+    const response = await new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage(
+        { action: 'fetchWithCORS', url: url },
+        (response) => {
+          if (chrome.runtime.lastError) {
+            reject(new Error(chrome.runtime.lastError.message));
+          } else {
+            resolve(response);
+          }
+        }
+      );
+    });
+    
+    if (!response.success) {
+      console.warn('[crawlArticleContent] ⚠️ fetchWithCORS 실패:', response.error);
+      return null;
+    }
+    
+    const html = response.html;
+    
+    // HTML 파싱하여 본문 추출
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(html, 'text/html');
+    
+    // 다양한 뉴스 사이트의 본문 선택자
+    const selectors = [
+      'article',
+      '[id*="article"]',
+      '[class*="article"]',
+      '[class*="content"]',
+      '[id*="content"]',
+      'main',
+      '.news-content',
+      '.article-body',
+      '[id*="newsBody"]',
+      '[class*="news_body"]'
+    ];
+    
+    let content = '';
+    for (const selector of selectors) {
+      const elements = doc.querySelectorAll(selector);
+      if (elements.length > 0) {
+        content = Array.from(elements)
+          .map(el => el.textContent)
+          .join('\n')
+          .replace(/\s+/g, ' ')
+          .trim();
+        
+        if (content.length > 100) {
+          break;
+        }
+      }
+    }
+    
+    if (content.length > 5000) {
+      content = content.substring(0, 5000) + '...';
+    }
+    
+    // 영구 캐시에 저장 (크롤링 절약)
+    if (content && content.length > 100) {
+      this.saveToCrawlCache(url, content);
+      console.log('[crawlArticleContent] ✅ 크롤링 성공, 길이:', content.length);
+    } else {
+      console.warn('[crawlArticleContent] ⚠️ 본문 추출 실패 (길이: ' + content.length + ')');
+    }
+    
+    return content || null;
+    
+  } catch (error) {
+    console.warn('[crawlArticleContent] ❌ 크롤링 실패:', error?.message || error);
+    return null;
+  }
+};
+
+// AI 응답에서 JSON 안전 추출
+AnalysisPanel.prototype.extractJsonFromAiResponse = function(resultText) {
+  if (!resultText) {
+    return null;
+  }
+
+  const normalized = resultText.replace(/\r\n/g, '\n');
+  const codeBlockMatch = normalized.match(/```(?:json)?[\t ]*\n?([\s\S]*?)```/i);
+  const braceMatch = normalized.match(/\{[\s\S]*\}/);
+  const bracketMatch = normalized.match(/\[[\s\S]*\]/);
+  const rawCandidate = codeBlockMatch ? codeBlockMatch[1] : (braceMatch ? braceMatch[0] : (bracketMatch ? bracketMatch[0] : null));
+  if (!rawCandidate) {
+    return null;
+  }
+
+  return this.safeParseJsonString(rawCandidate);
+};
+
+AnalysisPanel.prototype.safeParseJsonString = function(jsonString) {
+  if (!jsonString) {
+    return null;
+  }
+
+  const sanitizers = [
+    (str) => str,
+    (str) => str.replace(/[\u2018\u2019]/g, "'").replace(/[\u201C\u201D]/g, '"'),
+    (str) => str.replace(/,(\s*[}\]])/g, '$1'),
+    (str) => str.replace(/'(\s*:\s*)/g, '"$1').replace(/:(\s*)'(.*?)'/g, ':$1"$2"'),
+    (str) => str.replace(/'/g, '"')
+  ];
+
+  let working = jsonString;
+  for (const sanitize of sanitizers) {
+    try {
+      working = sanitize(working).trim();
+      return JSON.parse(working);
+    } catch (error) {
+      continue;
+    }
+  }
+
+  console.warn('[safeParseJsonString] JSON 파싱 실패, 원본 유지');
+  return null;
+};
+
+// AI를 사용한 사실 검증 함수
+AnalysisPanel.prototype.verifyFactsWithAI = async function(originalBlock, comparisonArticles) {
+  console.log('[verifyFactsWithAI] AI 검증 시작');
+  
+  const prompt = `
+당신은 사실 검증 전문가입니다. 원본 뉴스 기사와 비교 기사들을 분석하여 사실 여부를 검증하세요.
+
+## 원본 기사
+제목: ${originalBlock.title}
+내용: ${originalBlock.content.substring(0, 1000)}
+
+## 비교 기사들
+${comparisonArticles.map((article, i) => `
+### 비교 기사 ${i + 1}
+제목: ${article.title}
+출처: ${article.displayLink}
+요약: ${article.snippet}
+${article.crawledContent ? `본문 일부: ${article.crawledContent.substring(0, 500)}` : '(본문 크롤링 실패)'}
+`).join('\n')}
+
+## 작업
+원본 기사의 핵심 주장들을 비교 기사들과 대조하여 다음을 분석하세요:
+1. **일치하는 사실**: 비교 기사에서도 확인되는 내용
+2. **불일치하는 사실**: 비교 기사와 다르게 보도된 내용
+3. **검증 불가**: 비교 기사에서 언급되지 않은 내용
+4. **종합 평가**: 원본 기사의 신뢰도 평가 (신뢰할 수 있음 / 부분적으로 신뢰 / 신뢰하기 어려움)
+
+JSON 형식으로 응답:
+{
+  "일치하는_사실": ["사실1", "사실2", ...],
+  "불일치하는_사실": ["불일치1", "불일치2", ...],
+  "검증_불가": ["내용1", "내용2", ...],
+  "종합_평가": "평가 텍스트"
+}
+`;
+
+  try {
+    const apiKey = 'AIzaSyCj9T9GNDQLduYbwPAGn6ovK44RlCnZHDU'; // Gemini API 키
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }]
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`AI API 오류: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    const resultText = data.candidates[0]?.content?.parts[0]?.text || '{}';
+    const parsed = this.extractJsonFromAiResponse(resultText);
+    if (parsed) {
+      return parsed;
+    }
+    
+    console.warn('[verifyFactsWithAI] JSON 파싱 실패, 기본값 반환');
+    return {
+      일치하는_사실: [],
+      불일치하는_사실: [],
+      검증_불가: [],
+      종합_평가: '검증 결과를 파싱할 수 없습니다.'
+    };
+    
+  } catch (error) {
+    console.error('[verifyFactsWithAI] AI 검증 오류:', error);
+    return {
+      일치하는_사실: [],
+      불일치하는_사실: [],
+      검증_불가: [],
+      종합_평가: 'AI 검증 중 오류가 발생했습니다.'
+    };
+  }
+};
+
+// 사실 검증 후 Gemini로 전체 재분석
+AnalysisPanel.prototype.reanalyzeWithFactCheck = async function(originalBlock, comparisonArticles, verificationResult) {
+  console.log('[reanalyzeWithFactCheck] 재분석 시작');
+  
+  const prompt = `
+당신은 뉴스 진위 판별 전문가입니다. 기존 분석 결과와 사실 검증 결과를 종합하여 **최종 분석을 업데이트**하세요.
+
+## 원본 기사
+제목: ${originalBlock.title}
+본문: ${originalBlock.content.substring(0, 1500)}
+
+## 기존 AI 분석 결과
+${JSON.stringify(originalBlock.result, null, 2)}
+
+## 사실 검증 결과 (${comparisonArticles.length}개 기사와 비교)
+${comparisonArticles.map((article, i) => `
+### 검증 기사 ${i + 1}
+- 제목: ${article.title}
+- 출처: ${article.displayLink}
+- 요약: ${article.snippet}
+${article.crawledContent ? `- 본문 일부: ${article.crawledContent.substring(0, 400)}` : ''}
+`).join('\n')}
+
+### 검증 분석
+- 일치하는 사실: ${verificationResult.일치하는_사실?.join(', ') || '없음'}
+- 불일치하는 사실: ${verificationResult.불일치하는_사실?.join(', ') || '없음'}
+- 검증 불가: ${verificationResult.검증_불가?.join(', ') || '없음'}
+- 종합 평가: ${verificationResult.종합_평가}
+
+## 작업
+위 사실 검증 결과를 반영하여 **기존 분석을 업데이트**하세요:
+
+1. **진위**: 검증 결과를 반영하여 최종 판단 (진짜 뉴스 / 가짜일 가능성이 높은 뉴스 / 가짜일 가능성이 있는 뉴스 / 진짜 뉴스)
+2. **요약**: 사실 검증 결과를 포함한 핵심 요약 (2-3문장)
+3. **근거**: 
+   - 기존 근거 유지
+   - **✅ 사실 검증**: ${comparisonArticles.length}개 기사와 교차 검증 완료
+   - 일치/불일치하는 사실 요약
+4. **분석**: 
+   - 기존 분석 내용
+   - **사실 검증 반영**: 비교 기사들에서 확인된 사항, 의심스러운 부분 등 상세히 기술
+5. **키워드**: 기존 유지
+6. **검색어**: 기존 유지
+7. **사실검증완료**: true (새로 추가)
+
+**중요**: 
+- "사실 검증 완료" 또는 "교차 검증됨" 등의 표시를 명확히 포함
+- 일치하는 사실은 ✅, 불일치는 ❌ 마크 사용
+- 비교 검증된 기사 개수 명시
+
+JSON 형식으로 응답:
+\`\`\`json
+{
+  "진위": "...",
+  "요약": "...",
+  "근거": "...",
+  "분석": "...",
+  "키워드": "...",
+  "검색어": "...",
+  "사실검증완료": true
+}
+\`\`\`
+`;
+
+  try {
+    const apiKey = 'AIzaSyCj9T9GNDQLduYbwPAGn6ovK44RlCnZHDU';
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }]
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`AI API 오류: ${response.status}`);
+    }
+    
+    const data = await response.json();
+    const resultText = data.candidates[0]?.content?.parts[0]?.text || '{}';
+    const parsed = this.extractJsonFromAiResponse(resultText);
+    if (parsed) {
+      console.log('[reanalyzeWithFactCheck] 재분석 완료');
+      return parsed;
+    }
+    
+    // 파싱 실패 시 기존 결과에 사실검증완료 플래그만 추가
+    console.warn('[reanalyzeWithFactCheck] JSON 파싱 실패, 기존 결과 사용');
+    return {
+      ...originalBlock.result,
+      사실검증완료: true
+    };
+    
+  } catch (error) {
+    console.error('[reanalyzeWithFactCheck] 재분석 오류:', error);
+    // 오류 시 기존 결과 반환
+    return {
+      ...originalBlock.result,
+      사실검증완료: true
+    };
+  }
+};
+
+// 사실 검증 결과로 블록 업데이트 (더 이상 사용 안 함 - reanalyzeWithFactCheck로 대체)
+AnalysisPanel.prototype.updateBlockWithFactCheck = function(blockId, verification) {
+  const block = this.newsBlocks.get(blockId);
+  if (!block) return;
+  
+  // result 객체에 검증 결과 추가
+  if (!block.result) block.result = {};
+  block.result.사실검증 = verification;
+  
+  // UI 업데이트
+  this.newsBlocks.set(blockId, block);
+  
+  // 상세 패널이 열려있으면 새로고침
+  const detailPanel = document.getElementById(`detail-panel-${blockId}`);
+  if (detailPanel) {
+    // 기존 패널 제거하고 재생성
+    detailPanel.remove();
+    this.showDetailedResult(blockId);
+  }
+  
+  console.log('[updateBlockWithFactCheck] 블록 업데이트 완료:', blockId);
+};
+
+// 지연 함수 (크롤링 간격용)
+AnalysisPanel.prototype.delay = function(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+};
+
+// ============= 영구 캐시 관리 (API 효율성) =============
+
+// 영구 캐시 로드
+AnalysisPanel.prototype.loadPersistentCache = function() {
+  try {
+    // 검색 결과 캐시 로드
+    const searchCacheData = localStorage.getItem('factcheck_search_cache');
+    if (searchCacheData) {
+      const parsed = JSON.parse(searchCacheData);
+      this.persistentSearchCache = new Map(Object.entries(parsed));
+      console.log('[loadPersistentCache] 검색 캐시 로드:', this.persistentSearchCache.size, '개');
+    } else {
+      this.persistentSearchCache = new Map();
+    }
+    
+    // 크롤링 결과 캐시 로드
+    const crawlCacheData = localStorage.getItem('factcheck_crawl_cache');
+    if (crawlCacheData) {
+      const parsed = JSON.parse(crawlCacheData);
+      this.persistentCrawlCache = new Map(Object.entries(parsed));
+      console.log('[loadPersistentCache] 크롤링 캐시 로드:', this.persistentCrawlCache.size, '개');
+    } else {
+      this.persistentCrawlCache = new Map();
+    }
+  } catch (error) {
+    console.error('[loadPersistentCache] 로드 실패:', error);
+    this.persistentSearchCache = new Map();
+    this.persistentCrawlCache = new Map();
+  }
+};
+
+// 영구 캐시 저장
+AnalysisPanel.prototype.savePersistentCache = function() {
+  try {
+    // 검색 결과 캐시 저장
+    const searchCacheObj = Object.fromEntries(this.persistentSearchCache);
+    localStorage.setItem('factcheck_search_cache', JSON.stringify(searchCacheObj));
+    
+    // 크롤링 결과 캐시 저장
+    const crawlCacheObj = Object.fromEntries(this.persistentCrawlCache);
+    localStorage.setItem('factcheck_crawl_cache', JSON.stringify(crawlCacheObj));
+    
+    console.log('[savePersistentCache] 캐시 저장 완료:', 
+      this.persistentSearchCache.size, '개 검색,', 
+      this.persistentCrawlCache.size, '개 크롤링');
+  } catch (error) {
+    console.error('[savePersistentCache] 저장 실패:', error);
+  }
+};
+
+// 검색 결과를 영구 캐시에서 가져오기
+AnalysisPanel.prototype.getFromSearchCache = function(cacheKey) {
+  if (this.persistentSearchCache && this.persistentSearchCache.has(cacheKey)) {
+    const cached = this.persistentSearchCache.get(cacheKey);
+    // 캐시 유효기간 체크 (7일)
+    if (cached.timestamp && Date.now() - cached.timestamp < 7 * 24 * 60 * 60 * 1000) {
+      console.log('[getFromSearchCache] ✅ 캐시 히트:', cacheKey);
+      return cached.results;
+    } else {
+      // 만료된 캐시 제거
+      this.persistentSearchCache.delete(cacheKey);
+      this.savePersistentCache();
+    }
+  }
+  return null;
+};
+
+// 검색 결과를 영구 캐시에 저장
+AnalysisPanel.prototype.saveToSearchCache = function(cacheKey, results) {
+  if (!this.persistentSearchCache) {
+    this.persistentSearchCache = new Map();
+  }
+  this.persistentSearchCache.set(cacheKey, {
+    results: results,
+    timestamp: Date.now()
+  });
+  this.savePersistentCache();
+  console.log('[saveToSearchCache] 💾 캐시 저장:', cacheKey);
+};
+
+// 크롤링 결과를 영구 캐시에서 가져오기
+AnalysisPanel.prototype.getFromCrawlCache = function(url) {
+  if (this.persistentCrawlCache && this.persistentCrawlCache.has(url)) {
+    const cached = this.persistentCrawlCache.get(url);
+    // 캐시 유효기간 체크 (30일)
+    if (cached.timestamp && Date.now() - cached.timestamp < 30 * 24 * 60 * 60 * 1000) {
+      console.log('[getFromCrawlCache] ✅ 캐시 히트:', url.substring(0, 50));
+      return cached.content;
+    } else {
+      // 만료된 캐시 제거
+      this.persistentCrawlCache.delete(url);
+      this.savePersistentCache();
+    }
+  }
+  return null;
+};
+
+// 크롤링 결과를 영구 캐시에 저장
+AnalysisPanel.prototype.saveToCrawlCache = function(url, content) {
+  if (!this.persistentCrawlCache) {
+    this.persistentCrawlCache = new Map();
+  }
+  this.persistentCrawlCache.set(url, {
+    content: content,
+    timestamp: Date.now()
+  });
+  this.savePersistentCache();
+  console.log('[saveToCrawlCache] 💾 캐시 저장:', url.substring(0, 50));
+};
+
+// 캐시 통계 보기
+AnalysisPanel.prototype.getCacheStats = function() {
+  return {
+    searchCache: this.persistentSearchCache ? this.persistentSearchCache.size : 0,
+    crawlCache: this.persistentCrawlCache ? this.persistentCrawlCache.size : 0
+  };
+};
+
+

@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
 
 export default function ApiKeyInput({ onSubmit, onClose }) {
-  const [apiKey, setApiKey] = useState('');
+  const [geminiApiKey, setGeminiApiKey] = useState('');
+  const [googleApiKey, setGoogleApiKey] = useState('');
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (onSubmit) onSubmit(apiKey);
+    if (onSubmit) onSubmit({ gemini: geminiApiKey, google: googleApiKey });
   };
 
   const handleClose = () => {
@@ -23,13 +24,30 @@ export default function ApiKeyInput({ onSubmit, onClose }) {
           &times;
         </button>
         <h2 className="text-xl font-bold mb-6 text-center text-text-primary">API 키를 입력하세요</h2>
-        <input
-          type="text"
-          value={apiKey}
-          onChange={e => setApiKey(e.target.value)}
-          placeholder="API Key"
-          className="border border-secondary rounded px-4 py-2 mb-4 w-full text-base focus:outline-none focus:ring-2 focus:ring-primary"
-        />
+        
+        <div className="mb-4 w-full">
+          <label className="block text-sm font-semibold mb-2 text-text-primary">Gemini API Key</label>
+          <input
+            type="text"
+            value={geminiApiKey}
+            onChange={e => setGeminiApiKey(e.target.value)}
+            placeholder="Gemini API Key"
+            className="border border-secondary rounded px-4 py-2 w-full text-base focus:outline-none focus:ring-2 focus:ring-primary"
+          />
+        </div>
+
+        <div className="mb-4 w-full">
+          <label className="block text-sm font-semibold mb-2 text-text-primary">Google Search API Key</label>
+          <input
+            type="text"
+            value={googleApiKey}
+            onChange={e => setGoogleApiKey(e.target.value)}
+            placeholder="Google Custom Search API Key"
+            className="border border-secondary rounded px-4 py-2 w-full text-base focus:outline-none focus:ring-2 focus:ring-primary"
+          />
+          <p className="text-xs text-text-secondary mt-1">유사 기사 찾기, 사실 검증 기능에 사용됩니다.</p>
+        </div>
+
         <button
           type="submit"
           className="bg-primary text-text-primary px-6 py-2 rounded font-semibold hover:bg-secondary transition-colors w-full"
