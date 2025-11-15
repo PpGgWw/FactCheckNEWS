@@ -593,12 +593,15 @@ window.highlightSuspiciousSentences = highlightSuspiciousSentences;
 /**
  * 에러 모달 표시 함수
  */
-function showErrorModal(errorMessage) {
+function showErrorModal(errorMessage, errorTitle = 'API 호출 실패') {
   // 기존 에러 모달 제거
   const existingModal = document.getElementById('factcheck-error-modal');
   if (existingModal) {
     existingModal.remove();
   }
+  
+  // 429 에러 감지
+  const is429Error = errorTitle.includes('할당량') || errorMessage.includes('429') || errorMessage.includes('quota');
   
   // 에러 모달 생성
   const modal = document.createElement('div');
@@ -609,64 +612,87 @@ function showErrorModal(errorMessage) {
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.5);
+    background: rgba(0, 0, 0, 0.6);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 999999;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    animation: fadeIn 0.2s ease;
   `;
   
   const modalContent = document.createElement('div');
   modalContent.style.cssText = `
     background: white;
-    border-radius: 12px;
-    padding: 24px;
+    border-radius: 16px;
+    padding: 32px;
     max-width: 500px;
     width: 90%;
-    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    animation: slideUp 0.3s ease;
   `;
   
+  // 아이콘 추가
+  const icon = document.createElement('div');
+  icon.style.cssText = `
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 20px;
+    background: ${is429Error ? 'linear-gradient(135deg, #FFA726 0%, #FB8C00 100%)' : 'linear-gradient(135deg, #EF5350 0%, #D32F2F 100%)'};
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 32px;
+    color: white;
+  `;
+  icon.textContent = is429Error ? '⚠️' : '❌';
+  
   const title = document.createElement('h2');
-  title.textContent = 'API 호출 실패';
+  title.textContent = errorTitle;
   title.style.cssText = `
     margin: 0 0 16px 0;
-    font-size: 20px;
-    font-weight: 600;
-    color: #D32F2F;
+    font-size: 22px;
+    font-weight: 700;
+    color: ${is429Error ? '#F57C00' : '#D32F2F'};
+    text-align: center;
   `;
   
   const message = document.createElement('p');
   message.textContent = errorMessage;
   message.style.cssText = `
-    margin: 0 0 20px 0;
-    font-size: 14px;
-    line-height: 1.6;
-    color: #333;
+    margin: 0 0 24px 0;
+    font-size: 15px;
+    line-height: 1.7;
+    color: #424242;
     white-space: pre-wrap;
+    text-align: ${is429Error ? 'left' : 'center'};
   `;
   
   const closeButton = document.createElement('button');
   closeButton.textContent = '확인';
   closeButton.style.cssText = `
-    background: #D32F2F;
+    background: ${is429Error ? 'linear-gradient(135deg, #FFA726 0%, #FB8C00 100%)' : 'linear-gradient(135deg, #EF5350 0%, #D32F2F 100%)'};
     color: white;
     border: none;
-    border-radius: 6px;
-    padding: 10px 20px;
-    font-size: 14px;
-    font-weight: 500;
+    border-radius: 10px;
+    padding: 14px 24px;
+    font-size: 15px;
+    font-weight: 600;
     cursor: pointer;
     width: 100%;
-    transition: background 0.2s;
+    transition: all 0.2s;
+    box-shadow: 0 4px 12px ${is429Error ? 'rgba(255, 167, 38, 0.4)' : 'rgba(211, 47, 47, 0.4)'};
   `;
   
   closeButton.onmouseover = () => {
-    closeButton.style.background = '#B71C1C';
+    closeButton.style.transform = 'translateY(-2px)';
+    closeButton.style.boxShadow = `0 6px 16px ${is429Error ? 'rgba(255, 167, 38, 0.5)' : 'rgba(211, 47, 47, 0.5)'}`;
   };
   
   closeButton.onmouseout = () => {
-    closeButton.style.background = '#D32F2F';
+    closeButton.style.transform = 'translateY(0)';
+    closeButton.style.boxShadow = `0 4px 12px ${is429Error ? 'rgba(255, 167, 38, 0.4)' : 'rgba(211, 47, 47, 0.4)'}`;
   };
   
   closeButton.onclick = () => {
@@ -680,6 +706,30 @@ function showErrorModal(errorMessage) {
     }
   };
   
+  // 애니메이션 스타일 추가
+  if (!document.getElementById('error-modal-animations')) {
+    const style = document.createElement('style');
+    style.id = 'error-modal-animations';
+    style.textContent = `
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      @keyframes slideUp {
+        from { 
+          opacity: 0;
+          transform: translateY(20px);
+        }
+        to { 
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+    `;
+    document.head.appendChild(style);
+  }
+  
+  modalContent.appendChild(icon);
   modalContent.appendChild(title);
   modalContent.appendChild(message);
   modalContent.appendChild(closeButton);
@@ -905,8 +955,8 @@ if (isChromeApiAvailable()) {
           // 분석 실패 처리
           panel.__analysisPanel.failAnalysis(message.blockId, message.error);
           
-          // 에러 모달 생성
-          showErrorModal(message.error);
+          // 에러 모달 생성 (제목 포함)
+          showErrorModal(message.error, message.errorTitle || 'API 호출 실패');
         }
       } else if (message.action === "updateStreamingResult" && message.partialResult) {
         // 실시간 스트리밍 결과 업데이트

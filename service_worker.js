@@ -447,16 +447,28 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         } else {
           // 비스트리밍 모드: 한번에 결과 받기
           callGeminiAPINonStreaming(promptText, API_KEY)
-            .then(result => {
+            .then(response => {
               console.log("--- Gemini API 비스트리밍 완료 ---");
-              console.log(result);
+              console.log(response);
+              
+              // 할당량 정보 로깅
+              if (response.quota) {
+                console.log('[Quota Info] 남은 요청:', response.quota.remaining);
+                console.log('[Quota Info] 전체 한도:', response.quota.limit);
+                console.log('[Quota Info] 리셋 시간:', response.quota.reset);
+              }
               
               // sendResponse로 직접 반환 (content script로 전송 안 함)
-              sendResponse({ status: "분석 완료 및 결과 전송 성공", result: result });
+              sendResponse({ 
+                success: true,
+                status: "분석 완료 및 결과 전송 성공", 
+                result: response.result || response,
+                quota: response.quota
+              });
             })
             .catch(error => {
               console.error("Gemini API 비스트리밍 처리 중 오류:", error);
-              sendResponse({ status: "API 처리 오류", error: error.message });
+              sendResponse({ success: false, status: "API 처리 오류", error: error.message });
             });
         }
       });
@@ -606,13 +618,47 @@ async function callGeminiAPIWithRealStreaming(prompt, apiUrl, tabId, blockId) {
   }
   
   // 모든 재시도 실패 시 에러 메시지를 content script로 전송
-  const errorMessage = `API 호출에 ${MAX_RETRIES}번 실패했습니다.\n\n오류 내용:\n${lastError.message}`;
+  let errorMessage;
+  let errorTitle = 'API 호출 실패';
+  
+  // 429 에러 (할당량 초과) 체크
+  if (lastError.message.includes('429') || lastError.message.includes('quota')) {
+    errorTitle = 'API 할당량 초과';
+    errorMessage = `Gemini API의 일일 무료 할당량(200회)을 모두 사용했습니다.\n\n다음 방법을 시도해보세요:\n\n1. 설정에서 "유사 기사 AI 필터링"을 끄기\n2. 내일 자정(UTC 기준)까지 대기\n3. 유료 플랜으로 업그레이드\n\n현재 크롤링 우선순위를 "속도"로 설정하면 API 사용을 줄일 수 있습니다.`;
+    
+    // 할당량 0으로 저장
+    const exhaustedInfo = {
+      remaining: '0',
+      limit: '200',
+      reset: null,
+      timestamp: Date.now(),
+      exhausted: true
+    };
+    
+    if (chrome?.storage?.local) {
+      try {
+        await chrome.storage.local.set({ gemini_quota_info: exhaustedInfo });
+      } catch (storageError) {
+        console.error('할당량 chrome.storage 저장 실패:', storageError);
+      }
+    }
+    
+    if (isChromeApiAvailable()) {
+      chrome.runtime.sendMessage({
+        action: 'saveQuotaExhausted'
+      }).catch(e => console.error('할당량 저장 실패:', e));
+    }
+  } else {
+    errorMessage = `API 호출에 ${MAX_RETRIES}번 실패했습니다.\n\n오류 내용:\n${lastError.message}`;
+  }
+  
   console.error("최종 실패:", errorMessage);
   
   if (isChromeApiAvailable()) {
     chrome.tabs.sendMessage(tabId, {
       action: "displayErrorModal",
       error: errorMessage,
+      errorTitle: errorTitle,
       blockId: blockId
     }).catch(error => console.error("에러 모달 전송 오류:", error));
   }
@@ -696,6 +742,15 @@ async function callGeminiAPINonStreaming(prompt, apiKey) {
       })
     });
 
+    // 할당량 정보 추출 (응답 헤더)
+    const quotaInfo = {
+      remaining: response.headers.get('x-goog-quota-remaining') || response.headers.get('x-ratelimit-remaining'),
+      limit: response.headers.get('x-goog-quota-limit') || response.headers.get('x-ratelimit-limit'),
+      reset: response.headers.get('x-goog-quota-reset') || response.headers.get('x-ratelimit-reset')
+    };
+    
+    console.log('[callGeminiAPINonStreaming] 할당량 정보:', quotaInfo);
+
     if (!response.ok) {
       const errorBody = await response.json();
       throw new Error(`API 요청 실패: ${response.status} ${response.statusText} - ${JSON.stringify(errorBody)}`);
@@ -708,7 +763,7 @@ async function callGeminiAPINonStreaming(prompt, apiKey) {
     
     // JSON 파싱
     const parsed = extractNewsContentFromText(resultText);
-    return parsed;
+    return { success: true, result: parsed, quota: quotaInfo };
     
   } catch (error) {
     console.error("[callGeminiAPINonStreaming] API 호출 오류:", error);

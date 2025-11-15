@@ -11,6 +11,9 @@ class AnalysisPanel {
     this.streamingDiffCache = new Map(); // 스트리밍 누적 텍스트 캐시
     this.analysisTimeouts = new Map(); // 분석 타임아웃 관리
     this.abortControllers = new Map(); // API 요청 중단용 AbortController
+    this.API_KEY_PLACEHOLDER = 'NONE';
+    this.geminiKeyReady = this.hasLocalApiKey('gemini_api_key');
+    this.googleKeyReady = this.hasLocalApiKey('google_search_api_key');
     
     // 실시간 타이핑 효과 관련 속성
     this.typingSpeed = 30; // 타이핑 속도 (ms)
@@ -63,6 +66,391 @@ class AnalysisPanel {
     
     // 저장된 뉴스 블록 데이터 로드
     this.loadSavedNewsBlocks();
+    
+    // 기본 설정 보정
+    this.applyDefaultSettings();
+    this.syncApiKeyCacheFromChrome();
+    
+    // 메시지/스토리지 리스너 등록 (할당량 변동 감지)
+    this.setupMessageListener();
+    this.initializeQuotaState();
+  }
+  
+  hasLocalApiKey(keyName) {
+    try {
+      const value = localStorage.getItem(keyName);
+      return Boolean(value && value !== this.API_KEY_PLACEHOLDER);
+    } catch (error) {
+      console.warn('Failed to inspect local API key:', error);
+      return false;
+    }
+  }
+  
+  refreshApiKeyFlags() {
+    this.geminiKeyReady = this.hasLocalApiKey('gemini_api_key');
+    this.googleKeyReady = this.hasLocalApiKey('google_search_api_key');
+    this.enforceApiKeyDependencies();
+    this.updateHeaderApiIndicator();
+    const settingsModal = document.getElementById('settings-panel-modal');
+    if (settingsModal) {
+      const content = settingsModal.querySelector('.settings-panel-content');
+      this.updateApiStatusBadges(content);
+      this.updateApiKeyDependentControls(content);
+    }
+  }
+  
+  syncApiKeyCacheFromChrome() {
+    if (!this.isChromeApiAvailable()) {
+      this.refreshApiKeyFlags();
+      return;
+    }
+    try {
+      chrome.storage.local.get(['gemini_api_key', 'google_search_api_key'], (result) => {
+        if (chrome.runtime.lastError) {
+          console.warn('Failed to sync API 키 from chrome.storage:', chrome.runtime.lastError.message);
+          this.refreshApiKeyFlags();
+          return;
+        }
+        if (typeof result.gemini_api_key !== 'undefined') {
+          try {
+            localStorage.setItem('gemini_api_key', result.gemini_api_key);
+          } catch (error) {
+            console.warn('Failed to cache Gemini API key locally:', error);
+          }
+        }
+        if (typeof result.google_search_api_key !== 'undefined') {
+          try {
+            localStorage.setItem('google_search_api_key', result.google_search_api_key);
+          } catch (error) {
+            console.warn('Failed to cache Google API key locally:', error);
+          }
+        }
+        this.refreshApiKeyFlags();
+        this.updatePanel();
+      });
+    } catch (error) {
+      console.warn('Chrome storage unavailable while syncing API keys:', error);
+      this.refreshApiKeyFlags();
+    }
+  }
+  
+  isGeminiKeyConfigured() {
+    return Boolean(this.geminiKeyReady);
+  }
+  
+  isGoogleApiConfigured() {
+    return Boolean(this.googleKeyReady);
+  }
+
+  getApiIndicatorState() {
+    const geminiReady = this.isGeminiKeyConfigured();
+    const googleReady = this.isGoogleApiConfigured();
+    if (!geminiReady) {
+      return {
+        text: '안됨',
+        color: '#EF4444',
+        description: 'Gemini API 키가 없습니다.'
+      };
+    }
+    if (!googleReady) {
+      return {
+        text: '입력됨',
+        color: '#FBBF24',
+        description: 'Google API 키가 없어 일부 기능이 제한됩니다.'
+      };
+    }
+    return {
+      text: '입력됨',
+      color: '#10B981',
+      description: '모든 API 키가 준비되었습니다.'
+    };
+  }
+
+  updateHeaderApiIndicator() {
+    const panel = document.getElementById(this.panelId);
+    if (!panel) return;
+
+    const dot = panel.querySelector('[data-role="api-status-dot"]');
+    const textEl = panel.querySelector('[data-role="api-status-text"]');
+    if (!dot || !textEl) return;
+
+    const { text, color } = this.getApiIndicatorState();
+    dot.style.background = color;
+    dot.style.boxShadow = `0 0 12px ${this.hexToRgba(color, 0.6)}`;
+    textEl.textContent = text;
+    textEl.style.color = this.hexToRgba(color, 0.85);
+  }
+
+  updateApiStatusBadges(rootEl, snapshot = null) {
+    if (!rootEl) return;
+    const geminiBadge = rootEl.querySelector('[data-role="gemini-status"]');
+    const googleBadge = rootEl.querySelector('[data-role="google-status"]');
+    const geminiReady = this.isGeminiKeyConfigured();
+    const googleReady = this.isGoogleApiConfigured();
+
+    if (geminiBadge) {
+      geminiBadge.textContent = geminiReady ? '입력됨' : '미입력';
+      geminiBadge.style.background = geminiReady ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)';
+      geminiBadge.style.color = geminiReady ? '#047857' : '#B91C1C';
+    }
+    if (googleBadge) {
+      googleBadge.textContent = googleReady ? '입력됨' : '미입력';
+      googleBadge.style.background = googleReady ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)';
+      googleBadge.style.color = googleReady ? '#047857' : '#B91C1C';
+    }
+
+    if (snapshot) {
+      const geminiInput = rootEl.querySelector('.gemini-key-input');
+      const googleInput = rootEl.querySelector('.google-key-input');
+      if (geminiInput && typeof snapshot.gemini === 'string') {
+        geminiInput.value = snapshot.gemini;
+      }
+      if (googleInput && typeof snapshot.google === 'string') {
+        googleInput.value = snapshot.google;
+      }
+    }
+  }
+
+  updateApiKeyDependentControls(rootEl) {
+    if (!rootEl) return;
+    const geminiReady = this.isGeminiKeyConfigured();
+    const googleReady = this.isGoogleApiConfigured();
+    const googleToggle = rootEl.querySelector('.google-search-toggle-btn');
+    const autoFactCheckBtn = rootEl.querySelector('.auto-factcheck-btn');
+    const autoCrossBtn = rootEl.querySelector('.auto-crossverify-btn');
+    const filterBtn = rootEl.querySelector('.article-filter-btn');
+
+    const disableButton = (button, enabled, tooltip) => {
+      if (!button) return;
+      button.disabled = !enabled;
+      button.style.opacity = enabled ? '1' : '0.5';
+      button.style.cursor = enabled ? 'pointer' : 'not-allowed';
+      if (tooltip) {
+        button.title = enabled ? '' : tooltip;
+      }
+    };
+
+    disableButton(googleToggle, googleReady, 'Google Search API 키를 먼저 입력하세요.');
+    disableButton(autoFactCheckBtn, geminiReady && googleReady, 'Gemini와 Google API 키 모두 필요합니다.');
+    disableButton(autoCrossBtn, geminiReady, 'Gemini API 키를 먼저 입력하세요.');
+    disableButton(filterBtn, geminiReady, 'Gemini API 키를 먼저 입력하세요.');
+  }
+
+  enforceApiKeyDependencies() {
+    const geminiReady = this.isGeminiKeyConfigured();
+    const googleReady = this.isGoogleApiConfigured();
+
+    if (!googleReady && this.getGoogleSearchEnabled()) {
+      this.setGoogleSearchEnabled(false);
+    }
+    if ((!geminiReady || !googleReady) && this.getAutoFactCheckSetting()) {
+      this.setAutoFactCheckSetting(false);
+    }
+    if (!geminiReady && this.getAutoCrossVerificationSetting()) {
+      this.setAutoCrossVerificationSetting(false);
+    }
+    if (!geminiReady && this.getArticleFilterSetting()) {
+      this.setArticleFilterSetting(false);
+    }
+  }
+
+  async loadApiKeySnapshot() {
+    const [gemini, google] = await Promise.all([
+      this.fetchStoredApiKey('gemini_api_key'),
+      this.fetchStoredApiKey('google_search_api_key')
+    ]);
+    return { gemini, google };
+  }
+
+  async fetchStoredApiKey(keyName) {
+    const decodeValue = async (value) => {
+      if (!value || value === this.API_KEY_PLACEHOLDER) {
+        return '';
+      }
+      try {
+        return await this.decryptApiKey(value);
+      } catch (error) {
+        console.warn(`[API Key] Failed to decrypt ${keyName}:`, error);
+        return '';
+      }
+    };
+
+    let localValue = null;
+    try {
+      localValue = localStorage.getItem(keyName);
+    } catch (error) {
+      console.warn(`[API Key] Failed to read ${keyName} from localStorage:`, error);
+    }
+
+    const localPlain = await decodeValue(localValue);
+    if (localPlain) {
+      return localPlain;
+    }
+
+    if (!this.isChromeApiAvailable()) {
+      return '';
+    }
+
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.get([keyName], async (result) => {
+          if (chrome.runtime.lastError) {
+            console.warn(`[API Key] Chrome storage read failed for ${keyName}:`, chrome.runtime.lastError.message);
+            resolve('');
+            return;
+          }
+          const storedValue = result[keyName];
+          resolve(await decodeValue(storedValue));
+        });
+      } catch (error) {
+        console.warn(`[API Key] Chrome storage access failed for ${keyName}:`, error);
+        resolve('');
+      }
+    });
+  }
+
+  async persistApiKeyValue(keyName, plainValue) {
+    const sanitized = (plainValue || '').trim();
+    const shouldClear = sanitized.length === 0 || sanitized.toUpperCase() === this.API_KEY_PLACEHOLDER;
+    let valueToStore = this.API_KEY_PLACEHOLDER;
+
+    if (!shouldClear) {
+      valueToStore = await this.encryptApiKey(sanitized);
+    }
+
+    this.safeSetLocalItem(keyName, valueToStore);
+    await this.safeSetChromeLocal(keyName, valueToStore);
+    return shouldClear ? '' : sanitized;
+  }
+
+  safeSetLocalItem(key, value) {
+    try {
+      localStorage.setItem(key, value);
+    } catch (error) {
+      console.warn(`[Storage] Failed to set ${key} locally:`, error);
+    }
+  }
+
+  async safeSetChromeLocal(key, value) {
+    if (!this.isChromeApiAvailable()) return;
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.set({ [key]: value }, () => {
+          if (chrome.runtime.lastError) {
+            console.warn(`[Storage] Chrome storage set failed for ${key}:`, chrome.runtime.lastError.message);
+          }
+          resolve();
+        });
+      } catch (error) {
+        console.warn(`[Storage] Chrome storage exception for ${key}:`, error);
+        resolve();
+      }
+    });
+  }
+
+  async saveGeminiApiKey(apiKey) {
+    await this.persistApiKeyValue('gemini_api_key', apiKey);
+    this.refreshApiKeyFlags();
+  }
+  
+  // 메시지 리스너 설정
+  setupMessageListener() {
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+      if (message.action === 'saveQuotaExhausted') {
+        console.log('[AnalysisPanel] 할당량 소진 메시지 수신');
+        this.saveQuotaExhausted();
+        sendResponse({ success: true });
+      }
+      return true;
+    });
+  }
+
+  // chrome.storage.local과 동기화해 패널이 닫혀도 할당량 상태를 복원
+  initializeQuotaState() {
+    if (!chrome?.storage?.local) {
+      this.updateQuotaDisplay();
+      return;
+    }
+    
+    chrome.storage.local.get(['gemini_quota_info'], (result) => {
+      if (chrome.runtime.lastError) {
+        console.warn('할당량 초기화 실패:', chrome.runtime.lastError.message);
+        this.updateQuotaDisplay();
+        return;
+      }
+      if (result.gemini_quota_info) {
+        this.persistQuotaInfoLocally(result.gemini_quota_info);
+      }
+      this.updateQuotaDisplay();
+    });
+    
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+      if (areaName !== 'local' || !changes.gemini_quota_info) return;
+      const newValue = changes.gemini_quota_info.newValue;
+      if (newValue) {
+        this.persistQuotaInfoLocally(newValue);
+      } else {
+        localStorage.removeItem('gemini_quota_info');
+      }
+      this.updateQuotaDisplay();
+    });
+  }
+
+  // localStorage에 안전하게 저장
+  persistQuotaInfoLocally(quotaInfo) {
+    try {
+      localStorage.setItem('gemini_quota_info', JSON.stringify(quotaInfo));
+    } catch (error) {
+      console.error('Failed to persist quota info locally:', error);
+    }
+  }
+
+  // 초기 실행 시 기본 설정 값 주입
+  applyDefaultSettings() {
+    const ensureLocal = (key, value, serializer) => {
+      try {
+        if (localStorage.getItem(key) !== null) return;
+        const serialized = typeof serializer === 'function'
+          ? serializer(value)
+          : (typeof value === 'string' ? value : JSON.stringify(value));
+        localStorage.setItem(key, serialized);
+      } catch (error) {
+        console.warn(`[Defaults] Failed to set ${key}:`, error);
+      }
+    };
+
+    const ensureChrome = (key, value) => {
+      if (!this.isChromeApiAvailable()) return;
+      chrome.storage.local.get([key], (data) => {
+        if (chrome.runtime.lastError) {
+          console.warn(`[Defaults] Chrome storage get failed for ${key}:`, chrome.runtime.lastError.message);
+          return;
+        }
+        if (typeof data[key] === 'undefined') {
+          try {
+            chrome.storage.local.set({ [key]: value }, () => {
+              if (chrome.runtime.lastError) {
+                console.warn(`[Defaults] Chrome storage set failed for ${key}:`, chrome.runtime.lastError.message);
+              }
+            });
+          } catch (error) {
+            console.warn(`[Defaults] Chrome storage exception for ${key}:`, error);
+          }
+        }
+      });
+    };
+
+    ensureLocal('crawling_priority', 'speed');
+    ensureChrome('crawling_priority', 'speed');
+
+    ensureLocal('article_filter_enabled', 'false');
+    ensureChrome('article_filter_enabled', false);
+
+    ensureLocal('factcheck_auto_fact_check', false);
+    ensureLocal('factcheck_auto_cross_verify', false);
+    ensureLocal('factcheck_auto_open', true);
+    ensureLocal('factcheck_panel_opacity', '1');
+    ensureLocal('factcheck_cross_verification_depth', '3');
   }
 
   // 메인 패널 생성
@@ -740,6 +1128,28 @@ class AnalysisPanel {
                 ">연결됨</span>
               </div>
               
+              <!-- API 할당량 표시 -->
+              <div id="quota-display" style="
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                padding: 6px 12px;
+                background: rgba(13, 13, 13, 0.25);
+                border: 1px solid ${border};
+                border-radius: 8px;
+                margin-right: 8px;
+              ">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${textMuted}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+                </svg>
+                <span style="
+                  font-size: 11px;
+                  color: ${textMuted};
+                  font-weight: 600;
+                  letter-spacing: -0.3px;
+                "><span id="quota-remaining">-</span> / <span id="quota-limit">-</span></span>
+              </div>
+              
               <button id="settings-btn" style="
                 width: 36px;
                 height: 36px;
@@ -977,16 +1387,21 @@ class AnalysisPanel {
             overflow: hidden;
           ">${safeTitle}</span>
         </div>
-        ${showAnalyzeBtn ? `<button id="collapsed-current-analyze-btn" style="
-          padding: 8px 14px;
-          border-radius: 8px;
-          border: 1px solid rgba(140, 110, 84, 0.5);
-          background: rgba(140, 110, 84, 0.28);
-          color: ${text};
-          font-size: 13px;
-          cursor: pointer;
-          transition: all 0.2s ease;
-        " onmouseover="this.style.background='rgba(140, 110, 84, 0.4)';" onmouseout="this.style.background='rgba(140, 110, 84, 0.28)';">분석하기</button>` : ''}
+        ${showAnalyzeBtn ? `
+          <div style="display: flex; flex-direction: column; gap: 4px;">
+            <button id="collapsed-current-analyze-btn" style="
+              padding: 8px 14px;
+              border-radius: 8px;
+              border: 1px solid rgba(140, 110, 84, 0.5);
+              background: rgba(140, 110, 84, 0.28);
+              color: ${text};
+              font-size: 13px;
+              cursor: pointer;
+              transition: all 0.2s ease;
+            " onmouseover="this.style.background='rgba(140, 110, 84, 0.4)';" onmouseout="this.style.background='rgba(140, 110, 84, 0.28)';">분석하기</button>
+            ${this.isQuotaExhausted() ? `<span style="font-size: 11px; color: ${this.hexToRgba(text, 0.8)};">⚠️ 현재 할당량이 소진된 상태로 표시되지만, 다시 시도하여 상태를 새로고침할 수 있습니다.</span>` : ''}
+          </div>
+        ` : ''}
         ${isAnalyzing ? `
         <div style="
           padding: 8px 14px;
@@ -1042,17 +1457,19 @@ class AnalysisPanel {
         const showAnalyze = block.status === 'pending' || block.status === 'error';
         const statusBadge = this.getCollapsedStatusBadge(block);
         const analyzeButton = showAnalyze ? `
-              <button class="mini-action-btn mini-analyze-btn" data-block-id="${block.id}" style="
-                flex: 1 1 110px;
-                padding: 6px 10px;
-                border-radius: 6px;
-                border: 1px solid rgba(140, 110, 84, 0.45);
-                background: rgba(140, 110, 84, 0.22);
-                color: ${text};
-                font-size: 12px;
-                cursor: pointer;
-                transition: all 0.2s ease;
-              " onmouseover="this.style.background='rgba(140, 110, 84, 0.34)';" onmouseout="this.style.background='rgba(140, 110, 84, 0.22)';">분석하기</button>` : '';
+              <div style="flex: 1 1 110px; display: flex; flex-direction: column; gap: 4px;">
+                <button class="mini-action-btn mini-analyze-btn" data-block-id="${block.id}" style="
+                  padding: 6px 10px;
+                  border-radius: 6px;
+                  border: 1px solid rgba(140, 110, 84, 0.45);
+                  background: rgba(140, 110, 84, 0.22);
+                  color: ${text};
+                  font-size: 12px;
+                  cursor: pointer;
+                  transition: all 0.2s ease;
+                " onmouseover="this.style.background='rgba(140, 110, 84, 0.34)';" onmouseout="this.style.background='rgba(140, 110, 84, 0.22)';">분석하기</button>
+                ${this.isQuotaExhausted() ? `<span style="font-size: 10px; color: ${this.hexToRgba(text, 0.7)};">⚠️ 할당량 소진 상태를 다시 확인 중</span>` : ''}
+              </div>` : '';
         const openButton = encodedUrl ? `
               <button class="mini-action-btn mini-open-btn" data-url="${encodedUrl}" style="
                 flex: 1 1 90px;
@@ -1265,22 +1682,34 @@ class AnalysisPanel {
         actionButtons = factCheckProgressButton;
       } else {
         switch (status) {
-        case 'pending':
+        case 'pending': {
+          const quotaWarningActive = this.isQuotaExhausted();
           actionButtons = `
-            <button class="analyze-current-btn" data-id="${id}" style="
-              background: ${primaryButtonBase};
-              color: ${text};
-              padding: 8px 16px;
-              border-radius: 6px;
-              font-size: 14px;
-              border: 1px solid ${primaryButtonBorder};
-              cursor: pointer;
-              transition: all 0.2s;
-              width: 100%;
-              backdrop-filter: blur(8px);
-            " onmouseover="this.style.background='${primaryButtonHover}'" onmouseout="this.style.background='${primaryButtonBase}'">분석하기</button>
+            <div style="display: flex; flex-direction: column; gap: 6px; width: 100%;">
+              <button class="analyze-current-btn" data-id="${id}" style="
+                background: ${primaryButtonBase};
+                color: ${text};
+                padding: 8px 16px;
+                border-radius: 6px;
+                font-size: 14px;
+                border: 1px solid ${primaryButtonBorder};
+                cursor: pointer;
+                transition: all 0.2s;
+                width: 100%;
+                backdrop-filter: blur(8px);
+              " onmouseover="this.style.background='${primaryButtonHover}'" onmouseout="this.style.background='${primaryButtonBase}'">분석하기</button>
+              ${quotaWarningActive ? `<div style="
+                font-size: 12px;
+                color: ${this.hexToRgba(text, 0.8)};
+                background: rgba(191, 151, 128, 0.2);
+                border: 1px dashed rgba(140, 110, 84, 0.4);
+                padding: 8px 10px;
+                border-radius: 6px;
+              ">⚠️ 현재 저장된 정보상 할당량이 소진되었습니다. 분석하기를 눌러 상태를 다시 확인하세요.</div>` : ''}
+            </div>
           `;
           break;
+        }
         case 'analyzing':
           actionButtons = `
             <div style="display: flex; gap: 8px; align-items: center; width: 100%;">
@@ -1869,6 +2298,42 @@ class AnalysisPanel {
     return progress;
   }
 
+  // 출처 번호 [1], [2]를 인터랙티브 링크로 변환
+  renderSourceNumbers(text, articles) {
+    if (!text || !articles || articles.length === 0) return this.escapeHtml(text);
+    
+    let html = this.escapeHtml(text);
+    
+    // [1], [2], [3], [4] 형식의 출처 번호 찾기
+    html = html.replace(/\[(\d+)\]/g, (match, num) => {
+      const index = parseInt(num) - 1;
+      if (index < 0 || index >= articles.length) return match;
+      
+      const article = articles[index];
+      const title = this.escapeHtml(article.title || '제목 없음');
+      const snippet = this.escapeHtml(article.snippet || '내용 없음');
+      const displayLink = this.escapeHtml(article.displayLink || '');
+      const imageUrl = article.pagemap?.cse_thumbnail?.[0]?.src || article.pagemap?.cse_image?.[0]?.src || '';
+      const link = article.link || '#';
+      
+      return `<span class="source-ref" data-index="${index}" data-url="${this.escapeHtml(link)}" style="
+        display: inline-block;
+        background: linear-gradient(135deg, rgba(191, 151, 128, 0.2), rgba(140, 110, 84, 0.2));
+        color: #BF9780;
+        border: 1px solid rgba(191, 151, 128, 0.4);
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s;
+        position: relative;
+      " onmouseover="this.style.background='linear-gradient(135deg, rgba(191, 151, 128, 0.35), rgba(140, 110, 84, 0.35))'; this.style.transform='translateY(-1px)'" onmouseout="this.style.background='linear-gradient(135deg, rgba(191, 151, 128, 0.2), rgba(140, 110, 84, 0.2))'; this.style.transform='translateY(0)'">[${num}]</span>`;
+    });
+    
+    return html;
+  }
+
   // 블록 내부 타이핑 영역 업데이트
   updateBlockTypingArea(blockId, newText) {
     const container = document.getElementById(`typing-stream-${blockId}`);
@@ -2115,6 +2580,9 @@ class AnalysisPanel {
       if (analyzedContainer) {
         analyzedContainer.innerHTML = this.renderAnalyzedNews();
       }
+      
+      // 할당량 정보 업데이트
+      this.updateQuotaDisplay();
       
       // 축소된 요약 뷰 업데이트 (축소 상태일 때)
       if (this.isHistoryCollapsed) {
@@ -3210,8 +3678,8 @@ class AnalysisPanel {
         modalOverlay.remove();
         
         // 설정 패널 생성 및 열기
-        this.checkSavedApiKey().then((savedApiKey) => {
-          const settingsModal = this.createSettingsPanel(savedApiKey);
+        this.loadApiKeySnapshot().then((apiKeys) => {
+          const settingsModal = this.createSettingsPanel(apiKeys);
           document.body.appendChild(settingsModal);
           
           settingsModal.style.display = 'flex';
@@ -3471,7 +3939,7 @@ JSON 외의 문장, 주석, 코드 블록(\\\`\\\`\\\`json\\\`\\\`\\\`)은 절�
       "분석진행": "기사 구조 파악 → 근거 확인 → 논리 구조 분석 → 표현 분석 → 오탐 체크리스트 확인 → 종합 판단 순으로 단계별 추론 과정을 작성",
       "진위": "판단 결과('가짜 뉴스' / '가짜일 가능성이 높은 뉴스' / '가짜일 가능성이 있는 뉴스' / '부분적으로 신뢰할 수 있는 뉴스' / '진짜 뉴스')",
       "근거": "탐지된 중요도 조건을 <br> 태그로 반드시 구분하여 나열. 예: 1-1. 기사 내 명백한 내용상 모순<br>3-2. 감정적 표현 사용<br>4-1. 제목과 내용의 불일치",
-      "분석": "위 근거들을 종합하여 기사의 어떤 부분이 왜 문제인지 혹은 신뢰할 수 있는지를 구체적으로 설명. 문단 구분이 필요하면 <br><br> 사용",
+      "분석": "다음 구조로 가독성 높게 작성하세요:<br><br>**✨ 기사 개요**<br>기사가 다루는 핵심 내용을 1-2문장으로 간단히 정리<br><br>**📊 주요 분석 결과**<br>위 근거에서 발견된 핵심 문제점 또는 신뢰할 수 있는 요소를 항목별로 명확히 설명<br><br>**⚠️ 검증 한계**<br>(있다면) 현재 검증으로는 확인 불가능한 정보나 추가 확인이 필요한 부분을 간단히 언급<br><br>**⚖️ 종합 판단**<br>위 내용을 바탕으로 최종 신뢰도 평가와 그 이유를 2-3문장으로 명확히 정리<br><br>※ 각 섹션은 <br><br>로 구분하고, 섹션 제목은 이모지+굵은 글씨(**텍스트**)로 표시하세요",
       "요약": "기사의 핵심 내용을 간결하고 정확하게 요약 (50-100자 이내, HTML 태그 사용 금지). 한 문장으로 핵심만 간결하게 작성",
       "키워드": "기사의 핵심 키워드 3-5개를 추출 (쉼표로 구분, HTML 태그 사용 금지). 예: 정치, 한동훈, 국민의힘, 대장동 사건, 여론",
       "검색어": "유사 기사 검색 또는 사실 검증에 적합한 검색어 1개 (20-50자, 고유명사 + 핵심 사건/주제 조합, HTML 태그 사용 금지). 예: 한동훈 대장동 사건 항소 포기"
@@ -3526,7 +3994,7 @@ ${articleContent}
       "분석진행": "비교분석을 위한 단계별 추론 과정을 작성",
       "진위": "두 뉴스의 비교분석 결과 ('일치하는 진짜 뉴스' / '일부 차이가 있지만 신뢰할 수 있는 뉴스' / '상당한 차이가 있어 주의가 필요한 뉴스' / '상충되는 내용으로 추가 검증 필요')",
       "근거": "두 뉴스 간의 일치점과 차이점을 나열",
-      "분석": "두 뉴스의 비교분석 결과를 상세히 서술",
+      "분석": "다음 구조로 가독성 높게 작성하세요:<br><br>**✨ 두 기사 개요**<br>각 기사가 다루는 핵심 내용을 1-2문장씩 간단히 정리<br><br>**📊 비교 분석 결과**<br>- 일치하는 부분: 공통적으로 확인되는 사실이나 관점 나열<br>- 차이나는 부분: 서로 다른 정보나 해석의 차이 명확히 설명<br><br>**⚖️ 신뢰도 평가**<br>두 기사를 종합했을 때의 전체적인 신뢰도와 주의사항을 2-3문장으로 정리<br><br>※ 각 섹션은 <br><br>로 구분하고, 섹션 제목은 이모지+굵은 글씨(**텍스트**)로 표시하세요",
       "요약": "두 뉴스의 핵심 내용과 주요 차이점을 간결하게 요약"
     }
   }
@@ -3615,7 +4083,7 @@ ${article.crawledContent ? `- 핵심 내용: ${article.crawledContent.substring(
       "분석진행": "1차 분석 검토 → 원문 재평가 → 오류/과도한 판단 확인 → 최종 판단 도출 과정을 단계별로 작성",
       "진위": "교차 검증 후 최종 판단 ('가짜 뉴스' / '가짜일 가능성이 높은 뉴스' / '가짜일 가능성이 있는 뉴스' / '부분적으로 신뢰할 수 있는 뉴스' / '진짜 뉴스')",
       "근거": "최종 판단의 근거를 나열",
-      "분석": "1차 분석의 타당성 검토 + 원문 재평가 결과를 종합하여 상세히 설명",
+      "분석": "다음 구조로 가독성 높게 작성하세요:<br><br>**✨ 기사 개요**<br>기사가 다루는 핵심 내용을 1-2문장으로 간단히 정리<br><br>**📊 주요 분석 결과**<br>위 근거에서 발견된 핵심 문제점 또는 신뢰할 수 있는 요소를 항목별로 명확히 설명<br><br>**⚠️ 검증 한계**<br>(있다면) 현재 검증으로는 확인 불가능한 정보나 추가 확인이 필요한 부분을 간단히 언급<br><br>**⚖️ 종합 판단**<br>위 내용을 바탕으로 최종 신뢰도 평가와 그 이유를 2-3문장으로 명확히 정리<br><br>※ 각 섹션은 <br><br>로 구분하고, 섹션 제목은 이모지+굵은 글씨(**텍스트**)로 표시하세요",
       "요약": "교차 검증을 거친 최종 결론을 간결하게 요약",
       "검증의견": "1차 분석과 비교하여 달라진 점, 보완된 점, 또는 동의하는 이유를 명시"
     }
@@ -3683,7 +4151,7 @@ ${factCheckSection}
       "분석진행": "원문 재확인 → 1차 분석 검토 → ${currentStep - 1}차 검증 검토 → 놓친 맥락 확인 → 최종 정밀화된 판단 도출 과정을 단계별로 작성",
       "진위": "${currentStep}차 재귀적 검증 후 최종 판단 ('가짜 뉴스' / '가짜일 가능성이 높은 뉴스' / '가짜일 가능성이 있는 뉴스' / '부분적으로 신뢰할 수 있는 뉴스' / '진짜 뉴스')",
       "근거": "최종 판단의 근거를 나열",
-      "분석": "원문 기반으로 1차 분석과 ${currentStep - 1}차 검증의 타당성 재검토",
+      "분석": "다음 구조로 가독성 높게 작성하세요:<br><br>**✨ 기사 개요**<br>기사가 다루는 핵심 내용을 1-2문장으로 간단히 정리<br><br>**📊 주요 분석 결과**<br>위 근거에서 발견된 핵심 문제점 또는 신뢰할 수 있는 요소를 항목별로 명확히 설명<br><br>**⚠️ 검증 한계**<br>(있다면) 현재 검증으로는 확인 불가능한 정보나 추가 확인이 필요한 부분을 간단히 언급<br><br>**⚖️ 종합 판단**<br>위 내용을 바탕으로 최종 신뢰도 평가와 그 이유를 2-3문장으로 명확히 정리<br><br>※ 각 섹션은 <br><br>로 구분하고, 섹션 제목은 이모지+굵은 글씨(**텍스트**)로 표시하세요",
       "요약": "${currentStep}차 재귀적 검증을 거친 최종 결론을 간결하게 요약",
       "검증의견": "${currentStep - 1}차 검증 및 1차 분석과 비교하여 달라진 점, 보완된 점, 또는 동의하는 이유를 명시"
     }
@@ -4003,23 +4471,134 @@ ${factCheckSection}
             ">${this.renderMarkdown(summary)}</div>
           </section>
 
+          ${block.factCheckResult && block.factCheckResult.verification ? `
           <section>
             <h3 style="
               font-size: 15px;
               font-weight: 600;
               margin: 0 0 12px 0;
               color: ${text};
-            ">근거</h3>
+              display: flex;
+              align-items: center;
+              gap: 8px;
+            ">
+              📊 사실 검증 결과
+              <span style="
+                background: linear-gradient(135deg, rgba(16, 185, 129, 0.25), rgba(5, 150, 105, 0.25));
+                color: rgba(5, 150, 105, 1);
+                border: 1px solid rgba(16, 185, 129, 0.5);
+                padding: 4px 10px;
+                border-radius: 8px;
+                font-size: 11px;
+                font-weight: 600;
+                letter-spacing: 0.3px;
+              ">${block.factCheckResult.articles.length}개 기사 비교</span>
+            </h3>
+            
+            ${block.factCheckResult.verification.일치하는_사실 && block.factCheckResult.verification.일치하는_사실.length > 0 ? `
+            <div style="
+              background: ${this.hexToRgba('#10B981', 0.1)};
+              border: 1px solid ${this.hexToRgba('#10B981', 0.3)};
+              border-radius: 10px;
+              padding: 16px;
+              margin-bottom: 12px;
+            ">
+              <div style="
+                font-weight: 600;
+                color: #10B981;
+                margin-bottom: 10px;
+                font-size: 14px;
+              ">✅ 일치하는 사실 (${block.factCheckResult.verification.일치하는_사실.length})</div>
+              <ul style="
+                margin: 0;
+                padding-left: 20px;
+                color: ${text};
+                line-height: 1.6;
+                font-size: 13px;
+              ">
+                ${block.factCheckResult.verification.일치하는_사실.map(fact => `
+                  <li style="margin-bottom: 6px;">${this.renderSourceNumbers(fact, block.factCheckResult.articles)}</li>
+                `).join('')}
+              </ul>
+            </div>
+            ` : ''}
+            
+            ${block.factCheckResult.verification.불일치하는_사실 && block.factCheckResult.verification.불일치하는_사실.length > 0 ? `
+            <div style="
+              background: ${this.hexToRgba('#EF4444', 0.1)};
+              border: 1px solid ${this.hexToRgba('#EF4444', 0.3)};
+              border-radius: 10px;
+              padding: 16px;
+              margin-bottom: 12px;
+            ">
+              <div style="
+                font-weight: 600;
+                color: #EF4444;
+                margin-bottom: 10px;
+                font-size: 14px;
+              ">❌ 불일치하는 사실 (${block.factCheckResult.verification.불일치하는_사실.length})</div>
+              <ul style="
+                margin: 0;
+                padding-left: 20px;
+                color: ${text};
+                line-height: 1.6;
+                font-size: 13px;
+              ">
+                ${block.factCheckResult.verification.불일치하는_사실.map(fact => `
+                  <li style="margin-bottom: 6px;">${this.renderSourceNumbers(fact, block.factCheckResult.articles)}</li>
+                `).join('')}
+              </ul>
+            </div>
+            ` : ''}
+            
+            ${block.factCheckResult.verification.검증_불가 && block.factCheckResult.verification.검증_불가.length > 0 ? `
+            <div style="
+              background: ${this.hexToRgba('#F59E0B', 0.1)};
+              border: 1px solid ${this.hexToRgba('#F59E0B', 0.3)};
+              border-radius: 10px;
+              padding: 16px;
+              margin-bottom: 12px;
+            ">
+              <div style="
+                font-weight: 600;
+                color: #F59E0B;
+                margin-bottom: 10px;
+                font-size: 14px;
+              ">⚠️ 검증 불가 (${block.factCheckResult.verification.검증_불가.length})</div>
+              <ul style="
+                margin: 0;
+                padding-left: 20px;
+                color: ${text};
+                line-height: 1.6;
+                font-size: 13px;
+              ">
+                ${block.factCheckResult.verification.검증_불가.map(fact => `
+                  <li style="margin-bottom: 6px;">${this.escapeHtml(fact)}</li>
+                `).join('')}
+              </ul>
+            </div>
+            ` : ''}
+            
+            ${block.factCheckResult.verification.종합_평가 ? `
             <div style="
               background: ${cardBackground};
               border: 1px solid ${border};
               border-radius: 10px;
-              padding: 18px;
-              line-height: 1.65;
+              padding: 16px;
+              line-height: 1.6;
               font-size: 14px;
               color: ${text};
-            ">${this.renderMarkdown(evidence)}</div>
+            ">
+              <div style="
+                font-weight: 600;
+                margin-bottom: 8px;
+                color: ${this.hexToRgba(text, 0.9)};
+              ">📋 종합 평가</div>
+              ${this.renderMarkdown(block.factCheckResult.verification.종합_평가)}
+            </div>
+            ` : ''}
           </section>
+          ` : ''}
 
           <section>
             <h3 style="
@@ -4037,7 +4616,6 @@ ${factCheckSection}
               font-size: 14px;
               color: ${text};
             ">${this.renderMarkdown(analysis)}</div>
-          </section>
           </section>
 
           ${suspiciousEntries ? `
@@ -4248,6 +4826,120 @@ ${factCheckSection}
         comparisonButton.style.boxShadow = '0 10px 24px rgba(0, 0, 0, 0.25)';
       });
     }
+
+    // 출처 번호 클릭 및 툴팁 이벤트
+    const sourceRefs = overlay.querySelectorAll('.source-ref');
+    sourceRefs.forEach(ref => {
+      const index = parseInt(ref.dataset.index);
+      const article = block.factCheckResult.articles[index];
+      
+      if (!article) return;
+      
+      // 툴팁 생성
+      const createTooltip = () => {
+        const existingTooltip = document.querySelector('.source-tooltip');
+        if (existingTooltip) existingTooltip.remove();
+        
+        const tooltip = document.createElement('div');
+        tooltip.className = 'source-tooltip';
+        tooltip.style.cssText = `
+          position: fixed;
+          background: ${this.hexToRgba(surface, 0.98)};
+          border: 1px solid ${border};
+          border-radius: 10px;
+          padding: 12px;
+          max-width: 320px;
+          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+          z-index: 99999;
+          pointer-events: none;
+          backdrop-filter: blur(12px);
+        `;
+        
+        const imageUrl = article.pagemap?.cse_thumbnail?.[0]?.src || article.pagemap?.cse_image?.[0]?.src || '';
+        const title = this.escapeHtml(article.title || '제목 없음');
+        const snippet = this.escapeHtml(article.snippet || '내용 없음');
+        const displayLink = this.escapeHtml(article.displayLink || '');
+        
+        tooltip.innerHTML = `
+          ${imageUrl ? `
+          <img src="${this.escapeHtml(imageUrl)}" style="
+            width: 100%;
+            height: 120px;
+            object-fit: cover;
+            border-radius: 6px;
+            margin-bottom: 10px;
+          " />
+          ` : ''}
+          <div style="
+            font-weight: 600;
+            color: ${text};
+            font-size: 13px;
+            margin-bottom: 6px;
+            line-height: 1.4;
+          ">${title}</div>
+          <div style="
+            font-size: 11px;
+            color: ${this.hexToRgba(text, 0.6)};
+            margin-bottom: 6px;
+          ">${displayLink}</div>
+          <div style="
+            font-size: 12px;
+            color: ${this.hexToRgba(text, 0.8)};
+            line-height: 1.5;
+          ">${snippet.substring(0, 120)}${snippet.length > 120 ? '...' : ''}</div>
+          <div style="
+            font-size: 10px;
+            color: ${this.hexToRgba(accent, 0.9)};
+            margin-top: 8px;
+            text-align: center;
+          ">클릭하여 기사 보기</div>
+        `;
+        
+        document.body.appendChild(tooltip);
+        return tooltip;
+      };
+      
+      // 마우스 오버 시 툴팁 표시
+      ref.addEventListener('mouseenter', (e) => {
+        const tooltip = createTooltip();
+        const rect = ref.getBoundingClientRect();
+        
+        // 화면 범위 체크하여 위치 조정
+        let top = rect.bottom + 8;
+        let left = rect.left;
+        
+        // 툴팁이 화면 아래로 벗어나면 위쪽에 표시
+        setTimeout(() => {
+          const tooltipRect = tooltip.getBoundingClientRect();
+          if (top + tooltipRect.height > window.innerHeight) {
+            top = rect.top - tooltipRect.height - 8;
+          }
+          
+          // 툴팁이 화면 오른쪽으로 벗어나면 왼쪽으로 이동
+          if (left + tooltipRect.width > window.innerWidth) {
+            left = window.innerWidth - tooltipRect.width - 8;
+          }
+          
+          tooltip.style.top = top + 'px';
+          tooltip.style.left = left + 'px';
+        }, 0);
+      });
+      
+      ref.addEventListener('mouseleave', () => {
+        const tooltip = document.querySelector('.source-tooltip');
+        if (tooltip) tooltip.remove();
+      });
+      
+      // 클릭 시 기사 링크 열기
+      ref.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const url = ref.dataset.url;
+        if (url && url !== '#') {
+          window.open(url, '_blank');
+        }
+      });
+    });
 
     this.detailEscapeHandler = (event) => {
       if (event.key === 'Escape') {
@@ -5474,9 +6166,9 @@ ${factCheckSection}
           return;
         }
         
-        this.checkSavedApiKey().then((savedApiKey) => {
-          console.log('[Settings] Creating settings panel with API key:', savedApiKey ? 'exists' : 'none');
-          const modal = this.createSettingsPanel(savedApiKey);
+        this.loadApiKeySnapshot().then((apiKeys) => {
+          console.log('[Settings] Creating settings panel with API key:', apiKeys?.gemini ? 'exists' : 'none');
+          const modal = this.createSettingsPanel(apiKeys);
           document.body.appendChild(modal);
           
           // 강제로 스타일 적용
@@ -5605,16 +6297,28 @@ ${factCheckSection}
   }
 
   getNewsBrandSelectionLabel(selectedBrands = null) {
-    const currentSelection = selectedBrands || this.getSelectedNewsBrands();
     const allBrands = this.getNewsBrandDefinitions();
-    if (!currentSelection || currentSelection.length === 0 || currentSelection.length === allBrands.length) {
+    const totalBrands = allBrands.length;
+    let currentSelection = selectedBrands || this.getSelectedNewsBrands();
+
+    if (!Array.isArray(currentSelection)) {
+      currentSelection = [];
+    }
+
+    const uniqueSelection = Array.from(new Set(currentSelection)).filter((id) =>
+      allBrands.some((brand) => brand.id === id)
+    );
+
+    if (uniqueSelection.length === 0 || uniqueSelection.length >= totalBrands) {
       return '전체 뉴스 사용 중';
     }
-    if (currentSelection.length === 1) {
-      const brandInfo = allBrands.find((brand) => brand.id === currentSelection[0]);
+
+    if (uniqueSelection.length === 1) {
+      const brandInfo = allBrands.find((brand) => brand.id === uniqueSelection[0]);
       return brandInfo ? `${brandInfo.name}만 사용` : '1개 뉴스만 사용';
     }
-    return `${currentSelection.length}/${allBrands.length}개 뉴스 사용`;
+
+    return `${uniqueSelection.length}/${totalBrands}개 뉴스 사용`;
   }
 
   toggleBrandSelectionMenu(triggerEl) {
@@ -5843,7 +6547,7 @@ ${factCheckSection}
   }
 
   // 새로운 설정 패널 생성
-  createSettingsPanel(savedApiKey) {
+  createSettingsPanel(apiKeys = {}) {
     const modal = document.createElement('div');
     modal.id = 'settings-panel-modal';
     modal.style.cssText = `
@@ -5862,11 +6566,12 @@ ${factCheckSection}
       backdrop-filter: blur(4px);
     `;
     
-    const isApiKeySet = !!savedApiKey;
-    const maskedKey = savedApiKey ? `${savedApiKey.substring(0, 8)}...${savedApiKey.substring(savedApiKey.length - 4)}` : '';
+    const geminiPrefill = (apiKeys && typeof apiKeys.gemini === 'string') ? apiKeys.gemini : '';
+    const googlePrefill = (apiKeys && typeof apiKeys.google === 'string') ? apiKeys.google : '';
     const brandSelectionLabel = this.getNewsBrandSelectionLabel();
     const autoFactCheckEnabled = this.getAutoFactCheckSetting();
     const autoCrossVerificationEnabled = this.getAutoCrossVerificationSetting();
+    const articleFilterEnabled = this.getArticleFilterSetting();
     
     const modalContent = document.createElement('div');
     modalContent.className = 'settings-panel-content';
@@ -5914,36 +6619,182 @@ ${factCheckSection}
       ">설정</h2>
       
       <!-- API 키 설정 -->
-      <div style="
-        display: flex; 
-        align-items: center; 
-        justify-content: space-between; 
-        padding: 16px 0; 
+      <div class="api-key-settings" style="
+        padding: 16px 0;
         border-bottom: 1px solid #E5E5E5;
       ">
-        <div>
-          <div style="
-            font-size: 16px; 
-            font-weight: 600; 
-            color: #0D0D0D; 
-            margin-bottom: 4px;
-          ">API 키 설정</div>
-          <div style="
-            font-size: 13px; 
-            color: #737373;
-          ">${isApiKeySet ? `설정됨: ${maskedKey}` : '설정되지 않음'}</div>
+        <div style="
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 12px;
+        ">
+          <div>
+            <div style="
+              font-size: 16px;
+              font-weight: 600;
+              color: #0D0D0D;
+              margin-bottom: 4px;
+            ">API 키 관리</div>
+            <div style="
+              font-size: 13px;
+              color: #737373;
+              line-height: 1.4;
+            ">Gemini/Google 키를 입력하거나 NONE으로 초기화할 수 있습니다.</div>
+          </div>
+          <button class="api-key-btn" style="
+            background: #BF9780;
+            color: white;
+            padding: 11px 20px;
+            border-radius: 8px;
+            font-weight: 700;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            font-size: 15px;
+            min-width: 130px;
+          ">API 키 입력</button>
         </div>
-        <button class="api-key-btn" style="
-          background: #BF9780; 
-          color: white; 
-          padding: 8px 16px; 
-          border-radius: 6px; 
-          font-weight: 600; 
-          border: none; 
-          cursor: pointer; 
-          transition: background-color 0.2s; 
-          font-size: 14px;
-        ">${isApiKeySet ? '수정' : '설정'}</button>
+
+        <div style="
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 12px;
+          margin-top: 16px;
+        ">
+          <div style="
+            padding: 12px;
+            border-radius: 10px;
+            border: 1px solid rgba(0,0,0,0.08);
+            background: white;
+          ">
+            <div style="
+              font-size: 13px;
+              color: #737373;
+              margin-bottom: 6px;
+            ">Gemini API Key</div>
+            <span data-role="gemini-status" style="
+              display: inline-flex;
+              align-items: center;
+              padding: 4px 12px;
+              border-radius: 999px;
+              font-size: 12px;
+              font-weight: 600;
+              background: ${this.isGeminiKeyConfigured() ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)'};
+              color: ${this.isGeminiKeyConfigured() ? '#047857' : '#B91C1C'};
+            ">${this.isGeminiKeyConfigured() ? '입력됨' : '미입력'}</span>
+          </div>
+          <div style="
+            padding: 12px;
+            border-radius: 10px;
+            border: 1px solid rgba(0,0,0,0.08);
+            background: white;
+          ">
+            <div style="
+              font-size: 13px;
+              color: #737373;
+              margin-bottom: 6px;
+            ">Google Search API Key</div>
+            <span data-role="google-status" style="
+              display: inline-flex;
+              align-items: center;
+              padding: 4px 12px;
+              border-radius: 999px;
+              font-size: 12px;
+              font-weight: 600;
+              background: ${this.isGoogleApiConfigured() ? 'rgba(16, 185, 129, 0.12)' : 'rgba(239, 68, 68, 0.12)'};
+              color: ${this.isGoogleApiConfigured() ? '#047857' : '#B91C1C'};
+            ">${this.isGoogleApiConfigured() ? '입력됨' : '미입력'}</span>
+          </div>
+        </div>
+
+        <div class="api-key-inline-form" data-open="false" style="
+          margin-top: 16px;
+          padding: 16px;
+          background: rgba(191, 151, 128, 0.08);
+          border-radius: 10px;
+          border: 1px dashed rgba(191, 151, 128, 0.4);
+          max-height: 0;
+          overflow: hidden;
+          opacity: 0;
+          transition: max-height 0.35s ease, opacity 0.25s ease;
+        ">
+          <div style="display: flex; flex-direction: column; gap: 12px;">
+            <div>
+              <label style="
+                font-size: 13px;
+                font-weight: 600;
+                color: #0D0D0D;
+                margin-bottom: 6px;
+                display: block;
+              ">Gemini API Key</label>
+              <input type="text" class="gemini-key-input" value="${this.escapeHtml(geminiPrefill)}" placeholder="Gemini API 키를 입력하거나 비워두세요" style="
+                width: 100%;
+                padding: 10px 12px;
+                border-radius: 8px;
+                border: 1px solid rgba(0,0,0,0.15);
+                font-size: 14px;
+                font-family: inherit;
+                background: #FFFFFF;
+              " autocomplete="off" spellcheck="false" />
+            </div>
+            <div>
+              <label style="
+                font-size: 13px;
+                font-weight: 600;
+                color: #0D0D0D;
+                margin-bottom: 6px;
+                display: block;
+              ">Google Search API Key</label>
+              <input type="text" class="google-key-input" value="${this.escapeHtml(googlePrefill)}" placeholder="Google API 키를 입력하거나 비워두세요" style="
+                width: 100%;
+                padding: 10px 12px;
+                border-radius: 8px;
+                border: 1px solid rgba(0,0,0,0.15);
+                font-size: 14px;
+                font-family: inherit;
+                background: #FFFFFF;
+              " autocomplete="off" spellcheck="false" />
+            </div>
+            <div style="
+              font-size: 12px;
+              color: #6B7280;
+              background: rgba(255,255,255,0.7);
+              border-radius: 8px;
+              padding: 10px 12px;
+              border: 1px solid rgba(191, 151, 128, 0.3);
+            ">입력을 비우고 저장하면 <strong style="color:#B45309;">NONE</strong> 값으로 저장되어 관련 기능이 비활성화됩니다.</div>
+            <div class="api-key-inline-feedback" style="
+              font-size: 12px;
+              min-height: 16px;
+              color: #047857;
+            "></div>
+            <div style="
+              display: flex;
+              justify-content: flex-end;
+              gap: 10px;
+            ">
+              <button type="button" class="api-key-cancel-btn" style="
+                padding: 10px 16px;
+                border-radius: 8px;
+                border: 1px solid rgba(0,0,0,0.1);
+                background: white;
+                font-weight: 600;
+                cursor: pointer;
+              ">취소</button>
+              <button type="button" class="api-key-save-btn" style="
+                padding: 10px 18px;
+                border-radius: 8px;
+                border: none;
+                background: #BF9780;
+                color: white;
+                font-weight: 600;
+                cursor: pointer;
+                min-width: 96px;
+              ">저장</button>
+            </div>
+          </div>
+        </div>
       </div>
       
       <!-- Google Search API 사용 설정 -->
@@ -6000,19 +6851,6 @@ ${factCheckSection}
             color: #737373;
             margin-bottom: 8px;
           " id="google-api-key-status">API 키 확인 중...</div>
-          <button class="google-api-key-btn" style="
-            background: #BF9780; 
-            color: white; 
-            padding: 8px 16px; 
-            border-radius: 6px; 
-            font-weight: 600; 
-            border: none; 
-            cursor: pointer; 
-            transition: background-color 0.2s; 
-            font-size: 14px;
-            width: 100%;
-            margin-bottom: 12px;
-          ">API 키 설정</button>
           <div style="
             margin-top: 12px;
             padding: 12px;
@@ -6152,7 +6990,112 @@ ${factCheckSection}
             padding: 8px 10px;
             border-radius: 6px;
             line-height: 1.4;
-          ">⚠️ <strong>정확도 모드</strong>는 각 기사를 크롤링하여 AI로 본문을 추출합니다.<br/>Gemini API 호출이 추가로 발생하므로 사용량을 확인하세요.</div>
+          ">⚠️ <strong>정확도 모드</strong>는 각 기사를 크롤링하여 AI로 본문을 추출하고 재분석합니다.<br/>Gemini API 호출이 추가로 발생하며 <strong>속도가 느릴 수 있으니</strong> 사용량을 확인하세요.</div>
+          
+          <!-- 크롤링 개수 설정 (정확도 모드에서만 표시) -->
+          <div class="crawling-count-setting" style="
+            display: none;
+            margin-top: 12px;
+            padding: 12px;
+            background: #F9FAFB;
+            border-radius: 8px;
+            border: 1px solid #E5E7EB;
+          ">
+            <div style="
+              display: flex;
+              align-items: center;
+              justify-content: space-between;
+              margin-bottom: 8px;
+            ">
+              <div style="font-size: 14px; font-weight: 600; color: #0D0D0D;">크롤링 개수</div>
+              <div class="crawling-count-value" style="
+                font-size: 14px;
+                font-weight: 700;
+                color: #BF9780;
+                min-width: 60px;
+                text-align: right;
+              ">3개</div>
+            </div>
+            
+            <input type="range" class="crawling-count-slider" min="0" max="11" value="3" step="1" style="
+              width: 100%;
+              height: 6px;
+              border-radius: 5px;
+              background: linear-gradient(to right, #BF9780 0%, #BF9780 27.27%, #E5E7EB 27.27%, #E5E7EB 100%);
+              outline: none;
+              -webkit-appearance: none;
+              margin: 8px 0;
+            ">
+            
+            <!-- 커스텀 입력 (슬라이더 0일 때만 표시) -->
+            <div class="crawling-custom-input" style="
+              display: none;
+              margin-top: 8px;
+            ">
+              <input type="number" class="crawling-custom-value" min="1" max="100" value="3" style="
+                width: 100%;
+                padding: 8px 12px;
+                border: 1px solid #D1D5DB;
+                border-radius: 6px;
+                font-size: 14px;
+                font-family: inherit;
+              " placeholder="크롤링할 기사 개수 입력 (1-100)">
+            </div>
+            
+            <div style="
+              font-size: 11px;
+              color: #6B7280;
+              margin-top: 6px;
+              line-height: 1.4;
+            ">0: 직접 입력 | 1-10: 지정 개수 | 최대: 전체 크롤링</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 유사 기사 필터링 -->
+      <div style="
+        padding: 16px 0;
+        border-bottom: 1px solid #E5E5E5;
+      ">
+        <div style="
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 12px;
+        ">
+          <div style="flex: 1;">
+            <div style="
+              font-size: 16px;
+              font-weight: 600;
+              color: #0D0D0D;
+              margin-bottom: 4px;
+            ">유사 기사 AI 필터링</div>
+            <div style="
+              font-size: 13px;
+              color: #737373;
+              line-height: 1.4;
+            ">설정을 켜면 AI가 원본 뉴스와 관련 없는 기사를 자동으로 제거합니다. 설정을 끄면 필터링 없이 검색 결과를 그대로 표시합니다.</div>
+            <div style="
+              margin-top: 8px;
+              font-size: 12px;
+              color: #6B7280;
+              background: #F3F4F6;
+              padding: 8px 10px;
+              border-radius: 6px;
+            ">💡 끄기 권장: 관련성이 낮은 기사도 사실 검증에 유용할 수 있습니다.</div>
+          </div>
+          <button class="article-filter-btn" style="
+            background: ${articleFilterEnabled ? '#10B981' : '#9CA3AF'};
+            color: white;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            font-size: 14px;
+            min-width: 72px;
+          ">${articleFilterEnabled ? '켜짐' : '꺼짐'}</button>
         </div>
       </div>
 
@@ -6364,79 +7307,13 @@ ${factCheckSection}
     modal.appendChild(modalContent);
     
     // 이벤트 연결
-    this.attachSettingsPanelEvents(modal, modalContent, savedApiKey);
-    
-    return modal;
-  }
-
-  // 설정 모달 생성
-  createSettingsModal(savedApiKey) {
-    const modal = document.createElement('div');
-    modal.id = 'api-key-input-modal';
-    modal.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      background: rgba(13,13,13,0.6);
-      z-index: 2147483648;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      opacity: 0;
-      transition: opacity 0.3s ease;
-    `;
-    
-    const isEdit = !!savedApiKey;
-    const maskedKey = savedApiKey ? `${savedApiKey.substring(0, 8)}...${savedApiKey.substring(savedApiKey.length - 4)}` : '';
-    
-    const modalContent = document.createElement('div');
-    modalContent.className = 'modal-content';
-    modalContent.style.cssText = `
-      background: #F2F2F2;
-      border-radius: 12px;
-      padding: 32px;
-      width: 560px;
-      height: 270px;
-      position: relative;
-      display: flex;
-      flex-direction: column;
-      transform: scale(0.8);
-      transition: all 0.3s ease;
-    `;
-    
-    if (isEdit) {
-      modalContent.innerHTML = `
-        <button class="close-modal" style="position: absolute; top: 12px; right: 12px; background: none; border: none; font-size: 24px; color: #737373; cursor: pointer; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: background-color 0.2s;">&times;</button>
-        <h2 style="font-size: 24px; font-weight: bold; margin-bottom: 32px; text-align: center; color: #0D0D0D;">API 키 설정</h2>
-        <div style="background: #F2F2F2; border: 2px solid #BF9780; border-radius: 8px; padding: 16px 20px; margin-bottom: 24px; flex: 1; display: flex; align-items: center; justify-content: center;">
-          <span style="font-family: monospace; font-size: 16px; color: #0D0D0D;">${maskedKey}</span>
-        </div>
-        <div style="display: flex; gap: 12px;">
-          <button class="edit-key-btn" style="background: #BF9780; color: white; padding: 16px 32px; border-radius: 8px; font-weight: 600; border: none; cursor: pointer; flex: 1; transition: background-color 0.2s; font-size: 16px;">수정</button>
-          <button class="remove-key-btn" style="background: #E74C3C; color: white; padding: 16px 32px; border-radius: 8px; font-weight: 600; border: none; cursor: pointer; flex: 1; transition: background-color 0.2s; font-size: 16px;">해제</button>
-        </div>
-      `;
-    } else {
-      modalContent.innerHTML = `
-        <button class="close-modal" style="position: absolute; top: 12px; right: 12px; background: none; border: none; font-size: 24px; color: #737373; cursor: pointer; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: background-color 0.2s;">&times;</button>
-        <h2 style="font-size: 24px; font-weight: bold; margin-bottom: 32px; text-align: center; color: #0D0D0D;">API 키를 입력하세요</h2>
-        <input class="api-key-input" type="text" placeholder="Gemini API Key" style="border: 2px solid #BF9780; border-radius: 8px; padding: 16px 20px; margin-bottom: 24px; width: 100%; font-size: 16px; box-sizing: border-box; flex: 1; outline: none; transition: border-color 0.2s;" />
-        <button class="submit-key-btn" style="background: #F2CEA2; color: #0D0D0D; padding: 16px 32px; border-radius: 8px; font-weight: 600; border: none; cursor: pointer; width: 100%; transition: background-color 0.2s; font-size: 16px;">확인</button>
-      `;
-    }
-    
-    modal.appendChild(modalContent);
-    
-    // 이벤트 연결
-    this.attachModalEvents(modal, modalContent, savedApiKey);
+    this.attachSettingsPanelEvents(modal, modalContent, apiKeys);
     
     return modal;
   }
 
   // 설정 패널 이벤트 연결
-  attachSettingsPanelEvents(modal, modalContent, savedApiKey) {
+  attachSettingsPanelEvents(modal, modalContent, apiKeys = {}) {
     const closeModal = () => {
       modal.style.opacity = '0';
       setTimeout(() => modal.remove(), 300);
@@ -6456,96 +7333,234 @@ ${factCheckSection}
     modal.addEventListener('click', (e) => {
       if (e.target === modal) closeModal();
     });
-    
-    // API 키 설정 버튼
+
+    const inlineForm = modalContent.querySelector('.api-key-inline-form');
     const apiKeyBtn = modalContent.querySelector('.api-key-btn');
-    if (apiKeyBtn) {
-      apiKeyBtn.addEventListener('click', () => {
-        closeModal();
-        // API 키 모달 열기
-        setTimeout(() => {
-          if (document.getElementById('api-key-input-modal')) {
-            return;
-          }
-          
-          const apiModal = this.createApiKeyModal(savedApiKey);
-          document.body.appendChild(apiModal);
-          
-          apiModal.style.display = 'flex';
-          apiModal.style.visibility = 'visible';
-          
-          setTimeout(() => {
-            apiModal.style.opacity = '1';
-            const apiModalContent = apiModal.querySelector('.modal-content');
-            if (apiModalContent) {
-              apiModalContent.style.transform = 'scale(1)';
-            }
-          }, 10);
-        }, 100);
-      });
-      
-      apiKeyBtn.addEventListener('mouseenter', () => {
-        apiKeyBtn.style.backgroundColor = '#A68570';
-      });
-      apiKeyBtn.addEventListener('mouseleave', () => {
-        apiKeyBtn.style.backgroundColor = '#BF9780';
-      });
-    }
-    
-    // 패널 자동 열기 토글 버튼
-    const autoOpenBtn = modalContent.querySelector('.auto-open-btn');
-    if (autoOpenBtn) {
-      autoOpenBtn.addEventListener('click', () => {
-        const currentSetting = this.getAutoOpenSetting();
-        const newSetting = !currentSetting;
-        this.setAutoOpenSetting(newSetting);
-        
-        // 버튼 상태 업데이트
-        autoOpenBtn.style.backgroundColor = newSetting ? '#10B981' : '#9CA3AF';
-        autoOpenBtn.textContent = newSetting ? '켜짐' : '꺼짐';
-      });
-      
-      autoOpenBtn.addEventListener('mouseenter', () => {
-        const currentSetting = this.getAutoOpenSetting();
-        autoOpenBtn.style.backgroundColor = currentSetting ? '#0EA16F' : '#6B7280';
-      });
-      autoOpenBtn.addEventListener('mouseleave', () => {
-        const currentSetting = this.getAutoOpenSetting();
-        autoOpenBtn.style.backgroundColor = currentSetting ? '#10B981' : '#9CA3AF';
-      });
+    const googleApiKeyBtn = modalContent.querySelector('.google-api-key-btn');
+    const geminiInput = inlineForm ? inlineForm.querySelector('.gemini-key-input') : null;
+    const googleInput = inlineForm ? inlineForm.querySelector('.google-key-input') : null;
+    const inlineFeedback = inlineForm ? inlineForm.querySelector('.api-key-inline-feedback') : null;
+    const saveApiKeyBtn = inlineForm ? inlineForm.querySelector('.api-key-save-btn') : null;
+    const cancelApiKeyBtn = inlineForm ? inlineForm.querySelector('.api-key-cancel-btn') : null;
+    const googleApiKeyStatus = modalContent.querySelector('#google-api-key-status');
+
+    if (inlineForm) {
+      inlineForm.style.pointerEvents = inlineForm.getAttribute('data-open') === 'true' ? 'auto' : 'none';
     }
 
-    // 크롤링 우선 순위 토글 버튼
-    const priorityBtns = modalContent.querySelectorAll('.crawling-priority-btn');
-    const accuracyWarning = modalContent.querySelector('.accuracy-warning');
-    
-    if (priorityBtns.length === 2) {
-      const updatePriorityUI = (priority) => {
-        const mode = priority || 'speed';
-        priorityBtns.forEach(btn => {
-          const btnMode = btn.dataset.mode;
-          const isActive = btnMode === mode;
-          btn.style.background = isActive ? 'white' : 'transparent';
-          btn.style.color = isActive ? '#0D0D0D' : '#737373';
-          btn.style.boxShadow = isActive ? '0 1px 2px rgba(0,0,0,0.05)' : 'none';
-        });
-        
-        // 정확도 모드일 때만 경고문 표시
-        if (accuracyWarning) {
-          accuracyWarning.style.display = mode === 'accuracy' ? 'block' : 'none';
+    const updateInlineFormHeight = () => {
+      if (!inlineForm || inlineForm.getAttribute('data-open') !== 'true') return;
+      inlineForm.style.maxHeight = `${inlineForm.scrollHeight}px`;
+    };
+
+    const showInlineFeedback = (message = '', isError = false) => {
+      if (!inlineFeedback) return;
+      inlineFeedback.textContent = message;
+      inlineFeedback.style.color = isError ? '#B91C1C' : '#047857';
+      updateInlineFormHeight();
+    };
+
+    const toggleInlineForm = (forceState = null) => {
+      if (!inlineForm) return;
+      const isOpen = inlineForm.getAttribute('data-open') === 'true';
+      const nextState = typeof forceState === 'boolean' ? forceState : !isOpen;
+      inlineForm.setAttribute('data-open', String(nextState));
+      if (nextState) {
+        inlineForm.style.opacity = '1';
+        inlineForm.style.pointerEvents = 'auto';
+        inlineForm.style.maxHeight = `${inlineForm.scrollHeight}px`;
+        setTimeout(updateInlineFormHeight, 200);
+      } else {
+        inlineForm.style.opacity = '0';
+        inlineForm.style.pointerEvents = 'none';
+        inlineForm.style.maxHeight = '0px';
+        if (inlineFeedback) {
+          inlineFeedback.textContent = '';
+          inlineFeedback.style.color = '#047857';
         }
-      };
+      }
+    };
 
-      this.getCrawlingPrioritySetting()
-        .then(updatePriorityUI)
-        .catch((error) => {
+    const updateGoogleKeyStatus = () => {
+      if (!googleApiKeyStatus) return;
+      const ready = this.isGoogleApiConfigured();
+      googleApiKeyStatus.textContent = ready ? 'API 키 입력됨 ✓' : 'API 키 없음';
+      googleApiKeyStatus.style.color = ready ? '#10B981' : '#9CA3AF';
+    };
+    updateGoogleKeyStatus();
+
+    const focusInlineInput = (preferGoogle = false) => {
+      const target = preferGoogle ? googleInput || geminiInput : geminiInput || googleInput;
+      if (target) {
+        requestAnimationFrame(() => target.focus());
+      }
+    };
+
+    const openInlineForm = (preferGoogle = false) => {
+      toggleInlineForm(true);
+      focusInlineInput(preferGoogle);
+    };
+
+    if (apiKeyBtn) {
+      apiKeyBtn.addEventListener('click', () => openInlineForm(false));
+    }
+
+    if (googleApiKeyBtn) {
+      googleApiKeyBtn.addEventListener('click', () => openInlineForm(true));
+      googleApiKeyBtn.addEventListener('mouseenter', () => {
+        googleApiKeyBtn.style.transform = 'translateY(-2px)';
+        googleApiKeyBtn.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
+      });
+      googleApiKeyBtn.addEventListener('mouseleave', () => {
+        googleApiKeyBtn.style.transform = 'translateY(0)';
+        googleApiKeyBtn.style.boxShadow = 'none';
+      });
+    }
+
+    if (cancelApiKeyBtn) {
+      cancelApiKeyBtn.addEventListener('click', () => {
+        if (geminiInput) {
+          geminiInput.value = apiKeys?.gemini || '';
+        }
+        if (googleInput) {
+          googleInput.value = apiKeys?.google || '';
+        }
+        toggleInlineForm(false);
+      });
+    }
+
+    if (saveApiKeyBtn && geminiInput && googleInput) {
+      saveApiKeyBtn.addEventListener('click', async () => {
+        const previousLabel = saveApiKeyBtn.textContent;
+        showInlineFeedback('');
+        saveApiKeyBtn.disabled = true;
+        saveApiKeyBtn.textContent = '저장 중...';
+        try {
+          const [savedGemini, savedGoogle] = await Promise.all([
+            this.persistApiKeyValue('gemini_api_key', geminiInput.value),
+            this.persistApiKeyValue('google_search_api_key', googleInput.value)
+          ]);
+          apiKeys.gemini = savedGemini;
+          apiKeys.google = savedGoogle;
+          this.refreshApiKeyFlags();
+          this.updateApiStatusBadges(modalContent, { gemini: savedGemini, google: savedGoogle });
+          this.updateApiKeyDependentControls(modalContent);
+          updateGoogleKeyStatus();
+          showInlineFeedback('API 키가 저장되었습니다.');
+          setTimeout(() => toggleInlineForm(false), 900);
+        } catch (error) {
+          console.error('Failed to save API keys inline:', error);
+          showInlineFeedback('저장 중 문제가 발생했습니다. 다시 시도해주세요.', true);
+        } finally {
+          saveApiKeyBtn.disabled = false;
+          saveApiKeyBtn.textContent = previousLabel;
+        }
+      });
+    }
+
+    // 크롤링 우선 순위 & 개수 설정
+    const priorityButtons = modalContent.querySelectorAll('.crawling-priority-btn');
+    const accuracyWarning = modalContent.querySelector('.accuracy-warning');
+    const crawlingCountSection = modalContent.querySelector('.crawling-count-setting');
+    const crawlingCountValue = modalContent.querySelector('.crawling-count-value');
+    const crawlingCountSlider = modalContent.querySelector('.crawling-count-slider');
+    const customCountWrapper = modalContent.querySelector('.crawling-custom-input');
+    const customCountInput = modalContent.querySelector('.crawling-custom-value');
+
+    let storedCrawlingCount = 3;
+
+    const getCustomCountValue = () => {
+      if (!customCountInput) return storedCrawlingCount > 11 ? storedCrawlingCount : 3;
+      let value = parseInt(customCountInput.value, 10);
+      if (Number.isNaN(value) || value < 1) value = 1;
+      if (value > 100) value = 100;
+      customCountInput.value = value;
+      return value;
+    };
+
+    const formatCrawlingCountLabel = (sliderValue, resolvedValue) => {
+      if (sliderValue === 11) {
+        return '전체';
+      }
+      if (sliderValue === 0) {
+        const customValue = resolvedValue || getCustomCountValue();
+        return `${customValue}개 (직접 입력)`;
+      }
+      return `${sliderValue}개`;
+    };
+
+    const updateCrawlingCountUI = (sliderValue, resolvedValue = storedCrawlingCount) => {
+      if (!crawlingCountSlider || !crawlingCountValue) return;
+      const normalized = Math.min(Math.max(sliderValue, 0), 11);
+      crawlingCountSlider.value = normalized;
+      const percent = (normalized / 11) * 100;
+      crawlingCountSlider.style.background = `linear-gradient(to right, #BF9780 0%, #BF9780 ${percent}%, #E5E7EB ${percent}%, #E5E7EB 100%)`;
+      crawlingCountValue.textContent = formatCrawlingCountLabel(normalized, resolvedValue);
+      if (customCountWrapper) {
+        customCountWrapper.style.display = normalized === 0 ? 'block' : 'none';
+      }
+      if (customCountInput && normalized === 0 && resolvedValue) {
+        customCountInput.value = resolvedValue;
+      }
+    };
+
+    const initializeCrawlingCountControls = async () => {
+      if (!crawlingCountSlider) return;
+      try {
+        storedCrawlingCount = await this.getCrawlingCountSetting();
+      } catch (error) {
+        console.warn('Failed to load crawling count:', error);
+        storedCrawlingCount = 3;
+      }
+      let sliderValue = storedCrawlingCount;
+      if (storedCrawlingCount === 0 || storedCrawlingCount > 11) {
+        sliderValue = 0;
+      }
+      if (customCountInput) {
+        if (storedCrawlingCount > 11) {
+          customCountInput.value = storedCrawlingCount;
+        } else if (!customCountInput.value) {
+          customCountInput.value = storedCrawlingCount && storedCrawlingCount !== 0 ? storedCrawlingCount : '3';
+        }
+      }
+      updateCrawlingCountUI(sliderValue, storedCrawlingCount || getCustomCountValue());
+    };
+
+    const updatePriorityUI = (mode) => {
+      const normalized = mode === 'accuracy' ? 'accuracy' : 'speed';
+      priorityButtons.forEach((btn) => {
+        const isActive = btn.dataset.mode === normalized;
+        btn.style.background = isActive ? '#FFFFFF' : 'transparent';
+        btn.style.color = isActive ? '#0D0D0D' : '#737373';
+        btn.style.boxShadow = isActive ? '0 1px 2px rgba(0, 0, 0, 0.05)' : 'none';
+      });
+      if (accuracyWarning) {
+        accuracyWarning.style.display = normalized === 'accuracy' ? 'block' : 'none';
+      }
+      if (crawlingCountSection) {
+        crawlingCountSection.style.display = normalized === 'accuracy' ? 'block' : 'none';
+      }
+    };
+
+    const initializeCrawlingSettings = async () => {
+      await initializeCrawlingCountControls();
+      if (priorityButtons.length) {
+        try {
+          const priority = await this.getCrawlingPrioritySetting();
+          updatePriorityUI(priority);
+        } catch (error) {
           console.warn('Failed to load crawling priority:', error);
           updatePriorityUI('speed');
-        });
+        }
+      }
+    };
 
-      priorityBtns.forEach(btn => {
+    initializeCrawlingSettings();
+
+    if (priorityButtons.length) {
+      priorityButtons.forEach((btn) => {
         btn.addEventListener('click', async () => {
-          const mode = btn.dataset.mode;
+          const mode = btn.dataset.mode === 'accuracy' ? 'accuracy' : 'speed';
           updatePriorityUI(mode);
           try {
             await this.setCrawlingPrioritySetting(mode);
@@ -6555,6 +7570,49 @@ ${factCheckSection}
             alert('설정을 저장하지 못했습니다. 다시 시도해주세요.');
           }
         });
+      });
+    }
+
+    if (crawlingCountSlider) {
+      crawlingCountSlider.addEventListener('input', (event) => {
+        const sliderValue = parseInt(event.target.value, 10) || 0;
+        const resolvedValue = sliderValue === 0 ? getCustomCountValue() : sliderValue;
+        updateCrawlingCountUI(sliderValue, resolvedValue);
+      });
+
+      crawlingCountSlider.addEventListener('change', async (event) => {
+        const sliderValue = parseInt(event.target.value, 10) || 0;
+        const resolvedValue = sliderValue === 0 ? getCustomCountValue() : sliderValue;
+        storedCrawlingCount = resolvedValue;
+        updateCrawlingCountUI(sliderValue, resolvedValue);
+        try {
+          await this.setCrawlingCountSetting(resolvedValue);
+          console.log('[Settings] 크롤링 개수:', resolvedValue);
+        } catch (error) {
+          console.error('Failed to save crawling count:', error);
+        }
+      });
+    }
+
+    if (customCountInput) {
+      customCountInput.addEventListener('input', () => {
+        const customValue = getCustomCountValue();
+        updateCrawlingCountUI(0, customValue);
+        if (crawlingCountSlider && crawlingCountSlider.value !== '0') {
+          crawlingCountSlider.value = '0';
+        }
+      });
+
+      customCountInput.addEventListener('change', async () => {
+        const customValue = getCustomCountValue();
+        storedCrawlingCount = customValue;
+        updateCrawlingCountUI(0, customValue);
+        try {
+          await this.setCrawlingCountSetting(customValue);
+          console.log('[Settings] 크롤링 개수 (커스텀):', customValue);
+        } catch (error) {
+          console.error('Failed to save custom crawling count:', error);
+        }
       });
     }
 
@@ -6581,6 +7639,32 @@ ${factCheckSection}
       autoFactCheckBtn.addEventListener('mouseleave', () => {
         const enabled = this.getAutoFactCheckSetting();
         autoFactCheckBtn.style.backgroundColor = enabled ? '#10B981' : '#9CA3AF';
+      });
+    }
+
+    // 유사 기사 필터링 토글 버튼
+    const articleFilterBtn = modalContent.querySelector('.article-filter-btn');
+    if (articleFilterBtn) {
+      const updateArticleFilterBtn = () => {
+        const enabled = this.getArticleFilterSetting();
+        articleFilterBtn.textContent = enabled ? '켜짐' : '꺼짐';
+        articleFilterBtn.style.backgroundColor = enabled ? '#10B981' : '#9CA3AF';
+      };
+      updateArticleFilterBtn();
+
+      articleFilterBtn.addEventListener('click', () => {
+        const newSetting = !this.getArticleFilterSetting();
+        this.setArticleFilterSetting(newSetting);
+        updateArticleFilterBtn();
+      });
+
+      articleFilterBtn.addEventListener('mouseenter', () => {
+        const enabled = this.getArticleFilterSetting();
+        articleFilterBtn.style.backgroundColor = enabled ? '#0EA16F' : '#6B7280';
+      });
+      articleFilterBtn.addEventListener('mouseleave', () => {
+        const enabled = this.getArticleFilterSetting();
+        articleFilterBtn.style.backgroundColor = enabled ? '#10B981' : '#9CA3AF';
       });
     }
 
@@ -6669,47 +7753,6 @@ ${factCheckSection}
       });
     }
 
-    // Google API 키 설정 버튼
-    const googleApiKeyBtn = modalContent.querySelector('.google-api-key-btn');
-    const googleApiKeyStatus = modalContent.querySelector('#google-api-key-status');
-    
-    if (googleApiKeyBtn) {
-      // 초기 API 키 상태 확인
-      this.getGoogleApiKey().then(key => {
-        if (googleApiKeyStatus) {
-          googleApiKeyStatus.textContent = key ? 'API 키 설정됨 ✓' : 'API 키 없음';
-          googleApiKeyStatus.style.color = key ? '#10B981' : '#9CA3AF';
-        }
-      });
-
-      googleApiKeyBtn.addEventListener('click', async () => {
-        const inputKey = prompt('Google Custom Search API 키를 입력하세요:');
-        if (inputKey && inputKey.trim()) {
-          try {
-            await this.saveGoogleApiKey(inputKey.trim());
-            if (googleApiKeyStatus) {
-              googleApiKeyStatus.textContent = 'API 키 설정됨 ✓';
-              googleApiKeyStatus.style.color = '#10B981';
-            }
-            alert('API 키가 저장되었습니다.');
-          } catch (error) {
-            console.error('API 키 저장 실패:', error);
-            alert('API 키 저장에 실패했습니다.');
-          }
-        }
-      });
-
-      // 호버 효과
-      googleApiKeyBtn.addEventListener('mouseenter', () => {
-        googleApiKeyBtn.style.transform = 'translateY(-2px)';
-        googleApiKeyBtn.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
-      });
-      googleApiKeyBtn.addEventListener('mouseleave', () => {
-        googleApiKeyBtn.style.transform = 'translateY(0)';
-        googleApiKeyBtn.style.boxShadow = 'none';
-      });
-    }
-
     // Google CSE ID 설정 버튼 제거됨 (기본값 사용)
     // - 뉴스 검색: a6724cd0397f24747 (Daum 뉴스 전용)
     // - 사실 검증: 241358ac91fe04cd8 (전체 웹)
@@ -6789,74 +7832,6 @@ ${factCheckSection}
       });
     }
   }
-
-  // API 키 모달 생성 (별도)
-  createApiKeyModal(savedApiKey) {
-    const modal = document.createElement('div');
-    modal.id = 'api-key-input-modal';
-    modal.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      background: rgba(13,13,13,0.6);
-      z-index: 2147483648;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      opacity: 0;
-      transition: opacity 0.3s ease;
-    `;
-    
-    const isEdit = !!savedApiKey;
-    const maskedKey = savedApiKey ? `${savedApiKey.substring(0, 8)}...${savedApiKey.substring(savedApiKey.length - 4)}` : '';
-    
-    const modalContent = document.createElement('div');
-    modalContent.className = 'modal-content';
-    modalContent.style.cssText = `
-      background: #F2F2F2;
-      border-radius: 12px;
-      padding: 32px;
-      width: 560px;
-      height: ${isEdit ? '270px' : '320px'};
-      position: relative;
-      display: flex;
-      flex-direction: column;
-      transform: scale(0.8);
-      transition: all 0.3s ease;
-    `;
-    
-    if (isEdit) {
-      modalContent.innerHTML = `
-        <button class="close-modal" style="position: absolute; top: 12px; right: 12px; background: none; border: none; font-size: 24px; color: #737373; cursor: pointer; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: background-color 0.2s;">&times;</button>
-        <h2 style="font-size: 24px; font-weight: bold; margin-bottom: 32px; text-align: center; color: #0D0D0D;">API 키 설정</h2>
-        <div style="background: #F2F2F2; border: 2px solid #BF9780; border-radius: 8px; padding: 16px 20px; margin-bottom: 24px; flex: 1; display: flex; align-items: center; justify-content: center;">
-          <span style="font-family: monospace; font-size: 16px; color: #0D0D0D;">${maskedKey}</span>
-        </div>
-        <div style="display: flex; gap: 12px;">
-          <button class="edit-key-btn" style="background: #BF9780; color: white; padding: 16px 32px; border-radius: 8px; font-weight: 600; border: none; cursor: pointer; flex: 1; transition: background-color 0.2s; font-size: 16px;">수정</button>
-          <button class="remove-key-btn" style="background: #E74C3C; color: white; padding: 16px 32px; border-radius: 8px; font-weight: 600; border: none; cursor: pointer; flex: 1; transition: background-color 0.2s; font-size: 16px;">해제</button>
-        </div>
-      `;
-    } else {
-      modalContent.innerHTML = `
-        <button class="close-modal" style="position: absolute; top: 12px; right: 12px; background: none; border: none; font-size: 24px; color: #737373; cursor: pointer; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: background-color 0.2s;">&times;</button>
-        <h2 style="font-size: 24px; font-weight: bold; margin-bottom: 20px; text-align: center; color: #0D0D0D;">API 키를 입력하세요</h2>
-        <input class="api-key-input" type="text" placeholder="Gemini API Key" style="border: 2px solid #BF9780; border-radius: 8px; padding: 16px 20px; margin-bottom: 16px; width: 100%; font-size: 16px; box-sizing: border-box; outline: none; transition: border-color 0.2s;" />
-        
-        <button class="submit-key-btn" style="background: #F2CEA2; color: #0D0D0D; padding: 14px 28px; border-radius: 8px; font-weight: 600; border: none; cursor: pointer; width: 100%; transition: background-color 0.2s; font-size: 16px;">확인</button>
-      `;
-    }
-    
-    modal.appendChild(modalContent);
-    
-    // 이벤트 연결
-    this.attachModalEvents(modal, modalContent, savedApiKey);
-    
-    return modal;
-  }
-
   // 자동 열기 설정 가져오기
   getAutoOpenSetting() {
     try {
@@ -6985,6 +7960,94 @@ ${factCheckSection}
     });
   }
 
+  getCrawlingCountSettingFromCache() {
+    try {
+      const stored = localStorage.getItem('crawling_count');
+      return stored ? parseInt(stored) : 3;
+    } catch (error) {
+      console.error('Failed to read crawling count from cache:', error);
+      return 3;
+    }
+  }
+
+  cacheCrawlingCountSetting(value) {
+    try {
+      localStorage.setItem('crawling_count', value.toString());
+    } catch (error) {
+      console.error('Failed to cache crawling count:', error);
+    }
+  }
+
+  async getCrawlingCountSetting() {
+    const fallback = this.getCrawlingCountSettingFromCache();
+    if (!this.isChromeApiAvailable()) {
+      return fallback;
+    }
+
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.get(['crawling_count'], (data) => {
+          if (chrome.runtime.lastError) {
+            console.warn('Failed to load crawling count from Chrome storage:', chrome.runtime.lastError);
+            resolve(fallback);
+            return;
+          }
+          const count = data.crawling_count !== undefined ? data.crawling_count : 3;
+          this.cacheCrawlingCountSetting(count);
+          resolve(count);
+        });
+      } catch (error) {
+        console.warn('Chrome storage unavailable, using cached crawling count:', error);
+        resolve(fallback);
+      }
+    });
+  }
+
+  async setCrawlingCountSetting(value) {
+    this.cacheCrawlingCountSetting(value);
+
+    if (!this.isChromeApiAvailable()) {
+      return;
+    }
+
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.set({ crawling_count: value }, () => {
+          if (chrome.runtime.lastError) {
+            console.warn('Failed to persist crawling count to Chrome storage:', chrome.runtime.lastError);
+          }
+          resolve();
+        });
+      } catch (error) {
+        console.warn('Chrome storage unavailable while saving crawling count:', error);
+        resolve();
+      }
+    });
+  }
+
+  // 유사 기사 필터링 설정
+  getArticleFilterSetting() {
+    try {
+      const stored = localStorage.getItem('article_filter_enabled');
+      // 기본값 false (AI 필터링 비활성화 = API 절약)
+      return stored === null ? false : stored === 'true';
+    } catch (error) {
+      console.error('Failed to read article filter setting:', error);
+      return false;
+    }
+  }
+
+  setArticleFilterSetting(value) {
+    try {
+      localStorage.setItem('article_filter_enabled', value.toString());
+      if (this.isChromeApiAvailable()) {
+        chrome.storage.local.set({ article_filter_enabled: value });
+      }
+    } catch (error) {
+      console.error('Failed to save article filter setting:', error);
+    }
+  }
+
   // Google Search API 사용 설정 가져오기
   getGoogleSearchEnabled() {
     try {
@@ -7037,14 +8100,14 @@ ${factCheckSection}
   getPanelOpacitySetting() {
     try {
       const stored = localStorage.getItem('factcheck_panel_opacity');
-      const parsed = stored !== null ? parseFloat(stored) : 0.95;
+      const parsed = stored !== null ? parseFloat(stored) : 1;
       if (Number.isNaN(parsed)) {
-        return 0.95;
+        return 1;
       }
       return Math.min(Math.max(parsed, 0.4), 1);
     } catch (error) {
       console.error('Failed to get panel opacity setting:', error);
-      return 0.95;
+      return 1;
     }
   }
 
@@ -7107,146 +8170,6 @@ ${factCheckSection}
     }
   }
 
-  // 모달 이벤트 연결
-  attachModalEvents(modal, modalContent, savedApiKey) {
-    const closeModal = () => {
-      modal.style.opacity = '0';
-      setTimeout(() => modal.remove(), 300);
-    };
-    
-    // 닫기 버튼
-    const closeBtn = modalContent.querySelector('.close-modal');
-    closeBtn.addEventListener('click', closeModal);
-    closeBtn.addEventListener('mouseenter', () => {
-      closeBtn.style.backgroundColor = '#BF9780';
-    });
-    closeBtn.addEventListener('mouseleave', () => {
-      closeBtn.style.backgroundColor = 'transparent';
-    });
-    
-    // 배경 클릭으로 닫기
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) closeModal();
-    });
-    
-    // 수정 버튼 (표시 모드)
-    const editBtn = modalContent.querySelector('.edit-key-btn');
-    if (editBtn) {
-      editBtn.addEventListener('click', () => {
-        modalContent.innerHTML = `
-          <button class="close-modal" style="position: absolute; top: 12px; right: 12px; background: none; border: none; font-size: 24px; color: #737373; cursor: pointer; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: background-color 0.2s;">&times;</button>
-          <h2 style="font-size: 24px; font-weight: bold; margin-bottom: 32px; text-align: center; color: #0D0D0D;">API 키 수정</h2>
-          <input class="api-key-input" type="text" placeholder="새로운 Gemini API Key" value="${savedApiKey}" style="border: 2px solid #BF9780; border-radius: 8px; padding: 16px 20px; margin-bottom: 24px; width: 100%; font-size: 16px; box-sizing: border-box; flex: 1; outline: none; transition: border-color 0.2s;" />
-          <button class="submit-key-btn" style="background: #F2CEA2; color: #0D0D0D; padding: 16px 32px; border-radius: 8px; font-weight: 600; border: none; cursor: pointer; width: 100%; transition: background-color 0.2s; font-size: 16px;">저장</button>
-        `;
-        
-        this.attachModalEvents(modal, modalContent, savedApiKey);
-      });
-      
-      editBtn.addEventListener('mouseenter', () => {
-        editBtn.style.backgroundColor = '#A68570';
-      });
-      editBtn.addEventListener('mouseleave', () => {
-        editBtn.style.backgroundColor = '#BF9780';
-      });
-    }
-
-    // 해제 버튼 (표시 모드)
-    const removeBtn = modalContent.querySelector('.remove-key-btn');
-    if (removeBtn) {
-      removeBtn.addEventListener('click', () => {
-        if (confirm('API 키를 정말 해제하시겠습니까?\n해제하면 팩트체킹 기능을 사용할 수 없습니다.')) {
-          this.removeApiKey();
-          closeModal();
-          alert('API 키가 해제되었습니다.');
-        }
-      });
-      
-      removeBtn.addEventListener('mouseenter', () => {
-        removeBtn.style.backgroundColor = '#C0392B';
-      });
-      removeBtn.addEventListener('mouseleave', () => {
-        removeBtn.style.backgroundColor = '#E74C3C';
-      });
-    }
-    
-    // 입력 및 제출 (입력 모드)
-    const input = modalContent.querySelector('.api-key-input');
-    const submitBtn = modalContent.querySelector('.submit-key-btn');
-    
-    if (input && submitBtn) {
-      // 포커스 효과
-      input.addEventListener('focus', () => {
-        input.style.borderColor = '#F2CEA2';
-      });
-      input.addEventListener('blur', () => {
-        input.style.borderColor = '#BF9780';
-      });
-      
-      // 자동 포커스
-      setTimeout(() => input.focus(), 100);
-      
-      // 제출 버튼
-      const handleSubmit = async () => {
-        const apiKey = input.value.trim();
-        
-        if (apiKey) {
-          // API 키 암호화
-          let encryptedKey;
-          try {
-            encryptedKey = await this.encryptApiKey(apiKey);
-          } catch (error) {
-            console.error('API 키 암호화 오류:', error);
-            alert('API 키 암호화에 실패했습니다. 다시 시도해주세요.');
-            return;
-          }
-          
-          if (this.isChromeApiAvailable()) {
-            try {
-              chrome.storage.local.set({ gemini_api_key: encryptedKey }, () => {
-                if (chrome.runtime.lastError) {
-                  console.log('Chrome storage failed, using localStorage:', chrome.runtime.lastError);
-                  localStorage.setItem('gemini_api_key', encryptedKey);
-                  alert('API 키가 암호화되어 저장되었습니다! (localStorage)');
-                } else {
-                  alert('API 키가 암호화되어 저장되었습니다!');
-                }
-                closeModal();
-              });
-            } catch (error) {
-              console.log('Chrome storage error, using localStorage:', error);
-              localStorage.setItem('gemini_api_key', encryptedKey);
-              alert('API 키가 암호화되어 저장되었습니다! (localStorage)');
-              closeModal();
-            }
-          } else {
-            localStorage.setItem('gemini_api_key', encryptedKey);
-            alert('API 키가 암호화되어 저장되었습니다!');
-            closeModal();
-          }
-        } else {
-          alert('API 키를 입력해주세요.');
-        }
-      };
-      
-      submitBtn.addEventListener('click', handleSubmit);
-      
-      // Enter 키로 제출
-      input.addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-          handleSubmit();
-        }
-      });
-      
-      // 호버 효과
-      submitBtn.addEventListener('mouseenter', () => {
-        submitBtn.style.backgroundColor = '#E6B892';
-      });
-      submitBtn.addEventListener('mouseleave', () => {
-        submitBtn.style.backgroundColor = '#F2CEA2';
-      });
-    }
-  }
 
   // 저장된 API 키 확인
   async checkSavedApiKey() {
@@ -9109,9 +10032,6 @@ AnalysisPanel.prototype.findSimilarArticles = async function(blockId, skipLock =
       // 실제 Google Search API 호출 (최대 10개 요청)
       results = await this.callGoogleSearchAPI(searchQuery, 'news', 10);
       
-      // 최대 4개만 사용
-      results = results.slice(0, 4);
-      
       if (results.length === 0) {
         console.warn('[findSimilarArticles] 검색 결과 없음');
         this.hideSearchLoading(blockId);
@@ -9127,8 +10047,61 @@ AnalysisPanel.prototype.findSimilarArticles = async function(blockId, skipLock =
 
     console.log('[findSimilarArticles] 검증된 뉴스 결과:', results.length, '개');
 
-    // 영구 캐시에 저장 (API 절약)
-    this.saveToSearchCache(cacheKey, results);
+    // AI 필터링 적용 (설정이 켜져 있을 때만)
+    const articleFilterEnabled = this.getArticleFilterSetting();
+    console.log('[findSimilarArticles] 필터링 설정 상태:', articleFilterEnabled ? 'ON (AI 필터링 활성화)' : 'OFF (필터링 비활성화)');
+    
+    if (articleFilterEnabled && results.length > 1) {
+      console.log('[findSimilarArticles] 🤖 AI 필터링 시작:', results.length, '개');
+      console.log('[findSimilarArticles] 필터링 전 제목 목록:');
+      results.forEach((article, index) => {
+        console.log(`  ${index + 1}. ${article.title}`);
+      });
+      
+      // 로딩 표시
+      this.showSearchLoading(blockId, '🤖 AI 필터링 중...');
+      
+      try {
+        // 현재 블록 정보 가져오기
+        const block = this.newsBlocks.get(blockId);
+        
+        // AI 필터링 실행
+        const filteredResults = await this.filterArticlesWithAI(block, results);
+        
+        console.log('[findSimilarArticles] ✅ AI 필터링 완료:', filteredResults.length, '개 (제거:', results.length - filteredResults.length, '개)');
+        console.log('[findSimilarArticles] 필터링 후 제목 목록:');
+        filteredResults.forEach((article, index) => {
+          console.log(`  ${index + 1}. ${article.title}`);
+        });
+        
+        results = filteredResults;
+        
+        if (results.length > 0) {
+          // 필터링된 결과를 캐시에 저장
+          this.saveToSearchCache(cacheKey, results);
+        }
+      } catch (error) {
+        console.error('[findSimilarArticles] AI 필터링 실패:', error);
+        // 실패 시 원본 결과 사용
+        console.log('[findSimilarArticles] ⚠️ AI 필터링 실패, 원본 결과 사용');
+        
+        // 429 에러인 경우 사용자에게 알림
+        if (error.message && error.message.includes('429')) {
+          this.showSearchLoading(blockId, '⚠️ API 할당량 초과 (설정에서 필터링 OFF 권장)');
+          setTimeout(() => this.hideSearchLoading(blockId), 3000);
+        }
+        
+        this.saveToSearchCache(cacheKey, results);
+      }
+    } else {
+      console.log('[findSimilarArticles] ✅ 필터링 비활성화, 검색 결과 전체 표시:', results.length, '개');
+      console.log('[findSimilarArticles] 전체 제목 목록:');
+      results.forEach((article, index) => {
+        console.log(`  ${index + 1}. ${article.title}`);
+      });
+      // 원본 캐시에 저장
+      this.saveToSearchCache(cacheKey, results);
+    }
 
     // 로딩 숨김
     this.hideSearchLoading(blockId);
@@ -9259,6 +10232,41 @@ AnalysisPanel.prototype.searchFactCheck = async function(blockId) {
 
     console.log('[searchFactCheck] 검증된 뉴스 기사:', results.length, '개');
     
+    // AI 필터링 적용 (설정이 켜져 있을 때만)
+    const articleFilterEnabled = this.getArticleFilterSetting();
+    console.log('[searchFactCheck] 필터링 설정 상태:', articleFilterEnabled ? 'ON (AI 필터링 활성화)' : 'OFF (필터링 비활성화)');
+    
+    if (articleFilterEnabled && results.length > 1) {
+      console.log('[searchFactCheck] 🤖 AI 필터링 시작:', results.length, '개');
+      this.updateFactCheckStatus(blockId, '🤖 AI 필터링 중...');
+      
+      try {
+        // 현재 블록 정보 가져오기
+        const block = this.newsBlocks.get(blockId);
+        
+        // AI 필터링 실행
+        const filteredResults = await this.filterArticlesWithAI(block, results);
+        
+        console.log('[searchFactCheck] ✅ AI 필터링 완료:', filteredResults.length, '개 (제거:', results.length - filteredResults.length, '개)');
+        results = filteredResults;
+        this.updateFactCheckStatus(blockId, `✅ ${results.length}개 기사 선별 완료`);
+      } catch (error) {
+        console.error('[searchFactCheck] AI 필터링 실패:', error);
+        // 실패 시 원본 결과 사용
+        console.log('[searchFactCheck] ⚠️ AI 필터링 실패, 원본 결과 사용');
+        
+        // 429 에러인 경우 사용자에게 알림
+        if (error.message && error.message.includes('429')) {
+          this.updateFactCheckStatus(blockId, '⚠️ API 할당량 초과 (설정에서 필터링 OFF 권장)');
+          setTimeout(() => {
+            this.updateFactCheckStatus(blockId, `✅ ${results.length}개 기사 검색 완료`);
+          }, 3000);
+        }
+      }
+    } else {
+      console.log('[searchFactCheck] ✅ 필터링 비활성화, 검색 결과 전체 사용:', results.length, '개');
+    }
+    
     // 크롤링 우선순위 확인
     const crawlingPriority = await this.getCrawlingPrioritySetting();
     console.log('[searchFactCheck] 크롤링 우선순위:', crawlingPriority);
@@ -9283,21 +10291,27 @@ AnalysisPanel.prototype.searchFactCheck = async function(blockId) {
       const comparisonArticles = articlesWithSnippet.slice(0, 5);
       console.log('[searchFactCheck] snippet 검증 기사:', comparisonArticles.length, '개');
       
-      // AI 검증으로 바로 이동
+      // AI 검증으로 바로 이동 (재분석은 건너뛰기)
       this.updateFactCheckStatus(blockId, '🤖 AI 검증 중...');
       const verification = await this.verifyFactsWithAI(block, comparisonArticles);
       
-      this.updateFactCheckStatus(blockId, '📊 재분석 중...');
-      const reanalyzed = await this.reanalyzeWithFactCheck(block, comparisonArticles, verification);
+      console.log('[searchFactCheck] ⚡ 속도 모드: 재분석 생략, 기존 분석 결과 유지');
       
       const factCheckResult = {
         articles: comparisonArticles,
         verification: verification,
-        reanalyzed: reanalyzed,
+        reanalyzed: null, // 속도 모드에서는 재분석 없음
         timestamp: Date.now()
       };
       
       block.factCheckResult = factCheckResult;
+      
+      // 기존 분석 결과에 사실검증 필드 추가 (패널 표시용)
+      if (!block.result.사실검증) {
+        block.result.사실검증 = verification;
+        console.log('[searchFactCheck] ⚡ 속도 모드: 기존 분석에 검증 결과 추가');
+      }
+      
       console.log('[searchFactCheck] factCheckResult 저장 완료:', factCheckResult);
       
       this.saveNewsBlocks();
@@ -9330,12 +10344,31 @@ AnalysisPanel.prototype.searchFactCheck = async function(blockId) {
     
     // 정확도 모드: 크롤링 수행
     console.log('[searchFactCheck] 🎯 정확도 모드: 크롤링으로 전체 본문 수집');
-    this.updateFactCheckStatus(blockId, `✅ ${results.length}개 신뢰 기사 확보, 크롤링 시작...`);
     
-    // 각 기사 크롤링 시도 (성공한 것만 수집, 최소 2개 목표)
+    // 크롤링 개수 설정 가져오기
+    const crawlingCountSetting = await this.getCrawlingCountSetting();
+    let targetCount;
+    
+    if (crawlingCountSetting === 0) {
+      // 커스텀 입력 모드 - 커스텀 값 사용
+      const customInput = document.querySelector('.crawling-custom-value');
+      targetCount = customInput ? Math.min(Math.max(parseInt(customInput.value) || 3, 1), 100) : 3;
+      console.log('[searchFactCheck] 커스텀 크롤링 개수:', targetCount);
+    } else if (crawlingCountSetting === 11) {
+      // 전체 크롤링 모드
+      targetCount = results.length;
+      console.log('[searchFactCheck] 전체 크롤링 모드:', targetCount, '개');
+    } else {
+      // 1-10 범위
+      targetCount = Math.min(crawlingCountSetting, results.length);
+      console.log('[searchFactCheck] 설정된 크롤링 개수:', targetCount);
+    }
+    
+    this.updateFactCheckStatus(blockId, `✅ ${results.length}개 신뢰 기사 확보, ${targetCount}개 크롤링 시작...`);
+    
+    // 각 기사 크롤링 시도 (성공한 것만 수집)
     const crawledArticles = [];
     const failedArticles = [];
-    const targetCount = 2; // 최소 크롤링 성공 목표
     
     // 검증된 모든 결과를 순회하며 목표 달성까지 계속 시도
     for (let i = 0; i < results.length; i++) {
@@ -9487,76 +10520,18 @@ AnalysisPanel.prototype.searchFactCheck = async function(blockId) {
 };
 
 AnalysisPanel.prototype.getGoogleApiKey = async function() {
-  // localStorage를 우선 사용 (Extension context invalidated 오류 방지)
-  try {
-    const encryptedKey = localStorage.getItem('google_search_api_key');
-    if (encryptedKey) {
-      const decrypted = await this.decryptApiKey(encryptedKey);
-      if (decrypted) {
-        return decrypted;
-      }
-    }
-  } catch (error) {
-    console.error('localStorage에서 Google API 키 조회 실패:', error);
-  }
-  
-  // localStorage 실패 시 chrome.storage 시도
-  return new Promise((resolve) => {
-    try {
-      chrome.storage.local.get(['google_search_api_key'], (result) => {
-        if (chrome.runtime.lastError) {
-          console.error('chrome.storage API 키 조회 오류:', chrome.runtime.lastError);
-          resolve(null);
-          return;
-        }
-        const encryptedKey = result.google_search_api_key;
-        if (encryptedKey) {
-          this.decryptApiKey(encryptedKey).then(decrypted => resolve(decrypted)).catch(() => resolve(null));
-        } else {
-          resolve(null);
-        }
-      });
-    } catch (error) {
-      console.error('chrome.storage 접근 실패:', error);
-      resolve(null);
-    }
-  });
+  const key = await this.fetchStoredApiKey('google_search_api_key');
+  return key || null;
 };
 
 AnalysisPanel.prototype.saveGoogleApiKey = async function(apiKey) {
-  if (!apiKey) return false;
-  
   try {
-    const encryptedKey = await this.encryptApiKey(apiKey);
-    
-    // localStorage에 우선 저장 (Extension context invalidated 오류 방지)
-    try {
-      localStorage.setItem('google_search_api_key', encryptedKey);
-      console.log('API 키가 localStorage에 저장되었습니다.');
-    } catch (error) {
-      console.error('localStorage 저장 실패:', error);
-    }
-    
-    // chrome.storage에도 저장 시도 (백업)
-    try {
-      await new Promise((resolve) => {
-        chrome.storage.local.set({ google_search_api_key: encryptedKey }, () => {
-          if (chrome.runtime.lastError) {
-            console.log('chrome.storage 저장 실패:', chrome.runtime.lastError);
-          } else {
-            console.log('API 키가 chrome.storage에도 저장되었습니다.');
-          }
-          resolve(true);
-        });
-      });
-    } catch (error) {
-      console.error('chrome.storage 접근 실패:', error);
-    }
-    
+    await this.persistApiKeyValue('google_search_api_key', apiKey);
+    this.refreshApiKeyFlags();
     return true;
   } catch (error) {
     console.error('Google API 키 저장 오류:', error);
-    return false;
+    throw error;
   }
 };
 
@@ -9812,13 +10787,24 @@ AnalysisPanel.prototype.showSearchResults = function(blockId, results, type) {
   const typeName = type === 'similar' ? '유사 기사' : '사실 검증';
   const icon = type === 'similar' ? '📰' : '🔍';
   
+  // 페이지네이션 설정
+  const itemsPerPage = 5;
+  let currentPage = 0;
+  const totalPages = Math.ceil(results.length / itemsPerPage);
+  
   // 검색 결과를 HTML로 렌더링
-  const renderResults = () => {
+  const renderResults = (page = 0) => {
     if (!results || results.length === 0) {
       return '<p style="color: #737373; text-align: center; padding: 20px;">검색 결과가 없습니다.</p>';
     }
     
-    return results.map((r, i) => {
+    // 현재 페이지의 결과만 추출
+    const startIndex = page * itemsPerPage;
+    const endIndex = startIndex + itemsPerPage;
+    const pageResults = results.slice(startIndex, endIndex);
+    
+    return pageResults.map((r, i) => {
+      const globalIndex = startIndex + i;
       // 썸네일 이미지 추출 (유사 기사일 때만)
       let thumbnailHtml = '';
       if (type === 'similar' && r.pagemap) {
@@ -9856,7 +10842,7 @@ AnalysisPanel.prototype.showSearchResults = function(blockId, results, type) {
             font-size: 12px;
             font-weight: 600;
             margin-bottom: 6px;
-          ">${i + 1}번째 결과</div>
+          ">${globalIndex + 1}번째 결과</div>
           
           <h3 style="
             color: #0D0D0D;
@@ -9957,13 +10943,128 @@ AnalysisPanel.prototype.showSearchResults = function(blockId, results, type) {
         </div>
       ` : `
         <div class="search-results-container">
-          ${renderResults()}
+          ${renderResults(currentPage)}
         </div>
+        
+        ${totalPages > 1 ? `
+          <div class="pagination-controls" style="
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 1px solid #D1D5DB;
+          ">
+            <button class="prev-page-btn" style="
+              padding: 8px 16px;
+              background: #BF9780;
+              color: white;
+              border: none;
+              border-radius: 6px;
+              font-size: 14px;
+              font-weight: 600;
+              cursor: pointer;
+              transition: background 0.2s;
+              display: flex;
+              align-items: center;
+              gap: 6px;
+            " ${currentPage === 0 ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : ''}>
+              ◀ 이전
+            </button>
+            
+            <div class="page-info" style="
+              font-size: 14px;
+              color: #404040;
+              font-weight: 600;
+            ">
+              <span class="current-page">${currentPage + 1}</span> / ${totalPages}
+            </div>
+            
+            <button class="next-page-btn" style="
+              padding: 8px 16px;
+              background: #BF9780;
+              color: white;
+              border: none;
+              border-radius: 6px;
+              font-size: 14px;
+              font-weight: 600;
+              cursor: pointer;
+              transition: background 0.2s;
+              display: flex;
+              align-items: center;
+              gap: 6px;
+            " ${currentPage === totalPages - 1 ? 'disabled style="opacity: 0.5; cursor: not-allowed;"' : ''}>
+              다음 ▶
+            </button>
+          </div>
+        ` : ''}
       `}
     </div>
   `;
 
   document.body.appendChild(modal);
+
+  // 페이지 업데이트 함수
+  const updatePage = () => {
+    const container = modal.querySelector('.search-results-container');
+    const pageInfo = modal.querySelector('.current-page');
+    const prevBtn = modal.querySelector('.prev-page-btn');
+    const nextBtn = modal.querySelector('.next-page-btn');
+    
+    if (container) {
+      container.innerHTML = renderResults(currentPage);
+      
+      // 새로 렌더링된 항목에 이벤트 재적용
+      const newItems = container.querySelectorAll('.search-result-item');
+      newItems.forEach(item => {
+        item.addEventListener('click', () => {
+          const url = item.getAttribute('data-url');
+          if (url) {
+            window.open(url, '_blank', 'noopener,noreferrer');
+          }
+        });
+        
+        item.addEventListener('mouseenter', () => {
+          item.style.transform = 'translateY(-2px)';
+          item.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
+        });
+        item.addEventListener('mouseleave', () => {
+          item.style.transform = 'translateY(0)';
+          item.style.boxShadow = 'none';
+        });
+      });
+    }
+    
+    if (pageInfo) {
+      pageInfo.textContent = currentPage + 1;
+    }
+    
+    // 버튼 활성화/비활성화
+    if (prevBtn) {
+      if (currentPage === 0) {
+        prevBtn.disabled = true;
+        prevBtn.style.opacity = '0.5';
+        prevBtn.style.cursor = 'not-allowed';
+      } else {
+        prevBtn.disabled = false;
+        prevBtn.style.opacity = '1';
+        prevBtn.style.cursor = 'pointer';
+      }
+    }
+    
+    if (nextBtn) {
+      if (currentPage === totalPages - 1) {
+        nextBtn.disabled = true;
+        nextBtn.style.opacity = '0.5';
+        nextBtn.style.cursor = 'not-allowed';
+      } else {
+        nextBtn.disabled = false;
+        nextBtn.style.opacity = '1';
+        nextBtn.style.cursor = 'pointer';
+      }
+    }
+  };
 
   // 애니메이션
   setTimeout(() => {
@@ -9973,6 +11074,50 @@ AnalysisPanel.prototype.showSearchResults = function(blockId, results, type) {
       modalContent.style.transform = 'scale(1)';
     }
   }, 10);
+
+  // 페이지네이션 버튼 이벤트
+  const prevBtn = modal.querySelector('.prev-page-btn');
+  const nextBtn = modal.querySelector('.next-page-btn');
+  
+  if (prevBtn) {
+    prevBtn.addEventListener('click', () => {
+      if (currentPage > 0) {
+        currentPage--;
+        updatePage();
+      }
+    });
+    
+    prevBtn.addEventListener('mouseenter', () => {
+      if (!prevBtn.disabled) {
+        prevBtn.style.background = '#A68570';
+      }
+    });
+    prevBtn.addEventListener('mouseleave', () => {
+      if (!prevBtn.disabled) {
+        prevBtn.style.background = '#BF9780';
+      }
+    });
+  }
+  
+  if (nextBtn) {
+    nextBtn.addEventListener('click', () => {
+      if (currentPage < totalPages - 1) {
+        currentPage++;
+        updatePage();
+      }
+    });
+    
+    nextBtn.addEventListener('mouseenter', () => {
+      if (!nextBtn.disabled) {
+        nextBtn.style.background = '#A68570';
+      }
+    });
+    nextBtn.addEventListener('mouseleave', () => {
+      if (!nextBtn.disabled) {
+        nextBtn.style.background = '#BF9780';
+      }
+    });
+  }
 
   // 검색 결과 항목 클릭 이벤트
   const resultItems = modal.querySelectorAll('.search-result-item');
@@ -10338,6 +11483,384 @@ AnalysisPanel.prototype.clearFactCheckStatus = function(blockId) {
   this.setFactCheckState(blockId, { inProgress: false });
 };
 
+// AI를 사용하여 유사 기사 필터링
+AnalysisPanel.prototype.filterArticlesWithAI = async function(block, articles) {
+  console.log('[filterArticlesWithAI] 필터링 시작, 기사:', articles.length, '개');
+  console.log('[filterArticlesWithAI] 원본 뉴스 제목:', block.title);
+  console.log('[filterArticlesWithAI] 원본 뉴스 내용 길이:', (block.content || block.result?.요약 || '').length, '자');
+  
+  if (!articles || articles.length === 0) {
+    return articles;
+  }
+  
+  try {
+    // 현재 뉴스 정보
+    const currentNews = {
+      title: block.title,
+      content: block.content || block.result?.요약 || '',
+      summary: block.result?.요약 || ''
+    };
+    
+    console.log('[filterArticlesWithAI] 📤 Gemini에 보낼 데이터:');
+    console.log('  원본 제목:', currentNews.title);
+    console.log('  원본 내용:', currentNews.content.substring(0, 200) + '...');
+    
+    // 검색된 기사 리스트 생성
+    const articlesList = articles.map((article, index) => {
+      return `${index + 1}. [제목] ${article.title}\n   [출처] ${article.displayLink || article.link}\n   [요약] ${article.snippet || '없음'}`;
+    }).join('\n\n');
+    
+    console.log('[filterArticlesWithAI] 검색된 기사 목록:\n' + articlesList);
+    
+    // AI 프롬프트 생성
+    const prompt = `당신은 뉴스 관련성 분석 전문가입니다. 주어진 원본 뉴스와 검색된 유사 기사들을 비교하여, **현재 뉴스와 관련 없는 기사들을 제외**해주세요.
+
+**원본 뉴스:**
+제목: ${currentNews.title}
+내용: ${currentNews.content.substring(0, 500)}...
+
+**검색된 유사 기사 목록:**
+${articlesList}
+
+**제외 기준:**
+1. 완전히 다른 주제를 다루는 기사
+2. 같은 키워드를 사용하지만 전혀 다른 맥락의 기사
+3. 관련 없는 광고성 기사
+4. 원본 뉴스와 시간적/공간적 연관성이 전혀 없는 기사
+
+**유지 기준:**
+1. 같은 사건이나 이슈를 다루는 기사
+2. 관련된 배경 정보를 제공하는 기사
+3. 동일 인물/기관에 대한 기사
+4. 원본 뉴스의 사실 확인에 도움이 되는 기사
+
+**중요:** 너무 엄격하게 제외하지 말고, 조금이라도 관련이 있다면 유지하세요.
+
+다음 JSON 형식으로만 응답하세요:
+{
+  "Exclude": [제외할 기사 번호 배열, 예: [1, 4, 7]]
+}`;
+
+    console.log('[filterArticlesWithAI] 📤 프롬프트 길이:', prompt.length, '자');
+    console.log('[filterArticlesWithAI] 🚀 Gemini API 호출 중...');
+    
+    // 할당량 체크
+    if (this.isQuotaExhausted()) {
+      console.warn('[filterArticlesWithAI] API 호출 차단: 할당량 소진');
+      this.showQuotaExhaustedError(null);
+      return articles; // 필터링 없이 원본 반환
+    }
+    
+    // Gemini API 호출
+    const response = await chrome.runtime.sendMessage({
+      action: 'analyzeNewsWithGemini',
+      prompt: prompt,
+      isStreaming: false,
+      newsContent: null
+    });
+    
+    console.log('[filterArticlesWithAI] 📥 Gemini 응답 받음:', response);
+    
+    // 할당량 정보 로깅 및 저장
+    if (response.quota) {
+      console.log('[filterArticlesWithAI] 📊 API 할당량 정보:');
+      console.log('  남은 요청:', response.quota.remaining || 'N/A');
+      console.log('  전체 한도:', response.quota.limit || 'N/A');
+      console.log('  리셋 시간:', response.quota.reset || 'N/A');
+      
+      // 할당량 정보 저장
+      this.saveQuotaInfo(response.quota);
+      
+      // UI 업데이트
+      this.updateQuotaDisplay();
+    }
+    
+    if (!response || !response.success) {
+      const errorMsg = response?.error || 'Unknown error';
+      console.error('[filterArticlesWithAI] ❌ API 호출 실패:', errorMsg);
+      
+      // 429 에러 (할당량 초과) 체크
+      if (typeof errorMsg === 'string' && errorMsg.includes('429')) {
+        console.warn('[filterArticlesWithAI] ⚠️ Gemini API 일일 할당량 초과 (200회/일)');
+        console.warn('[filterArticlesWithAI] 💡 설정에서 "유사 기사 AI 필터링"을 끄는 것을 권장합니다.');
+      }
+      
+      return articles;
+    }
+    
+    console.log('[filterArticlesWithAI] 📥 AI 원본 응답:', response.result);
+    
+    // JSON 파싱
+    let filterResult;
+    try {
+      // JSON 추출 (마크다운 코드 블록 제거)
+      let jsonText = response.result;
+      if (jsonText.includes('```json')) {
+        jsonText = jsonText.split('```json')[1].split('```')[0].trim();
+      } else if (jsonText.includes('```')) {
+        jsonText = jsonText.split('```')[1].split('```')[0].trim();
+      }
+      
+      filterResult = JSON.parse(jsonText);
+    } catch (error) {
+      console.error('[filterArticlesWithAI] JSON 파싱 실패:', error);
+      return articles;
+    }
+    
+    // 제외 목록 확인
+    const excludeIndices = filterResult.Exclude || [];
+    console.log('[filterArticlesWithAI] 🗑️ 제외할 기사 번호:', excludeIndices);
+    
+    if (!Array.isArray(excludeIndices) || excludeIndices.length === 0) {
+      console.log('[filterArticlesWithAI] ℹ️ 제외할 기사 없음, 전체 유지');
+      return articles;
+    }
+    
+    // 제외될 기사 제목 로깅
+    excludeIndices.forEach(idx => {
+      if (articles[idx - 1]) {
+        console.log(`  ❌ 제외: ${idx}. ${articles[idx - 1].title}`);
+      }
+    });
+    
+    // 필터링된 결과 생성 (1-based index를 0-based로 변환)
+    const filteredArticles = articles.filter((_, index) => {
+      return !excludeIndices.includes(index + 1);
+    });
+    
+    console.log('[filterArticlesWithAI] ✅ 필터링 완료:', filteredArticles.length, '개 유지,', excludeIndices.length, '개 제외');
+    console.log('[filterArticlesWithAI] 유지된 기사:');
+    filteredArticles.forEach((article, index) => {
+      console.log(`  ✓ ${index + 1}. ${article.title}`);
+    });
+    
+    return filteredArticles;
+    
+  } catch (error) {
+    console.error('[filterArticlesWithAI] 오류:', error);
+    return articles;
+  }
+};
+
+// API 할당량 정보 업데이트
+AnalysisPanel.prototype.updateQuotaDisplay = function() {
+  const remainingEl = document.getElementById('quota-remaining');
+  const limitEl = document.getElementById('quota-limit');
+  
+  if (!remainingEl || !limitEl) return;
+  
+  // localStorage에서 마지막 할당량 정보 읽기
+  const quotaInfo = this.getQuotaInfo();
+  
+  if (quotaInfo && quotaInfo.remaining !== null) {
+    remainingEl.textContent = quotaInfo.remaining;
+    limitEl.textContent = quotaInfo.limit || '200';
+    
+    // 할당량에 따라 색상 변경
+    const quotaDisplay = document.getElementById('quota-display');
+    if (quotaDisplay) {
+      const remaining = parseInt(quotaInfo.remaining);
+      const limit = parseInt(quotaInfo.limit || '200');
+      const percentage = (remaining / limit) * 100;
+      
+      let color = '#10B981'; // 초록 (충분)
+      if (percentage < 10) {
+        color = '#EF4444'; // 빨강 (부족)
+      } else if (percentage < 30) {
+        color = '#F59E0B'; // 노랑 (주의)
+      }
+      
+      const svg = quotaDisplay.querySelector('svg');
+      if (svg) {
+        svg.setAttribute('stroke', color);
+      }
+      
+      const span = quotaDisplay.querySelector('span');
+      if (span) {
+        span.style.color = color;
+      }
+    }
+  }
+};
+
+// 할당량 소진 에러 표시 (토스트 알림)
+AnalysisPanel.prototype.showQuotaExhaustedError = function(blockId) {
+  console.warn('[Quota] API 호출 차단됨 - 할당량 소진');
+  
+  // 기존 토스트 제거
+  const existingToast = document.getElementById('quota-toast-notification');
+  if (existingToast) {
+    existingToast.remove();
+  }
+  
+  // 토스트 알림 생성
+  const toast = document.createElement('div');
+  toast.id = 'quota-toast-notification';
+  toast.style.cssText = `
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: linear-gradient(135deg, #FFA500 0%, #FF6B00 100%);
+    color: white;
+    padding: 16px 20px;
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(255, 107, 0, 0.3);
+    z-index: 999999;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans KR', sans-serif;
+    font-size: 14px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    animation: slideInRight 0.3s ease-out, fadeOut 0.3s ease-in 2.7s;
+    pointer-events: auto;
+  `;
+  
+  toast.innerHTML = `
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+    </svg>
+    <span>⚠️ API 할당량이 소진되었습니다. 24시간 후 재시도하세요.</span>
+  `;
+  
+  // 애니메이션 추가
+  const style = document.createElement('style');
+  style.textContent = `
+    @keyframes slideInRight {
+      from {
+        transform: translateX(400px);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+    @keyframes fadeOut {
+      from {
+        opacity: 1;
+      }
+      to {
+        opacity: 0;
+      }
+    }
+  `;
+  document.head.appendChild(style);
+  
+  document.body.appendChild(toast);
+  
+  // 3초 후 제거
+  setTimeout(() => {
+    toast.remove();
+    style.remove();
+  }, 3000);
+  
+  // blockId가 있으면 해당 블록의 상태를 에러로 업데이트
+  if (blockId && blockId !== 'current') {
+    this.updateNewsStatus(blockId, 'error', null, '⚠️ API 할당량 소진');
+  }
+};
+
+// 할당량 정보 저장
+AnalysisPanel.prototype.saveQuotaInfo = function(quota) {
+  if (!quota) return;
+  
+  const quotaInfo = {
+    remaining: quota.remaining || '0',
+    limit: quota.limit || '200',
+    reset: quota.reset,
+    timestamp: Date.now()
+  };
+  
+  this.persistQuotaInfoLocally(quotaInfo);
+  
+  if (chrome?.storage?.local) {
+    chrome.storage.local.set({ gemini_quota_info: quotaInfo }, () => {
+      if (chrome.runtime.lastError) {
+        console.warn('할당량 chrome.storage 저장 실패:', chrome.runtime.lastError.message);
+      }
+    });
+  }
+};
+
+// 할당량 소진 저장 (429 에러 발생 시)
+AnalysisPanel.prototype.saveQuotaExhausted = function() {
+  const quotaInfo = {
+    remaining: '0',
+    limit: '200',
+    reset: null,
+    timestamp: Date.now(),
+    exhausted: true
+  };
+  
+  this.persistQuotaInfoLocally(quotaInfo);
+  if (chrome?.storage?.local) {
+    chrome.storage.local.set({ gemini_quota_info: quotaInfo }, () => {
+      if (chrome.runtime.lastError) {
+        console.warn('할당량 소진 chrome.storage 저장 실패:', chrome.runtime.lastError.message);
+      }
+    });
+  }
+  console.warn('[saveQuotaExhausted] API 할당량 소진 저장: 0 / 200');
+  
+  // UI 즉시 업데이트 (여러 방법 시도)
+  setTimeout(() => {
+    this.updateQuotaDisplay();
+    
+    // 직접 DOM 업데이트 (fallback)
+    const remainingEl = document.getElementById('quota-remaining');
+    const limitEl = document.getElementById('quota-limit');
+    const quotaDisplay = document.getElementById('quota-display');
+    
+    if (remainingEl && limitEl) {
+      remainingEl.textContent = '0';
+      limitEl.textContent = '200';
+      console.log('[saveQuotaExhausted] UI 직접 업데이트: 0 / 200');
+    }
+    
+    // 색상 빨강으로 변경
+    if (quotaDisplay) {
+      const svg = quotaDisplay.querySelector('svg');
+      const span = quotaDisplay.querySelector('span');
+      if (svg) svg.setAttribute('stroke', '#EF4444');
+      if (span) span.style.color = '#EF4444';
+    }
+    
+    // 패널 전체 리렌더링 트리거
+    this.render();
+  }, 100);
+};
+
+// 할당량 정보 읽기
+AnalysisPanel.prototype.getQuotaInfo = function() {
+  try {
+    const stored = localStorage.getItem('gemini_quota_info');
+    if (!stored) return null;
+    
+    const quotaInfo = JSON.parse(stored);
+    
+    // 24시간 이상 지난 정보는 무효화 (할당량 리셋)
+    if (Date.now() - quotaInfo.timestamp > 86400000) {
+      localStorage.removeItem('gemini_quota_info');
+      return null;
+    }
+    
+    return quotaInfo;
+  } catch (error) {
+    console.error('Failed to read quota info:', error);
+    return null;
+  }
+};
+
+// 할당량 소진 여부 확인
+AnalysisPanel.prototype.isQuotaExhausted = function() {
+  const quotaInfo = this.getQuotaInfo();
+  if (!quotaInfo) return false;
+  
+  // remaining이 0이거나 exhausted 플래그가 true면 소진됨
+  return quotaInfo.exhausted === true || parseInt(quotaInfo.remaining || '0') === 0;
+};
+
 // 뉴스 기사 크롤링 함수
 AnalysisPanel.prototype.crawlArticleContent = async function(url, retryWithTab = false) {
   console.log('[crawlArticleContent] 크롤링 시작:', url, retryWithTab ? '(탭 열기 허용)' : '');
@@ -10503,6 +12026,12 @@ ${truncatedHtml}
 \`\`\``;
 
     console.log('[parseHtmlWithAI] 📤 Gemini에 전달할 prompt 길이:', prompt.length, '자');
+
+    // 할당량 체크
+    if (this.isQuotaExhausted()) {
+      console.warn('[parseHtmlWithAI] API 호출 차단: 할당량 소진');
+      return null; // 파싱 실패로 처리
+    }
 
     const response = await new Promise((resolve, reject) => {
       chrome.runtime.sendMessage({
@@ -10720,21 +12249,38 @@ ${comparisonArticles.map((article, i) => {
 
 ## 작업
 원본 기사의 핵심 주장들을 비교 기사들과 대조하여 다음을 분석하세요:
-1. **일치하는 사실**: 비교 기사에서도 확인되는 내용
-2. **불일치하는 사실**: 비교 기사와 다르게 보도된 내용
+1. **일치하는 사실**: 비교 기사에서도 확인되는 내용 (각 사실 뒤에 참고한 기사 번호를 [1], [2] 형식으로 표기)
+2. **불일치하는 사실**: 비교 기사와 다르게 보도된 내용 (각 불일치 뒤에 참고한 기사 번호 표기)
 3. **검증 불가**: 비교 기사에서 언급되지 않은 내용
 4. **종합 평가**: 원본 기사의 신뢰도 평가 (신뢰할 수 있음 / 부분적으로 신뢰 / 신뢰하기 어려움)
 
+**중요**: 각 사실/불일치 항목 뒤에 반드시 출처 번호를 [1], [2], [3], [4] 형식으로 표기하세요.
+
+예시:
+- "한동훈이 조국에게 공개토론을 제안했다 [1][2]"
+- "대장동 항소 포기 사태가 논란이 되고 있다 [1][3]"
+
 JSON 형식으로 응답:
 {
-  "일치하는_사실": ["사실1", "사실2", ...],
-  "불일치하는_사실": ["불일치1", "불일치2", ...],
+  "일치하는_사실": ["사실1 [1][2]", "사실2 [3]", ...],
+  "불일치하는_사실": ["불일치1 [2]", "불일치2 [1][4]", ...],
   "검증_불가": ["내용1", "내용2", ...],
   "종합_평가": "평가 텍스트"
 }
 `;
 
   try {
+    // 할당량 체크
+    if (this.isQuotaExhausted()) {
+      console.warn('[verifyFactsWithAI] API 호출 차단: 할당량 소진');
+      return {
+        일치하는_사실: [],
+        불일치하는_사실: [],
+        검증_불가: [],
+        종합_평가: 'API 할당량이 소진되어 검증할 수 없습니다.'
+      };
+    }
+    
     // service_worker를 통해 비스트리밍 모드로 호출
     return new Promise((resolve, reject) => {
       chrome.runtime.sendMessage({
@@ -10854,6 +12400,16 @@ JSON 형식으로 응답:
 `;
 
   try {
+    // 할당량 체크
+    if (this.isQuotaExhausted()) {
+      console.warn('[reanalyzeWithFactCheck] API 호출 차단: 할당량 소진');
+      return {
+        ...originalBlock?.result,
+        사실검증완료: false,
+        분석: 'API 할당량이 소진되어 재분석할 수 없습니다.'
+      };
+    }
+    
     // service_worker를 통해 비스트리밍 모드로 호출
     return new Promise((resolve, reject) => {
       chrome.runtime.sendMessage({
