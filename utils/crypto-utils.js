@@ -16,7 +16,10 @@ const SALT = new Uint8Array([
 async function getDeviceKey() {
   // 브라우저 지문 생성 (간단한 버전)
   const canvas = document.createElement('canvas');
-  const ctx = canvas.getContext('2d');
+  const ctx = canvas.getContext('2d', { willReadFrequently: true }) || canvas.getContext('2d');
+  if (!ctx) {
+    throw new Error('캔버스 컨텍스트를 초기화할 수 없습니다.');
+  }
   ctx.textBaseline = 'top';
   ctx.font = '14px Arial';
   ctx.fillText('fingerprint', 2, 2);

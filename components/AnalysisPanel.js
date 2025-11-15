@@ -7,6 +7,7 @@ class AnalysisPanel {
     this.currentNews = null; // 현재 페이지의 뉴스
     this.blockIdCounter = 0; // 고유 ID 생성용
     this.streamingResults = new Map(); // 실시간 스트리밍 결과 저장
+    this.streamingDiffCache = new Map(); // 스트리밍 누적 텍스트 캐시
     this.analysisTimeouts = new Map(); // 분석 타임아웃 관리
     this.abortControllers = new Map(); // API 요청 중단용 AbortController
     
@@ -47,6 +48,9 @@ class AnalysisPanel {
     this.preDetailFocus = null;
     this.crossVerificationInProgress = new Set(); // 교차 검증 중인 블록 ID들
     this.crossVerificationDepth = this.getCrossVerificationDepthSetting(); // 교차 검증 단계 수 (기본 3)
+    this.autoFactCheckEnabled = this.getAutoFactCheckSetting();
+    this.autoCrossVerificationEnabled = this.getAutoCrossVerificationSetting();
+    this.autoFactCheckQueue = new Set();
     
     // Google Search API 관련
     this.searchCache = new Map(); // 메모리 캐시 (세션 내)
@@ -450,11 +454,6 @@ class AnalysisPanel {
       const style = document.createElement('style');
       style.id = 'analysis-panel-styles';
       style.textContent = `
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-
         @property --glow-opacity {
           syntax: '<number>';
           inherits: false;
@@ -475,11 +474,45 @@ class AnalysisPanel {
 
         .news-block {
           position: relative;
-          transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.8s cubic-bezier(0.4, 0, 0.2, 1), --glow-opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1), --glow-scale 0.8s cubic-bezier(0.4, 0, 0.2, 1), --glow-blur 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+          transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.8s cubic-bezier(0.4, 0, 0.2, 1), height 0.6s cubic-bezier(0.4, 0, 0.2, 1), --glow-opacity 0.8s cubic-bezier(0.4, 0, 0.2, 1), --glow-scale 0.8s cubic-bezier(0.4, 0, 0.2, 1), --glow-blur 0.8s cubic-bezier(0.4, 0, 0.2, 1);
           box-shadow: var(--base-box-shadow, 0 4px 12px rgba(0, 0, 0, 0.25));
           --glow-opacity: var(--glow-opacity-base, 0);
           --glow-scale: var(--glow-scale-base, 1);
           --glow-blur: var(--glow-blur-base, 0px);
+          --analysis-expanded-height: 240px;
+        }
+
+        .news-content-area,
+        .news-actions-area {
+          max-height: 1200px;
+          transition: max-height 0.5s cubic-bezier(0.4, 0, 0.2, 1), padding 0.4s cubic-bezier(0.4, 0, 0.2, 1), margin 0.4s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.35s ease;
+        }
+
+        .news-block--analyzing .news-content-area,
+        .news-block--analyzing .news-actions-area {
+          max-height: 0;
+          padding-top: 0 !important;
+          padding-bottom: 0 !important;
+          margin-top: 0 !important;
+          margin-bottom: 0 !important;
+          opacity: 0;
+          border-width: 0 !important;
+          overflow: hidden;
+          pointer-events: none;
+        }
+
+        .news-block--analyzing .news-actions-area {
+          gap: 0 !important;
+        }
+
+        .analysis-height-expander {
+          height: 0;
+          transition: height 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+          pointer-events: none;
+        }
+
+        .news-block--analyzing .analysis-height-expander {
+          height: var(--analysis-expanded-height);
         }
 
         .news-block--interactive {
@@ -965,15 +998,7 @@ class AnalysisPanel {
           align-items: center;
           gap: 6px;
         ">
-          <div style="
-            width: 10px;
-            height: 10px;
-            border: 2px solid ${text};
-            border-top: 2px solid transparent;
-            border-radius: 50%;
-            animation: spin 1s linear infinite;
-            flex-shrink: 0;
-          "></div>
+          <div class="unified-spinner unified-spinner--small" style="margin-right: 2px;"></div>
           <span class="collapsed-progress-text" style="
             line-height: 1.2;
             overflow: hidden;
@@ -1157,6 +1182,7 @@ class AnalysisPanel {
     const { base, surface, surfaceAlt, accent, text, textMuted, border } = this.palette;
     const encodedUrl = encodeURIComponent(url || '');
     const isCompleted = status === 'completed';
+    const isAnalyzing = status === 'analyzing';
     const isCompareMode = block.compareMode || false;
     const verdictColors = result && result.진위 ? this.getVerdictColors(result.진위) : null;
     const hasGlow = isCompleted && verdictColors && !isCompareMode;
@@ -1179,11 +1205,20 @@ class AnalysisPanel {
     hoverNeonGlow = `0 0 50px ${this.hexToRgba(glowColor, 0.48)}, 0 0 110px ${this.hexToRgba(glowColor, 0.26)}, 0 0 160px ${this.hexToRgba(glowColor, 0.14)}, inset 0 0 130px ${this.hexToRgba(glowColor, 0.1)}`;
     }
 
+    if (isAnalyzing) {
+      blockBackground = this.blendColors(accent, surface, 0.32);
+      borderColor = this.hexToRgba(accent, 0.75);
+      boxShadow = '0 12px 30px rgba(191, 151, 128, 0.35)';
+    }
+
     const baseBoxShadow = neonGlow ? `${boxShadow}, ${neonGlow}` : boxShadow;
     const hoverBoxShadow = hasGlow ? `${boxShadow}, ${hoverNeonGlow}` : '0 12px 24px rgba(0, 0, 0, 0.35)';
     const isClickable = isCompleted && !isCompareMode;
     const cursorStyle = isClickable ? 'cursor: pointer;' : '';
     const blockOpacity = isCompareMode ? '0.8' : '1';
+
+    const factCheckInProgress = Boolean(block.factCheckInProgress);
+    const factCheckProgressText = block.factCheckProgress || '사실 검증 중...';
 
     let actionButtons = '';
 
@@ -1195,8 +1230,40 @@ class AnalysisPanel {
     const dangerButtonBase = "rgba(239, 68, 68, 0.25)";
     const dangerButtonHover = "rgba(239, 68, 68, 0.4)";
 
+    const factCheckProgressButton = `
+      <div style="display: flex; flex-direction: column; gap: 6px; width: 100%;">
+        <div style="
+          background: ${primaryButtonHover};
+          color: ${text};
+          padding: 10px 14px;
+          border-radius: 8px;
+          font-size: 13px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border: 1px solid ${primaryButtonBorder};
+          backdrop-filter: blur(12px);
+          min-height: 48px;
+        ">
+          <div class="unified-spinner unified-spinner--small" style="margin-right: 8px;"></div>
+          <span style="
+            line-height: 1.4;
+            font-weight: 600;
+          ">${this.escapeHtml(factCheckProgressText)}</span>
+        </div>
+        <div style="
+          font-size: 11px;
+          color: ${this.hexToRgba(text, 0.75)};
+          text-align: center;
+        ">사실 검증이 진행 중입니다. 완료될 때까지 기다려주세요.</div>
+      </div>
+    `;
+
     if (isCurrent) {
-      switch (status) {
+      if (factCheckInProgress && isCompleted) {
+        actionButtons = factCheckProgressButton;
+      } else {
+        switch (status) {
         case 'pending':
           actionButtons = `
             <button class="analyze-current-btn" data-id="${id}" style="
@@ -1232,16 +1299,7 @@ class AnalysisPanel {
                 backdrop-filter: blur(10px);
                 cursor: wait;
               ">
-                <div style="
-                  width: 12px;
-                  height: 12px;
-                  border: 2px solid ${text};
-                  border-top: 2px solid transparent;
-                  border-radius: 50%;
-                  margin-right: 6px;
-                  animation: spin 1s linear infinite;
-                  flex-shrink: 0;
-                "></div>
+                <div class="unified-spinner unified-spinner--small" style="margin-right: 6px;"></div>
                 <span class="progress-text" style="
                   line-height: 1.2;
                   overflow: hidden;
@@ -1344,9 +1402,12 @@ class AnalysisPanel {
             </div>
           `;
           break;
+        }
       }
     } else {
-      if (status === 'analyzing') {
+      if (factCheckInProgress && isCompleted) {
+        actionButtons = factCheckProgressButton;
+      } else if (status === 'analyzing') {
         actionButtons = `
           <div style="display: flex; gap: 8px; align-items: center; width: 100%;">
             <div style="
@@ -1364,16 +1425,7 @@ class AnalysisPanel {
               border: 1px solid ${primaryButtonBorder};
               backdrop-filter: blur(10px);
             ">
-              <div style="
-                width: 12px;
-                height: 12px;
-                border: 2px solid ${text};
-                border-top: 2px solid transparent;
-                border-radius: 50%;
-                margin-right: 6px;
-                animation: spin 1s linear infinite;
-                flex-shrink: 0;
-              "></div>
+              <div class="unified-spinner unified-spinner--small" style="margin-right: 6px;"></div>
               <span style="
                 line-height: 1.2;
                 overflow: hidden;
@@ -1585,6 +1637,32 @@ class AnalysisPanel {
     const blockClasses = ['news-block'];
     if (hasGlow) blockClasses.push('news-block--glow');
     if (isClickable) blockClasses.push('news-block--interactive');
+    if (isAnalyzing) blockClasses.push('news-block--analyzing');
+
+    const factCheckOverlay = factCheckInProgress ? `
+      <div class="fact-check-overlay" style="
+        position: absolute;
+        inset: 0;
+        border-radius: 12px;
+        background: rgba(8, 8, 8, 0.88);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        z-index: 20;
+        pointer-events: all;
+        backdrop-filter: blur(6px);
+        text-align: center;
+        padding: 22px;
+      ">
+        <div class="unified-spinner unified-spinner--large"></div>
+        <div style="font-size: 13px; font-weight: 600; color: ${text};">사실 검증 중</div>
+        <div style="font-size: 12px; color: ${this.hexToRgba(text, 0.85)}; line-height: 1.4;">
+          ${this.escapeHtml(factCheckProgressText)}
+        </div>
+      </div>
+    ` : '';
 
     return `
       <div class="${blockClasses.join(' ')}" data-id="${id}" style="
@@ -1648,40 +1726,7 @@ class AnalysisPanel {
           ">${this.escapeHtml(url)}</div>
         </div>
 
-        ${status === 'analyzing' ? `
-        <div id="typing-area-${id}" style="
-          border-top: 1px solid ${border};
-          padding: 12px 16px;
-          background: ${this.blendColors(surface, base, 0.18)};
-          height: 84px;
-          overflow: hidden;
-          transition: all 0.3s ease;
-        ">
-          <div style="
-            font-size: 12px;
-            color: ${textMuted};
-            margin-bottom: 8px;
-            font-weight: 500;
-          ">실시간 분석 결과</div>
-          <div id="typing-content-${id}" style="
-            font-size: 12px;
-            line-height: 1.45;
-            color: ${text};
-            word-wrap: break-word;
-            height: 48px;
-            overflow-y: auto;
-            overflow-x: hidden;
-            border: 1px solid ${border};
-            border-radius: 6px;
-            padding: 8px;
-            background: rgba(13, 13, 13, 0.45);
-            scrollbar-width: thin;
-            scrollbar-color: ${border} rgba(13, 13, 13, 0.3);
-          " onscroll="this.setAttribute('data-user-scrolled', this.scrollTop < this.scrollHeight - this.offsetHeight ? 'true' : 'false')">분석을 시작합니다...</div>
-        </div>
-        ` : ''}
-
-        <div style="
+        <div class="news-actions-area" style="
           border-top: 1px solid ${borderColor};
           padding: 10px 16px 16px 16px;
           background: ${this.blendColors(surface, base, 0.22)};
@@ -1698,6 +1743,43 @@ class AnalysisPanel {
             ${actionButtons}
           </div>
         </div>
+        ${isAnalyzing ? `
+        <div class="analysis-overlay" style="
+          position: absolute;
+          inset: 0;
+          border-radius: 12px;
+          background: linear-gradient(145deg, rgba(12, 10, 8, 0.95), rgba(38, 28, 22, 0.9));
+          display: flex;
+          align-items: stretch;
+          justify-content: center;
+          z-index: 20;
+          pointer-events: all;
+          backdrop-filter: blur(6px);
+          border: 1px solid ${this.hexToRgba(accent, 0.55)};
+          box-shadow: 0 24px 46px rgba(0, 0, 0, 0.55);
+          overflow: hidden;
+        ">
+          <div class="analysis-overlay-content" style="
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            padding: 24px 20px;
+            width: 100%;
+          ">
+            <div class="unified-spinner unified-spinner--large"></div>
+            <div style="font-size: 14px; font-weight: 600; color: ${text}; margin-top: 12px;">분석 중</div>
+            <div style="width: 100%; max-width: 320px; margin-top: 16px; display: flex; justify-content: center; overflow: hidden; flex-shrink: 0;">
+              <div id="typing-stream-${id}" class="streaming-snippet-container"></div>
+            </div>
+            <div id="progress-status-${id}" style="font-size: 11px; color: ${this.hexToRgba(text, 0.8)}; margin-top: 12px; text-align: center; line-height: 1.6; max-width: 280px;">
+              ${this.escapeHtml(progress || '분석 시작 중...')}
+            </div>
+          </div>
+        </div>
+        ` : ''}
+          <div class="analysis-height-expander" aria-hidden="true"></div>
+        ${factCheckOverlay}
       </div>
     `;
   }
@@ -1788,35 +1870,26 @@ class AnalysisPanel {
 
   // 블록 내부 타이핑 영역 업데이트
   updateBlockTypingArea(blockId, newText) {
-    const typingContent = document.getElementById(`typing-content-${blockId}`);
-    if (!typingContent) return;
+    const container = document.getElementById(`typing-stream-${blockId}`);
+    if (!container) return;
+    const normalizedText = (newText || '').trim();
+    if (!normalizedText) return;
 
-    // 처음 타이핑이 시작되면 "분석을 시작합니다..." 텍스트 제거
-    if (typingContent.textContent === '분석을 시작합니다...') {
-      typingContent.innerHTML = '';
-      this.typingBuffer = this.typingBuffer || new Map();
-      this.typingBuffer.set(blockId, '');
-      // 사용자 스크롤 상태 초기화
-      typingContent.setAttribute('data-user-scrolled', 'false');
-    }
+    const compact = normalizedText.replace(/\s+/g, ' ').trim();
+    if (!compact) return;
 
-    // 기존 누적된 텍스트에 새 텍스트 추가
-    if (!this.typingBuffer) this.typingBuffer = new Map();
-    const currentBuffer = this.typingBuffer.get(blockId) || '';
-    const updatedBuffer = currentBuffer + newText;
-    this.typingBuffer.set(blockId, updatedBuffer);
-    
-    // 사용자가 수동으로 스크롤했는지 확인
-    const userScrolled = typingContent.getAttribute('data-user-scrolled') === 'true';
-    
-    // 커서와 함께 텍스트 업데이트 (일반 텍스트로, 줄바꿈은 자동)
-  const cursorColor = this.palette.accent;
-  typingContent.innerHTML = `${this.escapeHtml(updatedBuffer)}<span class="typing-cursor" style="display: inline-block; width: 1px; height: 12px; background: ${cursorColor}; margin-left: 2px; animation: blink 1.2s infinite;"></span>`;
-    
-    // 사용자가 수동 스크롤하지 않았으면 자동으로 맨 아래로 스크롤
-    if (!userScrolled) {
-      typingContent.scrollTop = typingContent.scrollHeight;
-    }
+    const MAX_LEN = 6;
+    const snippetText = compact.length > MAX_LEN
+      ? `${compact.slice(0, MAX_LEN)}...`
+      : compact;
+
+    const snippet = document.createElement('div');
+    snippet.className = 'streaming-snippet';
+    snippet.textContent = snippetText;
+    container.appendChild(snippet);
+    snippet.addEventListener('animationend', () => {
+      snippet.remove();
+    });
   }
 
   // 현재 뉴스 설정
@@ -1977,6 +2050,14 @@ class AnalysisPanel {
     if (result) block.result = result;
     if (error) block.error = error;
     
+    // 진행 상태 텍스트 실시간 업데이트
+    if (status === 'analyzing' && progress) {
+      const progressElement = document.getElementById(`progress-status-${id}`);
+      if (progressElement) {
+        progressElement.textContent = progress;
+      }
+    }
+    
     // currentNews와 URL이 같은 블록이면 currentNews도 함께 업데이트
     if (id !== 'current' && this.currentNews) {
       const normalizeUrl = (urlString) => {
@@ -2021,6 +2102,7 @@ class AnalysisPanel {
   updatePanel() {
     const panel = document.getElementById(this.panelId);
     if (panel) {
+      const previousStates = this.captureNewsBlockStates(panel);
       // 현재 뉴스 컨테이너 업데이트
       const currentContainer = panel.querySelector('#current-news-container');
       if (currentContainer) {
@@ -2047,11 +2129,91 @@ class AnalysisPanel {
       this.attachBlockEvents(panel);
       this.updateCollapsedSummary(panel);
       this.attachCollapsedSummaryEvents(panel);
+      this.syncAnalysisHeight(panel);
+      this.applyNewsBlockTransitions(panel, previousStates);
 
       if (this.isHistoryCollapsed) {
         this.togglePanelCollapse(true);
       }
     }
+  }
+
+  syncAnalysisHeight(panel) {
+    if (!panel) return;
+
+    panel.querySelectorAll('.news-block').forEach(block => {
+      const expander = block.querySelector('.analysis-height-expander');
+      if (!expander) return;
+
+      if (!block.classList.contains('news-block--analyzing')) {
+        block.style.removeProperty('--analysis-expanded-height');
+        return;
+      }
+
+      const overlay = block.querySelector('.analysis-overlay');
+      if (!overlay) {
+        block.style.removeProperty('--analysis-expanded-height');
+        return;
+      }
+
+      const overlayContent = overlay.querySelector('.analysis-overlay-content');
+      const targetElement = overlayContent || overlay;
+      const measuredHeight = Math.ceil(targetElement.scrollHeight || 0);
+      if (measuredHeight > 0) {
+        block.style.setProperty('--analysis-expanded-height', `${measuredHeight}px`);
+      } else {
+        block.style.removeProperty('--analysis-expanded-height');
+      }
+    });
+  }
+
+  captureNewsBlockStates(panel) {
+    const states = new Map();
+    if (!panel) return states;
+
+    panel.querySelectorAll('.news-block').forEach(block => {
+      const id = block.dataset.id;
+      if (!id) return;
+      states.set(id, {
+        height: block.getBoundingClientRect().height,
+        isAnalyzing: block.classList.contains('news-block--analyzing')
+      });
+    });
+
+    return states;
+  }
+
+  applyNewsBlockTransitions(panel, previousStates) {
+    if (!panel || !previousStates || previousStates.size === 0) return;
+
+    panel.querySelectorAll('.news-block').forEach(block => {
+      const id = block.dataset.id;
+      if (!id || !previousStates.has(id)) return;
+
+      const prevState = previousStates.get(id);
+      const isAnalyzing = block.classList.contains('news-block--analyzing');
+      if (prevState.isAnalyzing === isAnalyzing) return;
+
+      const startHeight = prevState.height;
+      const endHeight = block.getBoundingClientRect().height;
+      if (!startHeight || !endHeight || startHeight === endHeight) return;
+
+      block.style.height = `${startHeight}px`;
+      block.style.overflow = 'hidden';
+
+      requestAnimationFrame(() => {
+        block.style.height = `${endHeight}px`;
+      });
+
+      const handleTransitionEnd = (event) => {
+        if (event.propertyName !== 'height') return;
+        block.style.height = '';
+        block.style.overflow = '';
+        block.removeEventListener('transitionend', handleTransitionEnd);
+      };
+
+      block.addEventListener('transitionend', handleTransitionEnd);
+    });
   }
 
   // 이벤트 연결
@@ -2083,6 +2245,9 @@ class AnalysisPanel {
     // 스트리밍 결과 삭제
     if (this.streamingResults.has(blockId)) {
       this.streamingResults.delete(blockId);
+    }
+    if (this.streamingDiffCache.has(blockId)) {
+      this.streamingDiffCache.delete(blockId);
     }
     
     // service_worker에 중단 요청 전송
@@ -2575,6 +2740,13 @@ class AnalysisPanel {
     
     if (!this.currentNews) {
       alert('현재 뉴스가 없습니다.');
+      return;
+    }
+    
+    // Chrome API 사용 가능 여부 확인
+    if (!this.isChromeApiAvailable()) {
+      console.error('[analyzeCurrentNews] Chrome API를 사용할 수 없습니다. 확장 프로그램을 다시 로드해주세요.');
+      alert('⚠️ 확장 프로그램 연결이 끊어졌습니다.\n\n페이지를 새로고침하거나 확장 프로그램을 다시 로드해주세요.');
       return;
     }
     
@@ -4293,14 +4465,7 @@ ${factCheckSection}
             justify-content: center;
             margin-right: 16px;
           ">
-            <div style="
-              width: 20px;
-              height: 20px;
-              border: 2px solid #1A1A1A;
-              border-top: 2px solid transparent;
-              border-radius: 50%;
-              animation: spin 1.5s linear infinite;
-            "></div>
+            <div class="unified-spinner unified-spinner--medium"></div>
           </div>
           <div>
             <h2 style="
@@ -4420,11 +4585,6 @@ ${factCheckSection}
       const style = document.createElement('style');
       style.id = 'simple-streaming-styles';
       style.textContent = `
-        @keyframes spin {
-          0% { transform: rotate(0deg); }
-          100% { transform: rotate(360deg); }
-        }
-        
         @keyframes blink {
           0%, 50% { opacity: 1; }
           51%, 100% { opacity: 0; }
@@ -5617,6 +5777,8 @@ ${factCheckSection}
     const isApiKeySet = !!savedApiKey;
     const maskedKey = savedApiKey ? `${savedApiKey.substring(0, 8)}...${savedApiKey.substring(savedApiKey.length - 4)}` : '';
     const brandSelectionLabel = this.getNewsBrandSelectionLabel();
+    const autoFactCheckEnabled = this.getAutoFactCheckSetting();
+    const autoCrossVerificationEnabled = this.getAutoCrossVerificationSetting();
     
     const modalContent = document.createElement('div');
     modalContent.className = 'settings-panel-content';
@@ -5825,6 +5987,100 @@ ${factCheckSection}
               </div>
             </div>
           </div>
+        </div>
+      </div>
+
+      <!-- 자동 사실 확인 -->
+      <div style="
+        padding: 16px 0;
+        border-bottom: 1px solid #E5E5E5;
+      ">
+        <div style="
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 12px;
+        ">
+          <div style="flex: 1;">
+            <div style="
+              font-size: 16px;
+              font-weight: 600;
+              color: #0D0D0D;
+              margin-bottom: 4px;
+            ">자동 사실 확인</div>
+            <div style="
+              font-size: 13px;
+              color: #737373;
+              line-height: 1.4;
+            ">분석이 끝나면 Google Search와 Gemini로 즉시 사실 검증을 실행합니다.</div>
+            <div style="
+              margin-top: 8px;
+              font-size: 12px;
+              color: #B45309;
+              background: rgba(191, 151, 128, 0.18);
+              padding: 8px 10px;
+              border-radius: 6px;
+            ">⚠️ API 호출이 자동으로 발생하므로 Google Search API 키와 사용량을 반드시 확인하세요.</div>
+          </div>
+          <button class="auto-factcheck-btn" style="
+            background: ${autoFactCheckEnabled ? '#10B981' : '#9CA3AF'};
+            color: white;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            font-size: 14px;
+            min-width: 72px;
+          ">${autoFactCheckEnabled ? '켜짐' : '꺼짐'}</button>
+        </div>
+      </div>
+
+      <!-- 자동 교차 검증 -->
+      <div style="
+        padding: 16px 0;
+        border-bottom: 1px solid #E5E5E5;
+      ">
+        <div style="
+          display: flex;
+          align-items: flex-start;
+          justify-content: space-between;
+          gap: 12px;
+        ">
+          <div style="flex: 1;">
+            <div style="
+              font-size: 16px;
+              font-weight: 600;
+              color: #0D0D0D;
+              margin-bottom: 4px;
+            ">자동 교차 검증</div>
+            <div style="
+              font-size: 13px;
+              color: #737373;
+              line-height: 1.4;
+            ">분석 결과를 지정된 깊이만큼 반복 검증합니다. 자동 사실 확인이 켜져 있으면 사실 검증 완료 후 순차적으로 실행됩니다.</div>
+            <div style="
+              margin-top: 8px;
+              font-size: 12px;
+              color: #93370D;
+              background: rgba(244, 190, 150, 0.25);
+              padding: 8px 10px;
+              border-radius: 6px;
+            ">⚠️ 각 단계마다 Gemini 호출이 발생하므로 사용 중인 API 쿼터와 비용 정책을 확인하세요.</div>
+          </div>
+          <button class="auto-crossverify-btn" style="
+            background: ${autoCrossVerificationEnabled ? '#10B981' : '#9CA3AF'};
+            color: white;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            font-size: 14px;
+            min-width: 72px;
+          ">${autoCrossVerificationEnabled ? '켜짐' : '꺼짐'}</button>
         </div>
       </div>
 
@@ -6093,6 +6349,58 @@ ${factCheckSection}
       });
     }
 
+    // 자동 사실 확인 토글 버튼
+    const autoFactCheckBtn = modalContent.querySelector('.auto-factcheck-btn');
+    if (autoFactCheckBtn) {
+      const updateAutoFactCheckBtn = () => {
+        const enabled = this.getAutoFactCheckSetting();
+        autoFactCheckBtn.textContent = enabled ? '켜짐' : '꺼짐';
+        autoFactCheckBtn.style.backgroundColor = enabled ? '#10B981' : '#9CA3AF';
+      };
+      updateAutoFactCheckBtn();
+
+      autoFactCheckBtn.addEventListener('click', () => {
+        const newSetting = !this.getAutoFactCheckSetting();
+        this.setAutoFactCheckSetting(newSetting);
+        updateAutoFactCheckBtn();
+      });
+
+      autoFactCheckBtn.addEventListener('mouseenter', () => {
+        const enabled = this.getAutoFactCheckSetting();
+        autoFactCheckBtn.style.backgroundColor = enabled ? '#0EA16F' : '#6B7280';
+      });
+      autoFactCheckBtn.addEventListener('mouseleave', () => {
+        const enabled = this.getAutoFactCheckSetting();
+        autoFactCheckBtn.style.backgroundColor = enabled ? '#10B981' : '#9CA3AF';
+      });
+    }
+
+    // 자동 교차 검증 토글 버튼
+    const autoCrossVerifyBtn = modalContent.querySelector('.auto-crossverify-btn');
+    if (autoCrossVerifyBtn) {
+      const updateAutoCrossBtn = () => {
+        const enabled = this.getAutoCrossVerificationSetting();
+        autoCrossVerifyBtn.textContent = enabled ? '켜짐' : '꺼짐';
+        autoCrossVerifyBtn.style.backgroundColor = enabled ? '#10B981' : '#9CA3AF';
+      };
+      updateAutoCrossBtn();
+
+      autoCrossVerifyBtn.addEventListener('click', () => {
+        const newSetting = !this.getAutoCrossVerificationSetting();
+        this.setAutoCrossVerificationSetting(newSetting);
+        updateAutoCrossBtn();
+      });
+
+      autoCrossVerifyBtn.addEventListener('mouseenter', () => {
+        const enabled = this.getAutoCrossVerificationSetting();
+        autoCrossVerifyBtn.style.backgroundColor = enabled ? '#0EA16F' : '#6B7280';
+      });
+      autoCrossVerifyBtn.addEventListener('mouseleave', () => {
+        const enabled = this.getAutoCrossVerificationSetting();
+        autoCrossVerifyBtn.style.backgroundColor = enabled ? '#10B981' : '#9CA3AF';
+      });
+    }
+
     // 뉴스 브랜드 선택 버튼
     const brandSelectorBtn = modalContent.querySelector('.brand-selector-btn');
     if (brandSelectorBtn) {
@@ -6357,6 +6665,48 @@ ${factCheckSection}
       console.log('Auto open setting updated:', value);
     } catch (error) {
       console.error('Failed to save auto open setting:', error);
+    }
+  }
+
+  // 자동 사실 검증 설정
+  getAutoFactCheckSetting() {
+    try {
+      const setting = localStorage.getItem('factcheck_auto_fact_check');
+      return setting !== null ? JSON.parse(setting) : false;
+    } catch (error) {
+      console.error('Failed to get auto fact check setting:', error);
+      return false;
+    }
+  }
+
+  setAutoFactCheckSetting(value) {
+    try {
+      localStorage.setItem('factcheck_auto_fact_check', JSON.stringify(value));
+      this.autoFactCheckEnabled = value;
+      console.log('Auto fact check setting updated:', value);
+    } catch (error) {
+      console.error('Failed to save auto fact check setting:', error);
+    }
+  }
+
+  // 자동 교차 검증 설정
+  getAutoCrossVerificationSetting() {
+    try {
+      const setting = localStorage.getItem('factcheck_auto_cross_verify');
+      return setting !== null ? JSON.parse(setting) : false;
+    } catch (error) {
+      console.error('Failed to get auto cross verification setting:', error);
+      return false;
+    }
+  }
+
+  setAutoCrossVerificationSetting(value) {
+    try {
+      localStorage.setItem('factcheck_auto_cross_verify', JSON.stringify(value));
+      this.autoCrossVerificationEnabled = value;
+      console.log('Auto cross verification setting updated:', value);
+    } catch (error) {
+      console.error('Failed to save auto cross verification setting:', error);
     }
   }
 
@@ -6957,8 +7307,19 @@ ${factCheckSection}
       this.updateProgressTextInDOM(blockId, progressMessage);
       
       // 타이핑 영역만 업데이트
-      if (partialResult) {
-        this.updateBlockTypingArea(blockId, partialResult);
+      if (typeof partialResult === 'string') {
+        const previousChunk = this.streamingDiffCache.get(blockId) || '';
+        let deltaText = partialResult;
+        if (previousChunk && partialResult.startsWith(previousChunk)) {
+          deltaText = partialResult.substring(previousChunk.length);
+        } else if (previousChunk.length > partialResult.length) {
+          // 새 스트림으로 재시작한 경우 전체를 사용
+          deltaText = partialResult;
+        }
+        this.streamingDiffCache.set(blockId, partialResult);
+        if (deltaText && deltaText.trim()) {
+          this.updateBlockTypingArea(blockId, deltaText);
+        }
       }
       
       // 패널 전체 렌더링하지 않음 (성능 최적화)
@@ -7163,6 +7524,8 @@ ${factCheckSection}
     }
     
     this.streamingResults.delete(blockId); // 스트리밍 결과 정리
+    this.streamingDiffCache.delete(blockId);
+    this.streamingDiffCache.delete(blockId); // 스트리밍 캐시 정리
 
     const { normalizedResult, verdict, suspicious } = this.parseAnalysisResult(result);
     
@@ -7239,6 +7602,85 @@ ${factCheckSection}
       }
     }
     
+    this.handlePostAnalysisAutomation(blockId);
+  }
+
+  // 분석 완료 후 자동 후속 작업 실행
+  handlePostAnalysisAutomation(blockId) {
+    if (blockId === 'current') {
+      return;
+    }
+
+    const block = this.newsBlocks.get(blockId);
+    if (!block || block.isComparison || block.status !== 'completed') {
+      return;
+    }
+
+    const autoFactCheckEnabled = !!this.autoFactCheckEnabled;
+    const autoCrossEnabled = !!this.autoCrossVerificationEnabled;
+
+    if (!autoFactCheckEnabled && !autoCrossEnabled) {
+      return;
+    }
+
+    if (autoFactCheckEnabled && !block.factCheckResult) {
+      this.executeAutoFactCheck(blockId, autoCrossEnabled);
+      return;
+    }
+
+    if (autoCrossEnabled) {
+      this.triggerAutoCrossVerification(blockId);
+    }
+  }
+
+  // 자동 사실 검증 실행
+  executeAutoFactCheck(blockId, cascadeToCrossVerification = false) {
+    if (this.autoFactCheckQueue.has(blockId)) {
+      return;
+    }
+
+    if (this.searchInProgress && this.searchInProgress.has(blockId)) {
+      return;
+    }
+
+    const block = this.newsBlocks.get(blockId);
+    if (!block || block.status !== 'completed') {
+      return;
+    }
+
+    this.autoFactCheckQueue.add(blockId);
+    console.log('[Automation] 자동 사실 검증 실행:', blockId);
+
+    this.searchFactCheck(blockId)
+      .then((success) => {
+        if (cascadeToCrossVerification) {
+          if (!success) {
+            console.warn('[Automation] 자동 사실 검증이 완료되지 않았지만 교차 검증을 계속 진행합니다.');
+          }
+          this.triggerAutoCrossVerification(blockId);
+        }
+      })
+      .catch((error) => {
+        console.error('[Automation] 자동 사실 검증 실패:', error);
+      })
+      .finally(() => {
+        this.autoFactCheckQueue.delete(blockId);
+      });
+  }
+
+  // 자동 교차 검증 실행
+  triggerAutoCrossVerification(blockId) {
+    if (this.crossVerificationInProgress.has(blockId)) {
+      return;
+    }
+
+    const block = this.newsBlocks.get(blockId);
+    if (!block || block.isComparison || block.status !== 'completed' || block.crossVerified) {
+      return;
+    }
+
+    console.log('[Automation] 자동 교차 검증 실행:', blockId);
+    this.startCrossVerification(blockId);
   }
 
   // 교차 검증 완료 처리
@@ -7310,6 +7752,7 @@ ${factCheckSection}
     
     // 스트리밍 결과 정리
     this.streamingResults.delete(blockId);
+    this.streamingDiffCache.delete(blockId);
     
     const { normalizedResult, verdict, suspicious } = this.parseAnalysisResult(finalResult);
     
@@ -7527,11 +7970,7 @@ ${factCheckSection}
     
     // 스트리밍 결과 정리
     this.streamingResults.delete(id);
-    
-    // 타이핑 버퍼 정리
-    if (this.typingBuffer && this.typingBuffer.has(id)) {
-      this.typingBuffer.delete(id);
-    }
+    this.streamingDiffCache.delete(id);
     
     // service_worker에 중단 요청 전송
     if (this.isChromeApiAvailable()) {
@@ -7549,7 +7988,7 @@ ${factCheckSection}
 
   // 뉴스 블록 데이터 저장
   saveNewsBlocks() {
-    const blocksData = Array.from(this.newsBlocks.entries()).map(([id, block]) => [id, block]);
+    const blocksData = Array.from(this.newsBlocks.entries()).map(([id, block]) => [id, this.getPersistableBlock(block)]);
     const dataToSave = {
       blocks: blocksData,
       counter: this.blockIdCounter
@@ -7573,6 +8012,11 @@ ${factCheckSection}
     } else {
       this.saveToLocalStorage(dataToSave);
     }
+  }
+
+  getPersistableBlock(block) {
+    const { factCheckInProgress, factCheckProgress, ...persistable } = block;
+    return { ...persistable };
   }
 
   // localStorage에 저장
@@ -7748,6 +8192,12 @@ ${factCheckSection}
     if (savedData && savedData.blocks) {
       this.newsBlocks = new Map(savedData.blocks);
       this.blockIdCounter = savedData.counter || 0;
+      this.newsBlocks.forEach(block => {
+        if (block) {
+          block.factCheckInProgress = false;
+          block.factCheckProgress = null;
+        }
+      });
       console.log('Restored', this.newsBlocks.size, 'news blocks');
     }
   }
@@ -8149,28 +8599,74 @@ if (!document.getElementById('analysis-panel-animations')) {
       }
     }
     
-    @keyframes spin {
-      0% { transform: rotate(0deg); }
-      100% { transform: rotate(360deg); }
+    .unified-spinner {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: conic-gradient(#0f0f0f 0deg, #f5f5f5 330deg, #0f0f0f 360deg);
+      mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px));
+      -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 4px), #000 calc(100% - 3px));
+      animation: spinnerCycle 0.9s linear infinite;
     }
-    
-    /* 타이핑 영역 스크롤바 스타일 */
-    div[id^="typing-content-"]::-webkit-scrollbar {
-      width: 6px;
+
+    .unified-spinner--small {
+      width: 16px;
+      height: 16px;
     }
-    
-    div[id^="typing-content-"]::-webkit-scrollbar-track {
-      background: rgba(13, 13, 13, 0.3);
-      border-radius: 3px;
+
+    .unified-spinner--medium {
+      width: 26px;
+      height: 26px;
     }
-    
-    div[id^="typing-content-"]::-webkit-scrollbar-thumb {
-      background: #BF9780;
-      border-radius: 3px;
+
+    .unified-spinner--large {
+      width: 44px;
+      height: 44px;
     }
-    
-    div[id^="typing-content-"]::-webkit-scrollbar-thumb:hover {
-      background: #A67E69;
+
+    @keyframes spinnerCycle {
+      to { transform: rotate(360deg); }
+    }
+
+    .streaming-snippet-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 3px;
+      width: 100%;
+      height: 56px;
+      max-height: 56px;
+      position: relative;
+      overflow: hidden;
+      pointer-events: none;
+      padding: 0;
+      flex-shrink: 0;
+    }
+
+    .streaming-snippet {
+      padding: 6px 10px;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 10px;
+      font-size: 11px;
+      color: #F8FAFC;
+      line-height: 1.4;
+      box-shadow: 0 10px 25px rgba(0, 0, 0, 0.25);
+      opacity: 0;
+      transform: translateY(14px) scale(0.9);
+      animation: streamFloat 1.6s cubic-bezier(0.42, 0, 0.35, 1) forwards;
+      will-change: transform, opacity;
+      max-width: 85%;
+      text-align: center;
+      word-break: break-word;
+    }
+
+    @keyframes streamFloat {
+      0% { opacity: 0; transform: translateY(14px) scale(0.88); }
+      18% { opacity: 1; }
+      75% { opacity: 0.9; transform: translateY(-16px) scale(0.87); }
+      100% { opacity: 0; transform: translateY(-28px) scale(0.82); }
     }
   `;
   document.head.appendChild(style);
@@ -8352,25 +8848,29 @@ AnalysisPanel.prototype.searchFactCheck = async function(blockId) {
   const block = this.newsBlocks.get(blockId);
   if (!block) {
     console.error('블록을 찾을 수 없음:', blockId);
-    return;
+    return false;
   }
 
   if (block.status !== 'completed' || !block.result) {
     alert('분석이 완료된 뉴스만 사실 검증을 할 수 있습니다.');
-    return;
+    return false;
   }
 
   // 이미 검색 중인지 확인
   if (this.searchInProgress.has(blockId)) {
+    if (this.autoFactCheckQueue && this.autoFactCheckQueue.has(blockId)) {
+      console.log('[searchFactCheck] 자동 사실 검증이 이미 진행 중입니다.');
+      return false;
+    }
     alert('이미 검색이 진행 중입니다.');
-    return;
+    return false;
   }
 
   // Google API 키 확인
   const apiKey = await this.getGoogleApiKey();
   if (!apiKey && this.USE_REAL_API) {
     alert('Google Custom Search API 키가 필요합니다.\n설정에서 API 키를 입력해주세요.');
-    return;
+    return false;
   }
 
   this.searchInProgress.add(blockId);
@@ -8389,7 +8889,7 @@ AnalysisPanel.prototype.searchFactCheck = async function(blockId) {
 
     let results;
     if (this.USE_REAL_API) {
-      results = await this.callGoogleSearchAPI(searchQuery, 'keyword', 2);
+      results = await this.callGoogleSearchAPI(searchQuery, 'keyword', 5); // 더 많은 결과 요청
     } else {
       results = this.getMockFactCheckResults();
     }
@@ -8397,17 +8897,20 @@ AnalysisPanel.prototype.searchFactCheck = async function(blockId) {
     if (!results || results.length === 0) {
       this.updateFactCheckStatus(blockId, '❌ 검색 결과 없음');
       setTimeout(() => this.clearFactCheckStatus(blockId), 3000);
-      return;
+      return false;
     }
 
     console.log('[searchFactCheck] 검색 결과:', results.length, '개');
     this.updateFactCheckStatus(blockId, `📄 ${results.length}개 기사 발견, 크롤링 중...`);
     
-    // 각 기사 크롤링 및 분석
+    // 각 기사 크롤링 시도 (성공한 것만 수집, 최소 2개 목표)
     const crawledArticles = [];
-    for (let i = 0; i < results.length; i++) {
+    const failedArticles = [];
+    const targetCount = 2; // 최소 크롤링 성공 목표
+    
+    for (let i = 0; i < results.length && crawledArticles.length < targetCount; i++) {
       const article = results[i];
-      this.updateFactCheckStatus(blockId, `📰 ${i + 1}/${results.length}: "${article.title.substring(0, 25)}..." 분석 중`);
+      this.updateFactCheckStatus(blockId, `📰 ${i + 1}/${results.length}: "${article.title.substring(0, 25)}..." 크롤링 중`);
       
       try {
         // 크롤링 시도
@@ -8418,17 +8921,26 @@ AnalysisPanel.prototype.searchFactCheck = async function(blockId) {
             ...article,
             crawledContent: crawledContent
           });
-          this.updateFactCheckStatus(blockId, `✅ ${i + 1}/${results.length}: 크롤링 완료`);
+          this.updateFactCheckStatus(blockId, `✅ ${crawledArticles.length}개 크롤링 성공`);
         } else {
-          crawledArticles.push(article);
-          this.updateFactCheckStatus(blockId, `⚠️ ${i + 1}/${results.length}: 크롤링 실패 (요약만 사용)`);
+          failedArticles.push(article);
+          this.updateFactCheckStatus(blockId, `⚠️ 크롤링 실패, 다음 기사 시도 중...`);
         }
         
         await this.delay(500); // 크롤링 간격
       } catch (error) {
         console.error('[searchFactCheck] 크롤링 오류:', error);
-        crawledArticles.push(article);
+        failedArticles.push(article);
       }
+    }
+    
+    // 크롤링 성공한 기사가 하나도 없으면 실패한 기사들의 요약 사용
+    if (crawledArticles.length === 0 && failedArticles.length > 0) {
+      console.warn('[searchFactCheck] 모든 크롤링 실패, 요약만 사용:', failedArticles.length, '개');
+      this.updateFactCheckStatus(blockId, `⚠️ 크롤링 실패, ${failedArticles.length}개 기사 요약만 사용`);
+      crawledArticles.push(...failedArticles.slice(0, 2)); // 최대 2개 요약 사용
+    } else if (crawledArticles.length > 0) {
+      console.log('[searchFactCheck] 크롤링 성공:', crawledArticles.length, '개, 실패:', failedArticles.length, '개');
     }
 
     this.updateFactCheckStatus(blockId, '🤖 AI 비교 검증 중...');
@@ -8457,9 +8969,28 @@ AnalysisPanel.prototype.searchFactCheck = async function(blockId) {
     block.result = reanalyzedResult;
     this.newsBlocks.set(blockId, block);
     
+    // currentNews와 URL이 동일하면 함께 업데이트
+    if (this.currentNews && this.currentNews.url) {
+      const normalizeUrl = (urlString) => {
+        try {
+          const urlObj = new URL(urlString);
+          return urlObj.origin + urlObj.pathname;
+        } catch {
+          return urlString;
+        }
+      };
+      
+      if (normalizeUrl(this.currentNews.url) === normalizeUrl(block.url)) {
+        this.currentNews.result = reanalyzedResult;
+        this.currentNews.factCheckResult = block.factCheckResult;
+        console.log('[searchFactCheck] currentNews도 함께 업데이트됨');
+      }
+    }
+    
     // 영구 저장 (chrome.storage + localStorage)
     this.saveNewsBlocks();
     console.log('[searchFactCheck] 블록 저장 완료 (영구 저장)');
+    this.updatePanel();
     
     // 상세 패널이 열려있으면 새로고침
     if (this.activeDetailOverlay) {
@@ -8473,7 +9004,7 @@ AnalysisPanel.prototype.searchFactCheck = async function(blockId) {
     // UI 업데이트
     this.hideSearchLoading(blockId);
     setTimeout(() => this.clearFactCheckStatus(blockId), 2000);
-
+    return true;
   } catch (error) {
     console.error('[searchFactCheck] 오류:', error);
     this.hideSearchLoading(blockId);
@@ -8483,6 +9014,7 @@ AnalysisPanel.prototype.searchFactCheck = async function(blockId) {
     alert(errorMessage);
     
     setTimeout(() => this.clearFactCheckStatus(blockId), 3000);
+    return false;
   } finally {
     this.searchInProgress.delete(blockId);
   }
@@ -8566,7 +9098,7 @@ AnalysisPanel.prototype.callGoogleSearchAPI = async function(query, type, limit)
   console.log('[callGoogleSearchAPI] 호출:', query, type, limit);
   
   // CSE ID 고정값 사용
-  const CSE_ID_NEWS = "a6724cd0397f24747";      // Daum 뉴스 전용
+  const CSE_ID_NEWS = "70364eb765310426e";      // 뉴스 전용 검색 엔진
   const CSE_ID_KEYWORD = "241358ac91fe04cd8";   // 전체 웹 검색
   const cseId = type === 'news' ? CSE_ID_NEWS : CSE_ID_KEYWORD;
   
@@ -8618,8 +9150,29 @@ AnalysisPanel.prototype.callGoogleSearchAPI = async function(query, type, limit)
       return [];
     }
     
+    // 뉴스 외 도메인 필터링 (소셜미디어, 쇼핑, 비뉴스 사이트 제외)
+    const excludedDomains = [
+      'instagram.com', 'facebook.com', 'twitter.com', 'x.com',
+      'youtube.com', 'tiktok.com', 'pinterest.com',
+      'coupang.com', 'aliexpress.com', 'gmarket.co.kr', '11st.co.kr',
+      'auction.co.kr', 'interpark.com', 'wemakeprice.com',
+      'hypebeast.kr', 'hypebeast.com'
+    ];
+    
+    const filteredItems = data.items.filter(item => {
+      const link = (item.link || '').toLowerCase();
+      const displayLink = (item.displayLink || '').toLowerCase();
+      
+      // 제외 도메인 체크
+      const isExcluded = excludedDomains.some(domain => 
+        link.includes(domain) || displayLink.includes(domain)
+      );
+      
+      return !isExcluded;
+    });
+    
     // 결과 포맷팅
-    return data.items.map(item => ({
+    return filteredItems.map(item => ({
       title: item.title || '제목 없음',
       snippet: item.snippet || '요약 없음',
       link: item.link || '',
@@ -8942,57 +9495,14 @@ AnalysisPanel.prototype.refineSearchQuery = function(rawQuery) {
   return refined;
 };
 
-// 검색 로딩 인디케이터 표시
-AnalysisPanel.prototype.showSearchLoading = function(blockId, type) {
-  const typeName = type === 'similar' ? '유사 기사' : '사실 검증';
-  const icon = type === 'similar' ? '📰' : '🔍';
-  
-  const loading = document.createElement('div');
-  loading.id = `search-loading-${blockId}`;
-  loading.style.cssText = `
-    position: fixed;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    background: rgba(13, 13, 13, 0.9);
-    color: #F2F2F2;
-    padding: 24px 32px;
-    border-radius: 12px;
-    border: 1px solid #BF9780;
-    z-index: 2147483650;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    font-size: 14px;
-    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
-  `;
-  
-  loading.innerHTML = `
-    <div style="
-      width: 20px;
-      height: 20px;
-      border: 3px solid #BF9780;
-      border-top-color: transparent;
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-    "></div>
-    <span>${icon} ${typeName} 검색 중...</span>
-    <style>
-      @keyframes spin {
-        to { transform: rotate(360deg); }
-      }
-    </style>
-  `;
-  
-  document.body.appendChild(loading);
+// 검색 로딩 인디케이터 표시 (패널 내부 처리만 사용, 전역 오버레이 제거)
+AnalysisPanel.prototype.showSearchLoading = function() {
+  // no-op: block 자체에 표시되는 로딩만 유지
 };
 
 // 검색 로딩 인디케이터 숨김
-AnalysisPanel.prototype.hideSearchLoading = function(blockId) {
-  const loading = document.getElementById(`search-loading-${blockId}`);
-  if (loading) {
-    loading.remove();
-  }
+AnalysisPanel.prototype.hideSearchLoading = function() {
+  // no-op: 상단과 동일
 };
 
 // 디버그 정보 모달 표시
@@ -9195,42 +9705,39 @@ AnalysisPanel.prototype.showDebugModal = function(blockId) {
 };
 
 // 실시간 사실 검증 상황 표시 함수들
-AnalysisPanel.prototype.updateFactCheckStatus = function(blockId, statusText) {
+AnalysisPanel.prototype.setFactCheckState = function(blockId, { inProgress, progressText }) {
   const block = this.newsBlocks.get(blockId);
-  if (!block) return;
-  
-  // 블록의 더보기 버튼 영역에 상황 텍스트 표시
-  const moreBtn = document.querySelector(`[data-block-id="${blockId}"] .show-more-btn`);
-  if (moreBtn) {
-    // 기존 상황 표시 요소 찾기 또는 생성
-    let statusEl = moreBtn.parentElement.querySelector('.fact-check-status');
-    if (!statusEl) {
-      statusEl = document.createElement('div');
-      statusEl.className = 'fact-check-status';
-      statusEl.style.cssText = `
-        margin-top: 8px;
-        padding: 8px 12px;
-        background: rgba(191, 151, 128, 0.1);
-        border-left: 3px solid #BF9780;
-        border-radius: 4px;
-        font-size: 13px;
-        color: #0D0D0D;
-        font-weight: 500;
-        animation: fadeIn 0.3s ease;
-      `;
-      moreBtn.parentElement.appendChild(statusEl);
+  if (!block) {
+    return;
+  }
+
+  let changed = false;
+
+  if (typeof inProgress === 'boolean' && block.factCheckInProgress !== inProgress) {
+    block.factCheckInProgress = inProgress;
+    if (!inProgress) {
+      block.factCheckProgress = null;
     }
-    statusEl.textContent = statusText;
+    changed = true;
+  }
+
+  if (typeof progressText === 'string' && block.factCheckProgress !== progressText) {
+    block.factCheckProgress = progressText;
+    changed = true;
+  }
+
+  if (changed) {
+    this.newsBlocks.set(blockId, block);
+    this.updatePanel();
   }
 };
 
+AnalysisPanel.prototype.updateFactCheckStatus = function(blockId, statusText) {
+  this.setFactCheckState(blockId, { inProgress: true, progressText: statusText });
+};
+
 AnalysisPanel.prototype.clearFactCheckStatus = function(blockId) {
-  const statusEl = document.querySelector(`[data-block-id="${blockId}"] .fact-check-status`);
-  if (statusEl) {
-    statusEl.style.opacity = '0';
-    statusEl.style.transition = 'opacity 0.3s ease';
-    setTimeout(() => statusEl.remove(), 300);
-  }
+  this.setFactCheckState(blockId, { inProgress: false });
 };
 
 // 뉴스 기사 크롤링 함수
@@ -9245,7 +9752,7 @@ AnalysisPanel.prototype.crawlArticleContent = async function(url) {
   }
   
   try {
-    // Service Worker를 통한 CORS 우회 크롤링
+    // 먼저 Service Worker를 통한 CORS 우회 시도
     const response = await new Promise((resolve, reject) => {
       chrome.runtime.sendMessage(
         { action: 'fetchWithCORS', url: url },
@@ -9260,7 +9767,16 @@ AnalysisPanel.prototype.crawlArticleContent = async function(url) {
     });
     
     if (!response.success) {
-      console.warn('[crawlArticleContent] ⚠️ fetchWithCORS 실패:', response.error);
+      console.warn('[crawlArticleContent] ⚠️ fetchWithCORS 실패, iframe 방식 시도:', response.error);
+      
+      // CORS 실패 시 iframe 주입 방식으로 재시도
+      const iframeContent = await this.crawlViaIframe(url);
+      if (iframeContent && iframeContent.length > 100) {
+        this.saveToCrawlCache(url, iframeContent);
+        console.log('[crawlArticleContent] ✅ iframe 크롤링 성공, 길이:', iframeContent.length);
+        return iframeContent;
+      }
+      
       return null;
     }
     
@@ -9318,6 +9834,79 @@ AnalysisPanel.prototype.crawlArticleContent = async function(url) {
     console.warn('[crawlArticleContent] ❌ 크롤링 실패:', error?.message || error);
     return null;
   }
+};
+
+// iframe을 통한 크롤링 (CORS 우회)
+AnalysisPanel.prototype.crawlViaIframe = async function(url) {
+  return new Promise((resolve) => {
+    const iframe = document.createElement('iframe');
+    iframe.style.display = 'none';
+    iframe.sandbox = 'allow-same-origin';
+    
+    const timeout = setTimeout(() => {
+      document.body.removeChild(iframe);
+      console.warn('[crawlViaIframe] ⏱️ 타임아웃');
+      resolve(null);
+    }, 8000);
+    
+    iframe.onload = () => {
+      try {
+        clearTimeout(timeout);
+        
+        const iframeDoc = iframe.contentDocument || iframe.contentWindow.document;
+        
+        const selectors = [
+          'article',
+          '[id*="article"]',
+          '[class*="article"]',
+          '[class*="content"]',
+          '[id*="content"]',
+          'main',
+          '.news-content',
+          '.article-body'
+        ];
+        
+        let content = '';
+        for (const selector of selectors) {
+          const elements = iframeDoc.querySelectorAll(selector);
+          if (elements.length > 0) {
+            content = Array.from(elements)
+              .map(el => el.textContent)
+              .join('\n')
+              .replace(/\s+/g, ' ')
+              .trim();
+            
+            if (content.length > 100) {
+              break;
+            }
+          }
+        }
+        
+        if (content.length > 5000) {
+          content = content.substring(0, 5000) + '...';
+        }
+        
+        document.body.removeChild(iframe);
+        resolve(content || null);
+        
+      } catch (error) {
+        clearTimeout(timeout);
+        document.body.removeChild(iframe);
+        console.warn('[crawlViaIframe] ❌ DOM 접근 실패:', error.message);
+        resolve(null);
+      }
+    };
+    
+    iframe.onerror = () => {
+      clearTimeout(timeout);
+      document.body.removeChild(iframe);
+      console.warn('[crawlViaIframe] ❌ iframe 로드 실패');
+      resolve(null);
+    };
+    
+    document.body.appendChild(iframe);
+    iframe.src = url;
+  });
 };
 
 // AI 응답에서 JSON 안전 추출
