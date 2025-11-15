@@ -6,6 +6,7 @@ class AnalysisPanel {
     this.newsBlocks = new Map(); // 분석된 뉴스 블록들을 관리하는 Map
     this.currentNews = null; // 현재 페이지의 뉴스
     this.blockIdCounter = 0; // 고유 ID 생성용
+    this.MAX_NEWS_BLOCKS = 20; // 최대 저장 블록 수 제한
     this.streamingResults = new Map(); // 실시간 스트리밍 결과 저장
     this.streamingDiffCache = new Map(); // 스트리밍 누적 텍스트 캐시
     this.analysisTimeouts = new Map(); // 분석 타임아웃 관리
@@ -5516,6 +5517,93 @@ ${factCheckSection}
     ];
   }
 
+  getNewsBrandDomainMap() {
+    return {
+      yonhap: ['yna.co.kr', 'yonhapnewstv.co.kr', 'newsis.com'],
+      chosun: ['chosun.com', 'biz.chosun.com', 'news.chosun.com'],
+      joongang: ['joongang.co.kr', 'news.joins.com'],
+      donga: ['donga.com', 'news.donga.com', 'm.donga.com'],
+      khan: ['khan.co.kr'],
+      hani: ['hani.co.kr'],
+      sbs: ['sbs.co.kr', 'news.sbs.co.kr'],
+      kbs: ['kbs.co.kr', 'news.kbs.co.kr'],
+      mbc: ['mbc.co.kr', 'imnews.imbc.com'],
+      jtbc: ['jtbc.co.kr', 'news.jtbc.co.kr']
+    };
+  }
+
+  getPreferredFactCheckDomains() {
+    const selectedBrands = this.getSelectedNewsBrands();
+    const domainMap = this.getNewsBrandDomainMap();
+    const allDomainValues = Object.values(domainMap).flat();
+    const domains = new Set();
+
+    if (!selectedBrands || selectedBrands.length === 0) {
+      allDomainValues.forEach((domain) => domains.add(domain.toLowerCase()));
+      return Array.from(domains);
+    }
+
+    selectedBrands.forEach((brandId) => {
+      const brandDomains = domainMap[brandId];
+      if (brandDomains && brandDomains.length > 0) {
+        brandDomains.forEach((domain) => domains.add(domain.toLowerCase()));
+      }
+    });
+
+    if (domains.size === 0) {
+      allDomainValues.forEach((domain) => domains.add(domain.toLowerCase()));
+    }
+
+    return Array.from(domains);
+  }
+
+  matchesPreferredNewsDomain(result, preferredDomains) {
+    if (!preferredDomains || preferredDomains.length === 0) {
+      return false;
+    }
+    const link = (result.link || '').toLowerCase();
+    const displayLink = (result.displayLink || '').toLowerCase();
+    return preferredDomains.some((domain) => link.includes(domain) || displayLink.includes(domain));
+  }
+
+  async prioritizeFactCheckResults(results) {
+    if (!results || results.length === 0) {
+      return [];
+    }
+
+    const preferredDomains = this.getPreferredFactCheckDomains();
+    const preferred = [];
+    const others = [];
+
+    results.forEach((item) => {
+      if (this.matchesPreferredNewsDomain(item, preferredDomains)) {
+        preferred.push(item);
+      } else {
+        others.push(item);
+      }
+    });
+
+    const strictPreferred = [];
+    for (const item of preferred) {
+      if (await this.validateNewsArticleStrict(item)) {
+        strictPreferred.push(item);
+      }
+    }
+
+    const strictOthers = [];
+    for (const item of others) {
+      if (await this.validateNewsArticleStrict(item)) {
+        strictOthers.push(item);
+      }
+    }
+
+    if (strictPreferred.length > 0 || strictOthers.length > 0) {
+      return [...strictPreferred, ...strictOthers];
+    }
+
+    return [...preferred, ...others];
+  }
+
   getNewsBrandSelectionLabel(selectedBrands = null) {
     const currentSelection = selectedBrands || this.getSelectedNewsBrands();
     const allBrands = this.getNewsBrandDefinitions();
@@ -5990,6 +6078,84 @@ ${factCheckSection}
         </div>
       </div>
 
+      <!-- 크롤링 우선 순위 -->
+      <div style="
+        padding: 16px 0;
+        border-bottom: 1px solid #E5E5E5;
+      ">
+        <div style="
+          display: flex;
+          flex-direction: column;
+          gap: 12px;
+        ">
+          <div>
+            <div style="
+              font-size: 16px;
+              font-weight: 600;
+              color: #0D0D0D;
+              margin-bottom: 4px;
+            ">크롤링 우선 순위</div>
+            <div style="
+              font-size: 13px;
+              color: #737373;
+              line-height: 1.4;
+            ">사실 검증 시 기사 본문 수집 방식을 선택합니다.</div>
+          </div>
+          
+          <!-- 토글 버튼 -->
+          <div style="
+            display: flex;
+            background: #F3F4F6;
+            border-radius: 8px;
+            padding: 4px;
+            gap: 4px;
+          ">
+            <button class="crawling-priority-btn" data-mode="speed" style="
+              flex: 1;
+              padding: 10px 16px;
+              border-radius: 6px;
+              font-weight: 600;
+              border: none;
+              cursor: pointer;
+              transition: all 0.2s;
+              font-size: 14px;
+              background: white;
+              color: #0D0D0D;
+              box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+            ">
+              <div style="font-weight: 700; margin-bottom: 2px;">⚡ 속도</div>
+              <div style="font-size: 11px; color: #737373;">검색 요약만</div>
+            </button>
+            <button class="crawling-priority-btn" data-mode="accuracy" style="
+              flex: 1;
+              padding: 10px 16px;
+              border-radius: 6px;
+              font-weight: 600;
+              border: none;
+              cursor: pointer;
+              transition: all 0.2s;
+              font-size: 14px;
+              background: transparent;
+              color: #737373;
+            ">
+              <div style="font-weight: 700; margin-bottom: 2px;">🎯 정확도</div>
+              <div style="font-size: 11px; color: #737373;">전체 본문</div>
+            </button>
+          </div>
+          
+          <!-- 정확도 선택 시 경고문 -->
+          <div class="accuracy-warning" style="
+            display: none;
+            font-size: 12px;
+            color: #B45309;
+            background: rgba(191, 151, 128, 0.18);
+            padding: 8px 10px;
+            border-radius: 6px;
+            line-height: 1.4;
+          ">⚠️ <strong>정확도 모드</strong>는 각 기사를 크롤링하여 AI로 본문을 추출합니다.<br/>Gemini API 호출이 추가로 발생하므로 사용량을 확인하세요.</div>
+        </div>
+      </div>
+
       <!-- 자동 사실 확인 -->
       <div style="
         padding: 16px 0;
@@ -6349,6 +6515,49 @@ ${factCheckSection}
       });
     }
 
+    // 크롤링 우선 순위 토글 버튼
+    const priorityBtns = modalContent.querySelectorAll('.crawling-priority-btn');
+    const accuracyWarning = modalContent.querySelector('.accuracy-warning');
+    
+    if (priorityBtns.length === 2) {
+      const updatePriorityUI = (priority) => {
+        const mode = priority || 'speed';
+        priorityBtns.forEach(btn => {
+          const btnMode = btn.dataset.mode;
+          const isActive = btnMode === mode;
+          btn.style.background = isActive ? 'white' : 'transparent';
+          btn.style.color = isActive ? '#0D0D0D' : '#737373';
+          btn.style.boxShadow = isActive ? '0 1px 2px rgba(0,0,0,0.05)' : 'none';
+        });
+        
+        // 정확도 모드일 때만 경고문 표시
+        if (accuracyWarning) {
+          accuracyWarning.style.display = mode === 'accuracy' ? 'block' : 'none';
+        }
+      };
+
+      this.getCrawlingPrioritySetting()
+        .then(updatePriorityUI)
+        .catch((error) => {
+          console.warn('Failed to load crawling priority:', error);
+          updatePriorityUI('speed');
+        });
+
+      priorityBtns.forEach(btn => {
+        btn.addEventListener('click', async () => {
+          const mode = btn.dataset.mode;
+          updatePriorityUI(mode);
+          try {
+            await this.setCrawlingPrioritySetting(mode);
+            console.log('[Settings] 크롤링 우선 순위:', mode);
+          } catch (error) {
+            console.error('Failed to save crawling priority:', error);
+            alert('설정을 저장하지 못했습니다. 다시 시도해주세요.');
+          }
+        });
+      });
+    }
+
     // 자동 사실 확인 토글 버튼
     const autoFactCheckBtn = modalContent.querySelector('.auto-factcheck-btn');
     if (autoFactCheckBtn) {
@@ -6610,7 +6819,7 @@ ${factCheckSection}
       border-radius: 12px;
       padding: 32px;
       width: 560px;
-      height: 270px;
+      height: ${isEdit ? '270px' : '320px'};
       position: relative;
       display: flex;
       flex-direction: column;
@@ -6633,9 +6842,10 @@ ${factCheckSection}
     } else {
       modalContent.innerHTML = `
         <button class="close-modal" style="position: absolute; top: 12px; right: 12px; background: none; border: none; font-size: 24px; color: #737373; cursor: pointer; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; border-radius: 50%; transition: background-color 0.2s;">&times;</button>
-        <h2 style="font-size: 24px; font-weight: bold; margin-bottom: 32px; text-align: center; color: #0D0D0D;">API 키를 입력하세요</h2>
-        <input class="api-key-input" type="text" placeholder="Gemini API Key" style="border: 2px solid #BF9780; border-radius: 8px; padding: 16px 20px; margin-bottom: 24px; width: 100%; font-size: 16px; box-sizing: border-box; flex: 1; outline: none; transition: border-color 0.2s;" />
-        <button class="submit-key-btn" style="background: #F2CEA2; color: #0D0D0D; padding: 16px 32px; border-radius: 8px; font-weight: 600; border: none; cursor: pointer; width: 100%; transition: background-color 0.2s; font-size: 16px;">확인</button>
+        <h2 style="font-size: 24px; font-weight: bold; margin-bottom: 20px; text-align: center; color: #0D0D0D;">API 키를 입력하세요</h2>
+        <input class="api-key-input" type="text" placeholder="Gemini API Key" style="border: 2px solid #BF9780; border-radius: 8px; padding: 16px 20px; margin-bottom: 16px; width: 100%; font-size: 16px; box-sizing: border-box; outline: none; transition: border-color 0.2s;" />
+        
+        <button class="submit-key-btn" style="background: #F2CEA2; color: #0D0D0D; padding: 14px 28px; border-radius: 8px; font-weight: 600; border: none; cursor: pointer; width: 100%; transition: background-color 0.2s; font-size: 16px;">확인</button>
       `;
     }
     
@@ -6708,6 +6918,71 @@ ${factCheckSection}
     } catch (error) {
       console.error('Failed to save auto cross verification setting:', error);
     }
+  }
+
+  getCrawlingPrioritySettingFromCache() {
+    try {
+      const stored = localStorage.getItem('crawling_priority');
+      return stored || 'speed';
+    } catch (error) {
+      console.error('Failed to read crawling priority from cache:', error);
+      return 'speed';
+    }
+  }
+
+  cacheCrawlingPrioritySetting(value) {
+    try {
+      localStorage.setItem('crawling_priority', value);
+    } catch (error) {
+      console.error('Failed to cache crawling priority:', error);
+    }
+  }
+
+  async getCrawlingPrioritySetting() {
+    const fallback = this.getCrawlingPrioritySettingFromCache();
+    if (!this.isChromeApiAvailable()) {
+      return fallback;
+    }
+
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.get(['crawling_priority'], (data) => {
+          if (chrome.runtime.lastError) {
+            console.warn('Failed to load crawling priority from Chrome storage:', chrome.runtime.lastError);
+            resolve(fallback);
+            return;
+          }
+          const priority = data.crawling_priority || 'speed';
+          this.cacheCrawlingPrioritySetting(priority);
+          resolve(priority);
+        });
+      } catch (error) {
+        console.warn('Chrome storage unavailable, using cached crawling priority:', error);
+        resolve(fallback);
+      }
+    });
+  }
+
+  async setCrawlingPrioritySetting(value) {
+    this.cacheCrawlingPrioritySetting(value);
+
+    if (!this.isChromeApiAvailable()) {
+      return;
+    }
+
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.set({ crawling_priority: value }, () => {
+          if (chrome.runtime.lastError) {
+            console.warn('Failed to persist crawling priority to Chrome storage:', chrome.runtime.lastError);
+          }
+          resolve();
+        });
+      } catch (error) {
+        console.warn('Chrome storage unavailable while saving crawling priority:', error);
+        resolve();
+      }
+    });
   }
 
   // Google Search API 사용 설정 가져오기
@@ -7546,6 +7821,7 @@ ${factCheckSection}
           const normalizedUrl = normalizeUrl(block.url);
 
           console.log('[completeAnalysis] 진위 결과 저장 시작:', normalizedUrl, verdict);
+          console.log('[completeAnalysis] normalizedResult 구조:', JSON.stringify(normalizedResult, null, 2));
 
           chrome.storage.local.get(['factcheck_verdicts'], (data) => {
             if (chrome.runtime.lastError) {
@@ -7569,7 +7845,9 @@ ${factCheckSection}
             });
           });
         } else {
-          console.warn('[completeAnalysis] 저장할 진위 결과를 찾지 못했습니다.', normalizedResult);
+          console.warn('[completeAnalysis] 저장할 진위 결과를 찾지 못했습니다.');
+          console.warn('[completeAnalysis] normalizedResult:', JSON.stringify(normalizedResult, null, 2));
+          console.warn('[completeAnalysis] verdict 값:', verdict);
         }
       } catch (error) {
         console.error('[completeAnalysis] 진위 결과 저장 실패:', error);
@@ -8518,6 +8796,15 @@ ${factCheckSection}
 
   // 뉴스 블록 추가할 때 카운트 업데이트
   addNewsBlock(newsData) {
+    // 블록 수 제한: 20개 초과 시 가장 오래된 블록 삭제
+    if (this.newsBlocks.size >= this.MAX_NEWS_BLOCKS) {
+      const sortedBlocks = Array.from(this.newsBlocks.entries())
+        .sort((a, b) => a[1].id - b[1].id);
+      const oldestId = sortedBlocks[0][0];
+      console.log(`[addNewsBlock] 블록 수 제한(${this.MAX_NEWS_BLOCKS})에 도달, 가장 오래된 블록 삭제:`, oldestId);
+      this.removeNewsBlock(oldestId);
+    }
+
     // 기존 로직...
     this.newsBlocks.set(newsData.id, newsData);
     this.updateAnalysisCount(); // 카운트 업데이트
@@ -8759,7 +9046,7 @@ window.testMessyJsonStreaming = function() {
 // Google Search API 통합 기능 (BACKUP에서 이식)
 // =============================================================================
 
-AnalysisPanel.prototype.findSimilarArticles = async function(blockId) {
+AnalysisPanel.prototype.findSimilarArticles = async function(blockId, skipLock = false) {
   console.log('[findSimilarArticles] 시작, blockId:', blockId);
   
   const block = this.newsBlocks.get(blockId);
@@ -8773,8 +9060,8 @@ AnalysisPanel.prototype.findSimilarArticles = async function(blockId) {
     return;
   }
 
-  // 이미 검색 중인지 확인
-  if (this.searchInProgress.has(blockId)) {
+  // 이미 검색 중인지 확인 (skipLock이 false일 때만)
+  if (!skipLock && this.searchInProgress.has(blockId)) {
     alert('이미 검색이 진행 중입니다.');
     return;
   }
@@ -8786,7 +9073,9 @@ AnalysisPanel.prototype.findSimilarArticles = async function(blockId) {
     return;
   }
 
-  this.searchInProgress.add(blockId);
+  if (!skipLock) {
+    this.searchInProgress.add(blockId);
+  }
   
   // 로딩 인디케이터 표시
   this.showSearchLoading(blockId, 'similar');
@@ -8802,7 +9091,11 @@ AnalysisPanel.prototype.findSimilarArticles = async function(blockId) {
     if (cachedResults) {
       console.log('[findSimilarArticles] ✅ 캐시에서 결과 반환');
       this.hideSearchLoading(blockId);
-      this.showSearchResults(blockId, cachedResults, 'similar');
+      if (!skipLock) {
+        this.showSearchResults(blockId, cachedResults, 'similar');
+      } else {
+        console.log('[findSimilarArticles] skipLock=true, 캐시 UI 표시 생략');
+      }
       this.searchInProgress.delete(blockId);
       return;
     }
@@ -8813,22 +9106,39 @@ AnalysisPanel.prototype.findSimilarArticles = async function(blockId) {
 
     let results;
     if (this.USE_REAL_API) {
-      // 실제 Google Search API 호출
-      results = await this.callGoogleSearchAPI(searchQuery, 'news', 4);
+      // 실제 Google Search API 호출 (최대 10개 요청)
+      results = await this.callGoogleSearchAPI(searchQuery, 'news', 10);
+      
+      // 최대 4개만 사용
+      results = results.slice(0, 4);
+      
+      if (results.length === 0) {
+        console.warn('[findSimilarArticles] 검색 결과 없음');
+        this.hideSearchLoading(blockId);
+        alert('유사한 뉴스 기사를 찾을 수 없습니다.\n다른 검색어로 시도해보세요.');
+        this.searchInProgress.delete(blockId);
+        return;
+      }
     } else {
       // Mock 데이터 반환
       console.log('[findSimilarArticles] Mock 데이터 사용');
       results = this.getMockSimilarArticles();
     }
 
-    console.log('[findSimilarArticles] 검색 결과:', results);
+    console.log('[findSimilarArticles] 검증된 뉴스 결과:', results.length, '개');
 
     // 영구 캐시에 저장 (API 절약)
     this.saveToSearchCache(cacheKey, results);
 
-    // 로딩 숨김 및 결과 표시
+    // 로딩 숨김
     this.hideSearchLoading(blockId);
-    this.showSearchResults(blockId, results, 'similar');
+    
+    // skipLock=true일 때는 UI 표시 안 함 (자동 실행이므로)
+    if (!skipLock) {
+      this.showSearchResults(blockId, results, 'similar');
+    } else {
+      console.log('[findSimilarArticles] skipLock=true, UI 표시 생략 (자동 실행)');
+    }
 
   } catch (error) {
     console.error('[findSimilarArticles] 오류:', error);
@@ -8888,27 +9198,153 @@ AnalysisPanel.prototype.searchFactCheck = async function(blockId) {
     this.updateFactCheckStatus(blockId, `🔎 "${searchQuery.substring(0, 30)}..." 검색 중`);
 
     let results;
-    if (this.USE_REAL_API) {
-      results = await this.callGoogleSearchAPI(searchQuery, 'keyword', 5); // 더 많은 결과 요청
+    const similarCacheKey = `similar_${searchQuery}`;
+    const cachedSimilarResults = this.getFromSearchCache(similarCacheKey);
+
+    if (cachedSimilarResults && cachedSimilarResults.length > 0) {
+      console.log('[searchFactCheck] 🔄 유사 기사 캐시 발견, 재사용:', cachedSimilarResults.length, '개');
+      this.updateFactCheckStatus(blockId, `♻️ 유사 기사 ${cachedSimilarResults.length}개 재사용 중...`);
+      results = cachedSimilarResults;
     } else {
-      results = this.getMockFactCheckResults();
+      console.log('[searchFactCheck] 🔍 유사 기사 캐시 없음, 자동 검색 실행');
+      this.updateFactCheckStatus(blockId, '🔍 먼저 유사 기사 검색 중...');
+      
+      // 유사 기사 자동 검색 실행
+      try {
+        await this.findSimilarArticles(blockId, true); // skipLock=true로 호출하여 중복 락 방지
+        
+        // 검색 후 캐시 재확인
+        const newCachedResults = this.getFromSearchCache(similarCacheKey);
+        if (newCachedResults && newCachedResults.length > 0) {
+          console.log('[searchFactCheck] ✅ 유사 기사 검색 완료, 재사용:', newCachedResults.length, '개');
+          this.updateFactCheckStatus(blockId, `✅ 유사 기사 ${newCachedResults.length}개 확보`);
+          results = newCachedResults;
+        } else if (this.USE_REAL_API) {
+          // 유사 기사 검색 실패 시 keyword 검색으로 폴백
+          console.warn('[searchFactCheck] 유사 기사 검색 실패, keyword 검색으로 폴백');
+          this.updateFactCheckStatus(blockId, '🔎 키워드 검색으로 전환 중...');
+          results = await this.callGoogleSearchAPI(searchQuery, 'keyword', 10);
+          
+          if (results.length < 2) {
+            console.error('[searchFactCheck] 충분한 검색 결과 없음:', results.length, '개');
+            this.updateFactCheckStatus(blockId, '❌ 검색 결과 부족');
+            setTimeout(() => this.clearFactCheckStatus(blockId), 3000);
+            this.searchInProgress.delete(blockId);
+            return false;
+          }
+        } else {
+          results = this.getMockFactCheckResults();
+        }
+      } catch (error) {
+        console.error('[searchFactCheck] 유사 기사 검색 중 오류:', error);
+        
+        // 오류 발생 시 keyword 검색으로 폴백
+        if (this.USE_REAL_API) {
+          console.warn('[searchFactCheck] 오류 발생, keyword 검색으로 폴백');
+          this.updateFactCheckStatus(blockId, '🔎 키워드 검색으로 전환 중...');
+          results = await this.callGoogleSearchAPI(searchQuery, 'keyword', 10);
+          
+          if (results.length < 2) {
+            console.error('[searchFactCheck] 충분한 검색 결과 없음:', results.length, '개');
+            this.updateFactCheckStatus(blockId, '❌ 검색 결과 부족');
+            setTimeout(() => this.clearFactCheckStatus(blockId), 3000);
+            this.searchInProgress.delete(blockId);
+            return false;
+          }
+        } else {
+          results = this.getMockFactCheckResults();
+        }
+      }
     }
 
-    if (!results || results.length === 0) {
-      this.updateFactCheckStatus(blockId, '❌ 검색 결과 없음');
-      setTimeout(() => this.clearFactCheckStatus(blockId), 3000);
-      return false;
+    console.log('[searchFactCheck] 검증된 뉴스 기사:', results.length, '개');
+    
+    // 크롤링 우선순위 확인
+    const crawlingPriority = await this.getCrawlingPrioritySetting();
+    console.log('[searchFactCheck] 크롤링 우선순위:', crawlingPriority);
+    
+    // 속도 모드면 크롤링 스킵하고 snippet만 사용
+    if (crawlingPriority === 'speed') {
+      console.log('[searchFactCheck] ⚡ 속도 모드: 크롤링 생략, snippet만 사용');
+      this.updateFactCheckStatus(blockId, '⚡ 빠른 검증 중...');
+      
+      // snippet이 있는 기사만 필터링
+      const articlesWithSnippet = results.filter(article => article.snippet && article.snippet.length > 50);
+      
+      if (articlesWithSnippet.length < 2) {
+        console.warn('[searchFactCheck] snippet이 충분한 기사 부족:', articlesWithSnippet.length, '개');
+        this.updateFactCheckStatus(blockId, '❌ 검증 가능한 기사 부족');
+        setTimeout(() => this.clearFactCheckStatus(blockId), 3000);
+        this.searchInProgress.delete(blockId);
+        return false;
+      }
+      
+      // snippet만 사용하여 즉시 검증 진행
+      const comparisonArticles = articlesWithSnippet.slice(0, 5);
+      console.log('[searchFactCheck] snippet 검증 기사:', comparisonArticles.length, '개');
+      
+      // AI 검증으로 바로 이동
+      this.updateFactCheckStatus(blockId, '🤖 AI 검증 중...');
+      const verification = await this.verifyFactsWithAI(block, comparisonArticles);
+      
+      this.updateFactCheckStatus(blockId, '📊 재분석 중...');
+      const reanalyzed = await this.reanalyzeWithFactCheck(block, comparisonArticles, verification);
+      
+      const factCheckResult = {
+        articles: comparisonArticles,
+        verification: verification,
+        reanalyzed: reanalyzed,
+        timestamp: Date.now()
+      };
+      
+      block.factCheckResult = factCheckResult;
+      console.log('[searchFactCheck] factCheckResult 저장 완료:', factCheckResult);
+      
+      this.saveNewsBlocks();
+      
+      // currentNews와 URL이 동일하면 함께 업데이트
+      if (this.currentNews && this.currentNews.url) {
+        const normalizeUrl = (urlString) => {
+          try {
+            const urlObj = new URL(urlString);
+            return urlObj.origin + urlObj.pathname;
+          } catch {
+            return urlString;
+          }
+        };
+        
+        if (normalizeUrl(this.currentNews.url) === normalizeUrl(block.url)) {
+          this.currentNews.factCheckResult = block.factCheckResult;
+          console.log('[searchFactCheck] currentNews도 함께 업데이트됨');
+        }
+      }
+      
+      console.log('[searchFactCheck] 블록 저장 완료 (영구 저장)');
+      this.updateFactCheckStatus(blockId, '✅ 검증 완료!');
+      setTimeout(() => this.clearFactCheckStatus(blockId), 2000);
+      
+      this.renderPanel(document.getElementById(this.panelId));
+      this.searchInProgress.delete(blockId);
+      return true;
     }
-
-    console.log('[searchFactCheck] 검색 결과:', results.length, '개');
-    this.updateFactCheckStatus(blockId, `📄 ${results.length}개 기사 발견, 크롤링 중...`);
+    
+    // 정확도 모드: 크롤링 수행
+    console.log('[searchFactCheck] 🎯 정확도 모드: 크롤링으로 전체 본문 수집');
+    this.updateFactCheckStatus(blockId, `✅ ${results.length}개 신뢰 기사 확보, 크롤링 시작...`);
     
     // 각 기사 크롤링 시도 (성공한 것만 수집, 최소 2개 목표)
     const crawledArticles = [];
     const failedArticles = [];
     const targetCount = 2; // 최소 크롤링 성공 목표
     
-    for (let i = 0; i < results.length && crawledArticles.length < targetCount; i++) {
+    // 검증된 모든 결과를 순회하며 목표 달성까지 계속 시도
+    for (let i = 0; i < results.length; i++) {
+      // 목표 달성 시 중단
+      if (crawledArticles.length >= targetCount) {
+        console.log('[searchFactCheck] ✅ 목표 달성:', crawledArticles.length, '개');
+        break;
+      }
+      
       const article = results[i];
       this.updateFactCheckStatus(blockId, `📰 ${i + 1}/${results.length}: "${article.title.substring(0, 25)}..." 크롤링 중`);
       
@@ -8921,27 +9357,57 @@ AnalysisPanel.prototype.searchFactCheck = async function(blockId) {
             ...article,
             crawledContent: crawledContent
           });
-          this.updateFactCheckStatus(blockId, `✅ ${crawledArticles.length}개 크롤링 성공`);
+          this.updateFactCheckStatus(blockId, `✅ ${crawledArticles.length}/${targetCount}개 크롤링 성공`);
+          console.log('[searchFactCheck] 크롤링 성공:', crawledArticles.length, '/', targetCount);
         } else {
-          failedArticles.push(article);
-          this.updateFactCheckStatus(blockId, `⚠️ 크롤링 실패, 다음 기사 시도 중...`);
+          // 크롤링 실패 시 지능형 크롤링 재시도
+          console.warn('[searchFactCheck] 크롤링 실패, 지능형 모드 재시도:', article.link);
+          this.updateFactCheckStatus(blockId, `🤖 지능형 크롤링 시도 중...`);
+          const advancedContent = await this.crawlArticleContent(article.link, true);
+          
+          if (advancedContent) {
+            crawledArticles.push({
+              ...article,
+              crawledContent: advancedContent
+            });
+            this.updateFactCheckStatus(blockId, `✅ ${crawledArticles.length}/${targetCount}개 크롤링 성공 (지능형)`);
+            console.log('[searchFactCheck] 지능형 크롤링 성공:', crawledArticles.length, '/', targetCount);
+          } else {
+            failedArticles.push(article);
+            this.updateFactCheckStatus(blockId, `⚠️ 크롤링 실패 (${failedArticles.length}번째), 다음 기사 시도 중...`);
+            console.log('[searchFactCheck] 크롤링 실패, 다음 시도:', i + 1, '/', results.length);
+          }
         }
         
         await this.delay(500); // 크롤링 간격
       } catch (error) {
         console.error('[searchFactCheck] 크롤링 오류:', error);
         failedArticles.push(article);
+        console.log('[searchFactCheck] 크롤링 예외, 다음 시도:', i + 1, '/', results.length);
       }
     }
     
-    // 크롤링 성공한 기사가 하나도 없으면 실패한 기사들의 요약 사용
-    if (crawledArticles.length === 0 && failedArticles.length > 0) {
-      console.warn('[searchFactCheck] 모든 크롤링 실패, 요약만 사용:', failedArticles.length, '개');
-      this.updateFactCheckStatus(blockId, `⚠️ 크롤링 실패, ${failedArticles.length}개 기사 요약만 사용`);
-      crawledArticles.push(...failedArticles.slice(0, 2)); // 최대 2개 요약 사용
-    } else if (crawledArticles.length > 0) {
-      console.log('[searchFactCheck] 크롤링 성공:', crawledArticles.length, '개, 실패:', failedArticles.length, '개');
+    // 최종 검증: 최소 요구사항 확인
+    if (crawledArticles.length < targetCount) {
+      console.warn('[searchFactCheck] 목표 미달성:', crawledArticles.length, '/', targetCount);
+      
+      // 크롤링 성공이 0개면 요약 사용
+      if (crawledArticles.length === 0 && failedArticles.length > 0) {
+        console.warn('[searchFactCheck] 모든 크롤링 실패, 요약만 사용:', failedArticles.length, '개');
+        this.updateFactCheckStatus(blockId, `⚠️ 크롤링 실패, ${Math.min(failedArticles.length, targetCount)}개 기사 요약만 사용`);
+        crawledArticles.push(...failedArticles.slice(0, targetCount));
+      } else if (crawledArticles.length === 1 && failedArticles.length > 0) {
+        // 1개만 성공했고 실패한 기사가 있으면 1개 더 요약 추가
+        console.warn('[searchFactCheck] 1개만 크롤링 성공, 요약 1개 추가');
+        this.updateFactCheckStatus(blockId, `⚠️ 1개 크롤링, 1개 요약 사용`);
+        crawledArticles.push(failedArticles[0]);
+      }
     }
+    
+    const successCount = crawledArticles.filter(a => a.crawledContent).length;
+    const snippetCount = crawledArticles.filter(a => !a.crawledContent).length;
+    console.log('[searchFactCheck] 최종 결과 - 크롤링 성공:', successCount, '개, 요약만:', snippetCount, '개');
+    console.log('[searchFactCheck] 📰 크롤링 우선 사용: snippet은 fallback으로만 사용됨');
 
     this.updateFactCheckStatus(blockId, '🤖 AI 비교 검증 중...');
     
@@ -9171,8 +9637,14 @@ AnalysisPanel.prototype.callGoogleSearchAPI = async function(query, type, limit)
       return !isExcluded;
     });
     
+    let orderedItems = filteredItems;
+
+    if (type === 'keyword') {
+      orderedItems = await this.prioritizeFactCheckResults(filteredItems);
+    }
+
     // 결과 포맷팅
-    return filteredItems.map(item => ({
+    return orderedItems.slice(0, limit).map(item => ({
       title: item.title || '제목 없음',
       snippet: item.snippet || '요약 없음',
       link: item.link || '',
@@ -9206,6 +9678,132 @@ AnalysisPanel.prototype.getSearchErrorMessage = function(errorCode) {
   };
   
   return messages[errorCode] || `⚠️ 검색 중 오류가 발생했습니다.\n\n오류 코드: ${errorCode}`;
+};
+
+// 뉴스 기사 여부 검증 (일반 모드 - 유사 기사 찾기용)
+AnalysisPanel.prototype.validateNewsArticle = async function(result) {
+  const link = (result.link || '').toLowerCase();
+  const displayLink = (result.displayLink || '').toLowerCase();
+  const title = (result.title || '').toLowerCase();
+  
+  // 1단계: 명확한 뉴스 도메인 화이트리스트
+  const trustedNewsDomains = [
+    'naver.com/news', 'news.naver.com',
+    'news.daum.net', 'v.daum.net/v',
+    'chosun.com', 'joongang.co.kr', 'donga.com',
+    'hankyung.com', 'mk.co.kr', 'sedaily.com',
+    'ytn.co.kr', 'yna.co.kr', 'newsis.com',
+    'sbs.co.kr/news', 'kbs.co.kr/news', 'mbc.co.kr/news',
+    'jtbc.co.kr/news', 'yonhapnewstv.co.kr',
+    'hani.co.kr', 'khan.co.kr', 'seoul.co.kr',
+    'mt.co.kr', 'etnews.com', 'edaily.co.kr'
+  ];
+  
+  const isTrustedNews = trustedNewsDomains.some(domain => 
+    link.includes(domain) || displayLink.includes(domain)
+  );
+  
+  if (isTrustedNews) {
+    return true;
+  }
+  
+  // 2단계: 뉴스 패턴 검증
+  const newsPatterns = [
+    '/news/', '/article/', '/view/',
+    'newsId=', 'articleId=', 'aid='
+  ];
+  
+  const hasNewsPattern = newsPatterns.some(pattern => link.includes(pattern));
+  
+  // 3단계: 제외 패턴 (쇼핑, SNS, 포럼 등)
+  const excludePatterns = [
+    'shopping', 'shop', 'store', 'mall', 'product',
+    'blog', 'cafe', 'community', 'forum',
+    'youtube', 'instagram', 'facebook', 'twitter',
+    'event', 'coupon', 'promotion'
+  ];
+  
+  const hasExcludePattern = excludePatterns.some(pattern => 
+    link.includes(pattern) || displayLink.includes(pattern) || title.includes(pattern)
+  );
+  
+  // 뉴스 패턴이 있고 제외 패턴이 없으면 유효
+  return hasNewsPattern && !hasExcludePattern;
+};
+
+// 뉴스 기사 엄격 검증 (사실 확인용 - 신뢰도 높은 뉴스만)
+AnalysisPanel.prototype.validateNewsArticleStrict = async function(result) {
+  const link = (result.link || '').toLowerCase();
+  const displayLink = (result.displayLink || '').toLowerCase();
+  
+  // 1단계: 신뢰할 수 있는 주요 언론사만 허용
+  const trustedNewsDomains = [
+    // 포털 뉴스
+    'naver.com/news', 'news.naver.com', 'n.news.naver.com',
+    'news.daum.net', 'v.daum.net/v', 'v.daum.net',
+    
+    // 종합 일간지
+    'chosun.com', 'joongang.co.kr', 'donga.com',
+    'hani.co.kr', 'khan.co.kr', 'seoul.co.kr',
+    
+    // 경제지
+    'hankyung.com', 'mk.co.kr', 'sedaily.com',
+    'mt.co.kr', 'edaily.co.kr', 'fnnews.com',
+    
+    // 통신사
+    'ytn.co.kr', 'yna.co.kr', 'newsis.com',
+    'yonhapnewstv.co.kr',
+    
+    // 방송사 (모바일 포함)
+    'sbs.co.kr', 'm.sbs.co.kr',
+    'kbs.co.kr', 'm.kbs.co.kr',
+    'mbc.co.kr', 'imnews.imbc.com',
+    'jtbc.co.kr', 'news.jtbc.co.kr',
+    'tvchosun.com',
+    
+    // IT/전문지
+    'etnews.com', 'zdnet.co.kr', 'bloter.net'
+  ];
+  
+  const isTrustedNews = trustedNewsDomains.some(domain => 
+    link.includes(domain) || displayLink.includes(domain)
+  );
+  
+  if (!isTrustedNews) {
+    console.log('[validateNewsArticleStrict] 신뢰 도메인 아님:', displayLink);
+    return false;
+  }
+  
+  // 2단계: 뉴스 URL 패턴 선택 검증 (필수 아님, 기본적으로 통과)
+  const newsPatterns = [
+    '/news/', '/article/', '/view/', '/mnews/',
+    'newsId=', 'articleId=', 'aid=', 'ncd='
+  ];
+  
+  const hasNewsPattern = newsPatterns.some(pattern => link.includes(pattern));
+  
+  // 신뢰 도메인이면 패턴 검증 생략 가능 (예: v.daum.net/v/...)
+  if (!hasNewsPattern) {
+    console.log('[validateNewsArticleStrict] ⚠️ 패턴 없지만 신뢰 도메인이므로 통과:', link);
+  }
+  
+  // 3단계: 제외 패턴 강화 (사설, 칼럼, 인터뷰 등 제외)
+  const strictExcludePatterns = [
+    'opinion', 'column', 'editorial', 'interview',
+    'blog', 'review', 'essay', 'comment'
+  ];
+  
+  const hasExcludePattern = strictExcludePatterns.some(pattern => 
+    link.includes(pattern)
+  );
+  
+  if (hasExcludePattern) {
+    console.log('[validateNewsArticleStrict] 제외 패턴 발견:', link);
+    return false;
+  }
+  
+  console.log('[validateNewsArticleStrict] ✅ 검증 통과:', displayLink);
+  return true;
 };
 
 AnalysisPanel.prototype.showSearchResults = function(blockId, results, type) {
@@ -9741,8 +10339,8 @@ AnalysisPanel.prototype.clearFactCheckStatus = function(blockId) {
 };
 
 // 뉴스 기사 크롤링 함수
-AnalysisPanel.prototype.crawlArticleContent = async function(url) {
-  console.log('[crawlArticleContent] 크롤링 시작:', url);
+AnalysisPanel.prototype.crawlArticleContent = async function(url, retryWithTab = false) {
+  console.log('[crawlArticleContent] 크롤링 시작:', url, retryWithTab ? '(탭 열기 허용)' : '');
   
   // 영구 캐시 확인 (크롤링 절약)
   const cachedContent = this.getFromCrawlCache(url);
@@ -9755,7 +10353,11 @@ AnalysisPanel.prototype.crawlArticleContent = async function(url) {
     // 먼저 Service Worker를 통한 CORS 우회 시도
     const response = await new Promise((resolve, reject) => {
       chrome.runtime.sendMessage(
-        { action: 'fetchWithCORS', url: url },
+        { 
+          action: 'fetchWithCORS', 
+          url: url,
+          allowTabOpen: retryWithTab // 두 번째 시도에서만 탭 열기 허용
+        },
         (response) => {
           if (chrome.runtime.lastError) {
             reject(new Error(chrome.runtime.lastError.message));
@@ -9777,12 +10379,46 @@ AnalysisPanel.prototype.crawlArticleContent = async function(url) {
         return iframeContent;
       }
       
+      // iframe도 실패 && 지능형 크롤링 모드 활성화 && 아직 탭 열기 안 했으면 재시도
+      if (!retryWithTab) {
+        // 설정 확인
+        const settings = await new Promise((resolve) => {
+          chrome.storage.local.get(['enable_advanced_crawling'], (data) => {
+            resolve(data);
+          });
+        });
+        
+        if (settings.enable_advanced_crawling) {
+          console.warn('[crawlArticleContent] iframe 실패, 지능형 크롤링 모드로 재시도');
+          return this.crawlArticleContent(url, true);
+        }
+      }
+      
       return null;
     }
     
     const html = response.html;
+    const initialPreview = html ? html.substring(0, 200).replace(/\n/g, ' ') + '...' : '(없음)';
+    console.log('[crawlArticleContent] 📄 HTML 수신:', html?.length || 0, '자');
+    console.log('[crawlArticleContent] 📄 HTML 미리보기:', initialPreview);
     
-    // HTML 파싱하여 본문 추출
+    // HTML이 비어있으면 조기 종료
+    if (!html || html.length < 100) {
+      console.warn('[crawlArticleContent] ❌ HTML 길이 부족:', html?.length || 0, '자');
+      return null;
+    }
+    
+    // 🤖 AI-first 방식: HTML을 바로 AI에게 전송 (조선일보 등 모든 뉴스 사이트 지원)
+    console.log('[crawlArticleContent] 🤖 AI 파싱 시작 (전체:', html.length, '자)');
+    
+    const aiParsedContent = await this.parseHtmlWithAI(html, url);
+    if (aiParsedContent) {
+      this.saveToCrawlCache(url, aiParsedContent);
+      console.log('[crawlArticleContent] ✅ AI 파싱 성공, 길이:', aiParsedContent.length);
+      return aiParsedContent;
+    }
+    
+    // AI 실패 시 fallback: HTML 파싱하여 본문 추출 (기존 방식)
     const parser = new DOMParser();
     const doc = parser.parseFromString(html, 'text/html');
     
@@ -9832,6 +10468,89 @@ AnalysisPanel.prototype.crawlArticleContent = async function(url) {
     
   } catch (error) {
     console.warn('[crawlArticleContent] ❌ 크롤링 실패:', error?.message || error);
+    return null;
+  }
+};
+
+// AI를 사용한 HTML 파싱 (AI-first 방식: HTML을 바로 AI에게 전송)
+AnalysisPanel.prototype.parseHtmlWithAI = async function(html, url) {
+  try {
+    console.log('[parseHtmlWithAI] 📥 원본 HTML 길이:', html.length, '자');
+    
+    // HTML을 바로 AI에게 전송 (최대 50000자)
+    const truncatedHtml = html.substring(0, 50000);
+    
+    console.log('[parseHtmlWithAI] 📤 AI에게 전달할 HTML 길이:', truncatedHtml.length, '자');
+    
+    // Gemini API로 HTML에서 제목과 본문 추출 요청
+    const prompt = `다음은 뉴스 기사 웹페이지의 HTML 코드입니다. 이 HTML에서 **기사 제목**과 **본문 내용**만 추출해서 JSON 형식으로 반환하세요.
+
+규칙:
+- 광고, 메뉴, 관련 기사 링크, 댓글, 네비게이션은 제외
+- 본문은 기사의 실제 내용만 포함
+- 기자 이름, 날짜는 포함해도 됨
+- Next.js의 __NEXT_DATA__ JSON이 있으면 그 안에서 추출하세요
+
+HTML:
+${truncatedHtml}
+
+다음 JSON 형식으로만 응답하세요:
+\`\`\`json
+{
+  "title": "기사 제목",
+  "content": "본문 내용"
+}
+\`\`\``;
+
+    console.log('[parseHtmlWithAI] 📤 Gemini에 전달할 prompt 길이:', prompt.length, '자');
+
+    const response = await new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage({
+        action: 'analyzeNewsWithGemini',
+        blockId: 'html_parser_' + Date.now(),
+        newsContent: prompt,
+        isStreaming: false
+      }, (response) => {
+        if (chrome.runtime.lastError) {
+          reject(new Error(chrome.runtime.lastError.message));
+        } else {
+          resolve(response);
+        }
+      });
+    });
+    
+    // 비스트리밍 모드는 '분석 완료 및 결과 전송 성공' 반환
+    if (!response.result) {
+      console.error('[parseHtmlWithAI] AI 파싱 실패 - result 없음:', response);
+      return null;
+    }
+    
+    console.log('[parseHtmlWithAI] ✅ AI 응답 수신:', typeof response.result);
+    
+    // response.result가 이미 객체인 경우 vs 문자열인 경우 처리
+    let parsed;
+    if (typeof response.result === 'object' && response.result !== null) {
+      parsed = response.result;
+      console.log('[parseHtmlWithAI] 📦 이미 파싱된 객체 수신');
+    } else if (typeof response.result === 'string') {
+      parsed = this.extractJsonFromAiResponse(response.result);
+      console.log('[parseHtmlWithAI] 📝 문자열에서 JSON 추출');
+    } else {
+      console.error('[parseHtmlWithAI] ❌ 알 수 없는 타입:', typeof response.result);
+      return null;
+    }
+    
+    if (parsed && parsed.title && parsed.content) {
+      const formatted = `제목: ${parsed.title}\n\n${parsed.content}`;
+      console.log('[parseHtmlWithAI] ✅ AI 파싱 성공 - 제목:', parsed.title.substring(0, 30), '/ 본문:', parsed.content.length, '자');
+      return formatted;
+    }
+    
+    console.error('[parseHtmlWithAI] JSON 파싱 실패:', parsed);
+    return null;
+    
+  } catch (error) {
+    console.error('[parseHtmlWithAI] AI 파싱 오류:', error);
     return null;
   }
 };
@@ -9958,6 +10677,27 @@ AnalysisPanel.prototype.safeParseJsonString = function(jsonString) {
 AnalysisPanel.prototype.verifyFactsWithAI = async function(originalBlock, comparisonArticles) {
   console.log('[verifyFactsWithAI] AI 검증 시작');
   
+  // 빈 데이터 검증 (Gemini API 400 에러 방지)
+  if (!originalBlock || !originalBlock.title || !originalBlock.content) {
+    console.error('[verifyFactsWithAI] 원본 기사 데이터 없음');
+    return {
+      일치하는_사실: [],
+      불일치하는_사실: [],
+      검증_불가: [],
+      종합_평가: '원본 기사 데이터가 충분하지 않습니다.'
+    };
+  }
+  
+  if (!comparisonArticles || comparisonArticles.length === 0) {
+    console.error('[verifyFactsWithAI] 비교 기사 없음');
+    return {
+      일치하는_사실: [],
+      불일치하는_사실: [],
+      검증_불가: [originalBlock.title],
+      종합_평가: '비교할 기사가 없어 검증할 수 없습니다.'
+    };
+  }
+  
   const prompt = `
 당신은 사실 검증 전문가입니다. 원본 뉴스 기사와 비교 기사들을 분석하여 사실 여부를 검증하세요.
 
@@ -9966,13 +10706,17 @@ AnalysisPanel.prototype.verifyFactsWithAI = async function(originalBlock, compar
 내용: ${originalBlock.content.substring(0, 1000)}
 
 ## 비교 기사들
-${comparisonArticles.map((article, i) => `
+${comparisonArticles.map((article, i) => {
+  // 🔥 크롤링 본문 우선 사용, snippet은 fallback
+  const content = article.crawledContent || article.snippet;
+  const source = article.crawledContent ? '(크롤링 본문)' : '(Google 검색 요약)';
+  return `
 ### 비교 기사 ${i + 1}
 제목: ${article.title}
-출처: ${article.displayLink}
-요약: ${article.snippet}
-${article.crawledContent ? `본문 일부: ${article.crawledContent.substring(0, 500)}` : '(본문 크롤링 실패)'}
-`).join('\n')}
+출처: ${article.displayLink} ${source}
+내용: ${content.substring(0, 800)}
+`;
+}).join('\n')}
 
 ## 작업
 원본 기사의 핵심 주장들을 비교 기사들과 대조하여 다음을 분석하세요:
@@ -9991,33 +10735,33 @@ JSON 형식으로 응답:
 `;
 
   try {
-    const apiKey = 'AIzaSyCj9T9GNDQLduYbwPAGn6ovK44RlCnZHDU'; // Gemini API 키
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }]
-      })
+    // service_worker를 통해 비스트리밍 모드로 호출
+    return new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage({
+        action: 'analyzeNewsWithGemini',
+        newsContent: prompt,
+        blockId: 'fact_verify_' + Date.now(),
+        isStreaming: false
+      }, (response) => {
+        if (chrome.runtime.lastError) {
+          console.error('[verifyFactsWithAI] 메시지 전송 오류:', chrome.runtime.lastError);
+          reject(chrome.runtime.lastError);
+          return;
+        }
+        
+        if (response.status === '분석 완료 및 결과 전송 성공' && response.result) {
+          resolve(response.result);
+        } else {
+          console.warn('[verifyFactsWithAI] 응답 파싱 실패:', response);
+          resolve({
+            일치하는_사실: [],
+            불일치하는_사실: [],
+            검증_불가: [],
+            종합_평가: '검증 결과를 파싱할 수 없습니다.'
+          });
+        }
+      });
     });
-    
-    if (!response.ok) {
-      throw new Error(`AI API 오류: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    const resultText = data.candidates[0]?.content?.parts[0]?.text || '{}';
-    const parsed = this.extractJsonFromAiResponse(resultText);
-    if (parsed) {
-      return parsed;
-    }
-    
-    console.warn('[verifyFactsWithAI] JSON 파싱 실패, 기본값 반환');
-    return {
-      일치하는_사실: [],
-      불일치하는_사실: [],
-      검증_불가: [],
-      종합_평가: '검증 결과를 파싱할 수 없습니다.'
-    };
     
   } catch (error) {
     console.error('[verifyFactsWithAI] AI 검증 오류:', error);
@@ -10034,6 +10778,16 @@ JSON 형식으로 응답:
 AnalysisPanel.prototype.reanalyzeWithFactCheck = async function(originalBlock, comparisonArticles, verificationResult) {
   console.log('[reanalyzeWithFactCheck] 재분석 시작');
   
+  // 빈 데이터 검증
+  if (!originalBlock || !originalBlock.title || !originalBlock.content || !originalBlock.result) {
+    console.error('[reanalyzeWithFactCheck] 원본 기사 데이터 부족');
+    return {
+      ...originalBlock?.result,
+      사실검증완료: false,
+      분석: '원본 기사 데이터가 충분하지 않아 재분석할 수 없습니다.'
+    };
+  }
+  
   const prompt = `
 당신은 뉴스 진위 판별 전문가입니다. 기존 분석 결과와 사실 검증 결과를 종합하여 **최종 분석을 업데이트**하세요.
 
@@ -10045,13 +10799,18 @@ AnalysisPanel.prototype.reanalyzeWithFactCheck = async function(originalBlock, c
 ${JSON.stringify(originalBlock.result, null, 2)}
 
 ## 사실 검증 결과 (${comparisonArticles.length}개 기사와 비교)
-${comparisonArticles.map((article, i) => `
+${comparisonArticles.map((article, i) => {
+  // 🔥 크롤링 본문 우선 사용, snippet은 fallback
+  const content = article.crawledContent || article.snippet;
+  const source = article.crawledContent ? '크롤링 본문' : 'Google 검색 요약';
+  return `
 ### 검증 기사 ${i + 1}
 - 제목: ${article.title}
 - 출처: ${article.displayLink}
-- 요약: ${article.snippet}
-${article.crawledContent ? `- 본문 일부: ${article.crawledContent.substring(0, 400)}` : ''}
-`).join('\n')}
+- 유형: ${source}
+- 내용: ${content.substring(0, 600)}
+`;
+}).join('\n')}
 
 ### 검증 분석
 - 일치하는 사실: ${verificationResult.일치하는_사실?.join(', ') || '없음'}
@@ -10095,40 +10854,40 @@ JSON 형식으로 응답:
 `;
 
   try {
-    const apiKey = 'AIzaSyCj9T9GNDQLduYbwPAGn6ovK44RlCnZHDU';
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }]
-      })
+    // service_worker를 통해 비스트리밍 모드로 호출
+    return new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage({
+        action: 'analyzeNewsWithGemini',
+        newsContent: prompt,
+        blockId: 'reanalyze_' + Date.now(),
+        isStreaming: false
+      }, (response) => {
+        if (chrome.runtime.lastError) {
+          console.error('[reanalyzeWithFactCheck] 메시지 전송 오류:', chrome.runtime.lastError);
+          reject(chrome.runtime.lastError);
+          return;
+        }
+        
+        if (response.status === '분석 완료 및 결과 전송 성공' && response.result) {
+          resolve(response.result);
+        } else {
+          console.warn('[reanalyzeWithFactCheck] 응답 파싱 실패:', response);
+          resolve({
+            ...originalBlock?.result,
+            사실검증완료: false,
+            분석: '재분석 중 오류가 발생했습니다.'
+          });
+        }
+      });
     });
-    
-    if (!response.ok) {
-      throw new Error(`AI API 오류: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    const resultText = data.candidates[0]?.content?.parts[0]?.text || '{}';
-    const parsed = this.extractJsonFromAiResponse(resultText);
-    if (parsed) {
-      console.log('[reanalyzeWithFactCheck] 재분석 완료');
-      return parsed;
-    }
-    
-    // 파싱 실패 시 기존 결과에 사실검증완료 플래그만 추가
-    console.warn('[reanalyzeWithFactCheck] JSON 파싱 실패, 기존 결과 사용');
-    return {
-      ...originalBlock.result,
-      사실검증완료: true
-    };
     
   } catch (error) {
     console.error('[reanalyzeWithFactCheck] 재분석 오류:', error);
     // 오류 시 기존 결과 반환
     return {
       ...originalBlock.result,
-      사실검증완료: true
+      사실검증완료: false,
+      분석: '재분석 중 오류가 발생했습니다.'
     };
   }
 };

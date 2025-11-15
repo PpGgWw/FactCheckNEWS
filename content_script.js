@@ -860,6 +860,14 @@ if (isChromeApiAvailable()) {
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       console.log('메시지 수신:', message);
       
+      // 탭 크롤링 요청 처리 (service_worker로부터)
+      if (message.action === "extractContent") {
+        const html = document.documentElement.outerHTML;
+        console.log('[extractContent] 페이지 HTML 전송, 길이:', html.length);
+        sendResponse({ html: html });
+        return true;
+      }
+      
       if (message.action === "displayAnalysisResult" && message.result) {
         // 결과를 패널에 표시
         const panel = document.getElementById('news-analysis-panel');

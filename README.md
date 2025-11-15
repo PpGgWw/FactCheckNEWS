@@ -31,7 +31,6 @@ Gemini AI 기반 실시간 뉴스 팩트체크 확장 프로그램
   - 최대 5개 검색 결과까지 순회하며 유효한 기사 내용 확보
 
 - **검색 결과 품질 개선**
-  - Google Custom Search Engine ID를 `70364eb765310426e`로 업데이트
   - 뉴스 도메인 필터링 강화: 주요 언론사(naver.com, chosun.com, joongang.co.kr 등)만 검색 대상으로 제한
   - 일반 블로그/커뮤니티 결과 자동 제외로 신뢰도 높은 교차 검증 가능
 
@@ -109,7 +108,7 @@ Gemini AI 기반 실시간 뉴스 팩트체크 확장 프로그램
 아래 파일 또는 폴더의 코드를 수정하면 반드시 빌드 과정을 거쳐야 합니다:
 
 - `panel/tailwind.css`, `tailwind.config.js` 등 **디자인/스타일 관련 파일**
-- `panel/index.js`, `panel/Panel.jsx` 등 **패널 UI/React 컴포넌트**
+- `panel/Panel.html` 등 **패널 UI 레이아웃/스타일 파일**
 - `components/AnalysisBlock.js`, `components/AnalysisPanel.js` 등 **분석 UI 컴포넌트**
 - 기타 **CSS, JS, JSX, 스타일 관련 코드**
 
@@ -173,8 +172,7 @@ FactCheckNEWS/
 │   ├── EvidenceBlock.js       # 근거 블록
 │   └── AnalysisDetailBlock.js # 상세 분석 블록
 ├── panel/
-│   ├── Panel.jsx              # React 패널 컴포넌트
-│   ├── index.js               # 패널 진입점
+│   ├── Panel.html             # 패널 UI 정적 HTML
 │   └── tailwind.css           # 컴파일된 스타일
 ├── color/
 │   └── theme.js               # 테마 색상 정의

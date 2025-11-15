@@ -6,9 +6,14 @@
   "icons": {
     "48": "icon48.png"
   },
-  "permissions": ["storage"],
+  "permissions": [
+    "storage",
+    "scripting",
+    "tabs"
+  ],
   "host_permissions": [
-    "https://generativelanguage.googleapis.com/*"
+    "https://generativelanguage.googleapis.com/*",
+    "<all_urls>"
   ],
   "background": {
     "service_worker": "service_worker.js"
