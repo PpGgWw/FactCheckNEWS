@@ -6,122 +6,43 @@ class AnalysisPanel {
     this.newsBlocks = new Map(); // 분석된 뉴스 블록들을 관리하는 Map
     this.activeNewsStates = new Map(); // 각 URL별 분석 상태 관리
     this.activeNewsUrl = null; // 현재 패널에 표시 중인 뉴스 URL
-    this.currentAnalyzingBlockId = null; // 현재 분석 중인 블록 ID (순차 분석용)
-    this.blockIdCounter = 0; // 고유 ID 생성용
-    this.MAX_NEWS_BLOCKS = 20; // 최대 저장 블록 수 제한
-    this.streamingResults = new Map(); // 실시간 스트리밍 결과 저장
-    this.streamingDiffCache = new Map(); // 스트리밍 누적 텍스트 캐시
-    this.analysisTimeouts = new Map(); // 분석 타임아웃 관리
-    this.abortControllers = new Map(); // API 요청 중단용 AbortController
-    this.API_KEY_PLACEHOLDER = 'NONE';
-    this.geminiKeyReady = this.hasLocalApiKey('gemini_api_key');
-    this.googleKeyReady = this.hasLocalApiKey('google_search_api_key');
-    
-    // 실시간 타이핑 효과 관련 속성
-    this.typingSpeed = 30; // 타이핑 속도 (ms)
-    this.currentTypingIntervals = new Map(); // 현재 타이핑 중인 인터벌들
-    this.analysisSteps = ['분석진행', '진위', '근거', '분석', '요약']; // 분석 단계
-    this.panelOpacity = this.getPanelOpacitySetting();
-    this.isHistoryCollapsed = this.getCollapsedStateSetting(); // localStorage에서 복원
-    this.collapsedHistoryExpanded = false;
-    this.originalHtmlHeight = null;
-    this.originalWindowScrollTo = null;
-    this.originalWindowScrollBy = null;
-    this.scrollPropertyDescriptors = null;
-    this.scrollPropsOverridden = false;
-    this.savedScrollPosition = { top: 0, left: 0 };
-    this.boundWrapperScrollHandler = null;
-    this.currentPageOffset = 0;
-    this.activeDetailOverlay = null;
-    this.detailEscapeHandler = null;
-    this.preDetailFocus = null;
-    this.crossVerificationInProgress = new Set(); // 교차 검증 중인 블록 ID들
-    this.searchInProgress = new Set(); // 사실 검증/유사 기사 검색 중인 블록 추적
-    this.autoFactCheckQueue = new Set(); // 자동 사실 검증 대기열
-    this.palette = this.initializePalette();
-
-    this.syncApiKeysFromStorage();
-    this.USE_REAL_API = this.getGoogleSearchEnabled(); // Google Search API 설정 초기화
-    this.loadSavedNewsBlocks();
-  }
-
-  initializePalette(overrides = {}) {
-    const defaultPalette = {
-      base: '#0D0D0D',
-      surface: '#141414',
-      surfaceAlt: '#1F1F1F',
-      surfaceSoft: 'rgba(255, 255, 255, 0.05)',
-      surfaceBorder: 'rgba(255, 255, 255, 0.1)',
-      accent: '#F2CEA2',
-      accentAlt: '#BF9780',
-      text: '#F3F4F6',
-      textMuted: '#A5A5A5',
-      textAlt: '#E5E7EB',
-      border: 'rgba(255, 255, 255, 0.18)',
-      success: '#10B981',
-      warning: '#F59E0B',
-      danger: '#EF4444',
-      info: '#3B82F6',
-      badgeBackground: 'rgba(255, 255, 255, 0.08)',
-      badgeBorder: 'rgba(255, 255, 255, 0.2)',
-      badgeText: '#F9FAFB'
-    };
-
-    const palette = { ...defaultPalette, ...overrides };
-
-    try {
-      if (typeof window !== 'undefined') {
-        if (window.FactCheckPalette && typeof window.FactCheckPalette === 'object') {
-          Object.assign(palette, window.FactCheckPalette);
+    Object.defineProperty(this, 'currentNews', {
+      get: () => {
+        if (!this.activeNewsUrl) {
+          return null;
         }
-        const root = document.documentElement;
-        if (root && typeof getComputedStyle === 'function') {
-          const computed = getComputedStyle(root);
-          const cssMap = {
-            base: '--factcheck-panel-base',
-            surface: '--factcheck-panel-surface',
-            surfaceAlt: '--factcheck-panel-surface-alt',
-            accent: '--factcheck-panel-accent',
-            text: '--factcheck-panel-text',
-            textMuted: '--factcheck-panel-text-muted',
-            border: '--factcheck-panel-border'
-          };
-          Object.entries(cssMap).forEach(([key, varName]) => {
-            const value = computed.getPropertyValue(varName);
-            if (value && value.trim()) {
-              palette[key] = value.trim();
-            }
-          });
-        }
-      }
-    } catch (error) {
-      console.warn('[Palette] Failed to read theme variables, using defaults:', error);
-    }
-
-    const fallbackColor = palette.base;
-    return new Proxy(palette, {
-      get(target, prop) {
-        if (prop in target) {
-          return target[prop];
-        }
-        if (typeof prop !== 'string') {
-          return target[prop];
-        }
-        if (prop.endsWith('Alt')) {
-          const baseKey = prop.slice(0, -3);
-          if (baseKey in target) {
-            return target[baseKey];
-          }
-        }
-        if (prop.endsWith('Muted')) {
-          const baseKey = prop.slice(0, -5);
-          if (baseKey in target) {
-            return target[baseKey];
-          }
-        }
-        return fallbackColor;
+        return this.activeNewsStates.get(this.activeNewsUrl) || null;
       }
     });
+    this.currentAnalyzingBlockId = null; // 현재 분석 중인 블록 ID (순차 분석용)
+    this.palette = this.initializePalette();
+    this.panelOpacity = this.getPanelOpacitySetting();
+    this.blockIdCounter = 0;
+    this.analysisTimeouts = new Map();
+    this.abortControllers = new Map();
+    this.crossVerificationInProgress = new Set();
+    this.streamingResults = new Map();
+    this.streamingDiffCache = new Map();
+    this.searchInProgress = new Set();
+    this.autoFactCheckQueue = new Set();
+    this.persistentSearchCache = new Map();
+    this.persistentCrawlCache = new Map();
+    
+    // API_KEY_PLACEHOLDER 상수 정의
+    this.API_KEY_PLACEHOLDER = 'NONE';
+    
+    // USE_REAL_API 초기화 (Google Search API 설정과 동기화)
+    this.USE_REAL_API = this.getGoogleSearchEnabled();
+
+    try {
+      this.loadPersistentCache();
+    } catch (error) {
+      console.warn('Failed to load persistent caches on init:', error);
+    }
+
+    if (this.isChromeApiAvailable()) {
+      this.setupMessageListener();
+    }
   }
 
   hasLocalApiKey(key) {
@@ -180,6 +101,7 @@ class AnalysisPanel {
     }
 
     this.updateHeaderApiIndicator();
+    this.updateApiQuotaDisplay();
     this.enforceApiKeyDependencies();
   }
   
@@ -228,6 +150,70 @@ class AnalysisPanel {
     dot.style.boxShadow = `0 0 12px ${this.hexToRgba(color, 0.6)}`;
     textEl.textContent = text;
     textEl.style.color = this.hexToRgba(color, 0.85);
+  }
+
+  // API 할당량 표시 업데이트
+  updateApiQuotaDisplay() {
+    const panel = document.getElementById(this.panelId);
+    if (!panel) return;
+
+    const geminiKeyStatus = panel.querySelector('#gemini-key-status');
+    const googleKeyStatus = panel.querySelector('#google-key-status');
+    const geminiQuota = panel.querySelector('#gemini-quota');
+    const googleQuota = panel.querySelector('#google-quota');
+
+    // Gemini API 상태 업데이트
+    if (geminiKeyStatus) {
+      const geminiReady = this.isGeminiKeyConfigured();
+      geminiKeyStatus.textContent = geminiReady ? '입력됨' : '미입력';
+      geminiKeyStatus.style.color = geminiReady ? '#10B981' : '#EF4444';
+    }
+
+    // Google Search API 상태 업데이트
+    if (googleKeyStatus) {
+      const googleReady = this.isGoogleApiConfigured();
+      googleKeyStatus.textContent = googleReady ? '입력됨' : '미입력';
+      googleKeyStatus.style.color = googleReady ? '#10B981' : '#EF4444';
+    }
+
+    // 할당량 표시 (오늘 사용량 기준)
+    const today = new Date().toDateString();
+    const geminiUsage = this.getApiUsageCount('gemini', today);
+    const googleUsage = this.getApiUsageCount('google', today);
+
+    if (geminiQuota) {
+      geminiQuota.textContent = geminiUsage > 0 ? `(총 ${geminiUsage}회)` : '';
+    }
+
+    if (googleQuota) {
+      googleQuota.textContent = googleUsage > 0 ? `(총 ${googleUsage}회)` : '';
+    }
+  }
+
+  // API 사용 횟수 가져오기
+  getApiUsageCount(apiType, date) {
+    try {
+      const key = `api_usage_${apiType}_${date}`;
+      const stored = localStorage.getItem(key);
+      return stored ? parseInt(stored) : 0;
+    } catch (error) {
+      console.warn('Failed to get API usage count:', error);
+      return 0;
+    }
+  }
+
+  // API 사용 횟수 증가
+  incrementApiUsage(apiType, count = 1) {
+    try {
+      const today = new Date().toDateString();
+      const key = `api_usage_${apiType}_${today}`;
+      const current = this.getApiUsageCount(apiType, today);
+      localStorage.setItem(key, (current + count).toString());
+      console.log(`[API Usage] ${apiType} API 사용: +${count}, 총 ${current + count}회 (오늘)`);
+      this.updateApiQuotaDisplay();
+    } catch (error) {
+      console.warn('Failed to increment API usage:', error);
+    }
   }
 
   updateApiStatusBadges(rootEl, snapshot = null) {
@@ -412,6 +398,11 @@ class AnalysisPanel {
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       if (message.action === 'notifyQuotaError') {
         console.warn('[AnalysisPanel] 할당량 오류 알림 수신');
+        const apiType = message.resetApiUsageType || 'gemini';
+        if (typeof this.resetApiUsageCount === 'function') {
+          this.resetApiUsageCount(apiType);
+          this.updateApiQuotaDisplay();
+        }
         this.showQuotaErrorToast(message.blockId || null);
         if (typeof sendResponse === 'function') {
           sendResponse({ success: true });
@@ -471,6 +462,63 @@ class AnalysisPanel {
     ensureLocal('factcheck_cross_verification_depth', '3');
   }
 
+  // 패널 테마 색상 초기화
+  initializePalette() {
+    const fallback = this.getDefaultPalette();
+
+    if (typeof window === 'undefined' || typeof document === 'undefined') {
+      return fallback;
+    }
+
+    try {
+      const root = document.documentElement;
+      if (!root) {
+        return fallback;
+      }
+
+      const computed = window.getComputedStyle(root);
+      const readVar = (name) => {
+        if (!name) return '';
+        const value = computed.getPropertyValue(name);
+        return typeof value === 'string' ? value.trim() : '';
+      };
+
+      const cssPalette = {
+        base: readVar('--factcheck-panel-base'),
+        surface: readVar('--factcheck-panel-surface'),
+        surfaceAlt: readVar('--factcheck-panel-surface-alt'),
+        accent: readVar('--factcheck-panel-accent'),
+        text: readVar('--factcheck-panel-text'),
+        textAlt: readVar('--factcheck-panel-text-alt'),
+        textMuted: readVar('--factcheck-panel-text-muted'),
+        border: readVar('--factcheck-panel-border')
+      };
+
+      return Object.entries(cssPalette).reduce((palette, [key, value]) => {
+        if (value) {
+          palette[key] = value;
+        }
+        return palette;
+      }, { ...fallback });
+    } catch (error) {
+      console.warn('[AnalysisPanel] Failed to read palette variables:', error);
+      return fallback;
+    }
+  }
+
+  getDefaultPalette() {
+    return {
+      base: '#0D0D0D',
+      surface: '#151515',
+      surfaceAlt: '#1E1E1E',
+      accent: '#F2CEA2',
+      text: '#F8FAFC',
+      textAlt: '#E2E8F0',
+      textMuted: '#94A3B8',
+      border: 'rgba(255, 255, 255, 0.15)'
+    };
+  }
+
   // 메인 패널 생성
   create() {
     const existingPanel = document.getElementById(this.panelId);
@@ -503,6 +551,12 @@ class AnalysisPanel {
     
     // 초기 컨텐츠 렌더링
     this.renderPanel(panelContainer);
+    
+    // 패널 생성 후 저장된 블록 복원
+    this.loadSavedData();
+    
+    // API 키 상태 초기화
+    this.refreshApiKeyFlags();
     
     return panelContainer;
   }
@@ -712,25 +766,31 @@ class AnalysisPanel {
   // 진위 여부에 따른 색상 반환
   getVerdictColors(verdict) {
     const palette = {
-      '진짜 뉴스': {
+      '사실': {
         base: '#22C55E',
         badgeBackground: 'rgba(34, 197, 94, 0.18)',
         badgeText: '#BBF7D0',
         badgeBorder: 'rgba(34, 197, 94, 0.55)'
       },
-      '가짜일 가능성이 있는 뉴스': {
+      '대체로 사실': {
+        base: '#10B981',
+        badgeBackground: 'rgba(16, 185, 129, 0.18)',
+        badgeText: '#A7F3D0',
+        badgeBorder: 'rgba(16, 185, 129, 0.55)'
+      },
+      '일부 사실': {
         base: '#F59E0B',
         badgeBackground: 'rgba(245, 158, 11, 0.18)',
         badgeText: '#FDE68A',
         badgeBorder: 'rgba(245, 158, 11, 0.55)'
       },
-      '가짜일 가능성이 높은 뉴스': {
+      '대체로 거짓': {
         base: '#F97316',
         badgeBackground: 'rgba(249, 115, 22, 0.18)',
         badgeText: '#FDBA74',
         badgeBorder: 'rgba(249, 115, 22, 0.55)'
       },
-      '가짜 뉴스': {
+      '거짓': {
         base: '#EF4444',
         badgeBackground: 'rgba(239, 68, 68, 0.18)',
         badgeText: '#FCA5A5',
@@ -738,7 +798,7 @@ class AnalysisPanel {
       }
     };
 
-    const selected = palette[verdict] || palette['가짜일 가능성이 있는 뉴스'];
+    const selected = palette[verdict] || palette['일부 사실'];
     return {
       ...selected,
       text: selected.base,
@@ -1094,7 +1154,7 @@ class AnalysisPanel {
         background: linear-gradient(135deg, ${surfaceAlt} 0%, ${accent} 100%);
         padding: 20px;
         border-bottom: none;
-        border-radius: 20px 20px 0 0;
+        border-radius: 20px 0 0 0;
         flex-shrink: 0;
         position: relative;
         overflow: hidden;
@@ -1131,21 +1191,26 @@ class AnalysisPanel {
             </div>
             
             <div style="display: flex; align-items: center; gap: 8px;">
-              <div style="display: flex; align-items: center; gap: 6px; margin-right: 8px;">
-                <div style="
-                  width: 10px;
-                  height: 10px;
-                  background: #10B981;
-                  border-radius: 50%;
-                  animation: pulse 2s infinite;
-                  box-shadow: 0 0 12px rgba(16, 185, 129, 0.6);
-                "></div>
-                <span style="
-                  font-size: 11px;
-                  color: ${textMuted};
-                  font-weight: 500;
-                ">연결됨</span>
+              <div id="api-status-container" style="display: flex; flex-direction: column; gap: 2px; font-size: 10px; color: ${textMuted}; font-weight: 500;">
+                <!-- Gemini API 상태 -->
+                <div style="display: flex; align-items: center; gap: 4px;">
+                  <span style="color: ${text}; font-weight: 600; font-size: 10px;">Gemini:</span>
+                  <span id="gemini-key-status" style="color: ${this.isGeminiKeyConfigured() ? '#10B981' : '#EF4444'}; font-weight: 600; font-size: 10px;">
+                    ${this.isGeminiKeyConfigured() ? '입력됨' : '미입력'}
+                  </span>
+                  <span id="gemini-quota" style="color: #F8FAFC; font-size: 10px; font-weight: 600;"></span>
+                </div>
+                
+                <!-- Google Search API 상태 -->
+                <div style="display: flex; align-items: center; gap: 4px;">
+                  <span style="color: ${text}; font-weight: 600; font-size: 10px;">Google:</span>
+                  <span id="google-key-status" style="color: ${this.isGoogleApiConfigured() ? '#10B981' : '#EF4444'}; font-weight: 600; font-size: 10px;">
+                    ${this.isGoogleApiConfigured() ? '입력됨' : '미입력'}
+                  </span>
+                  <span id="google-quota" style="color: #F8FAFC; font-size: 10px; font-weight: 600;"></span>
+                </div>
               </div>
+              <div style="display: flex; align-items: center; gap: 8px;">
               
               <button id="settings-btn" style="
                 width: 36px;
@@ -1186,6 +1251,7 @@ class AnalysisPanel {
                 color: ${text};
               " onmouseover="this.style.background='rgba(239, 68, 68, 0.25)'; this.style.transform='scale(1.05)';" 
                  onmouseout="this.style.background='rgba(13, 13, 13, 0.25)'; this.style.transform='scale(1)';">&times;</button>
+              </div>
             </div>
           </div>
         </div>
@@ -1258,7 +1324,76 @@ class AnalysisPanel {
     }
     
     const currentNews = this.activeNewsStates.get(this.activeNewsUrl);
+    currentNews.linkedId = this.getCurrentLinkedBlockId();
     return this.renderNewsBlock(currentNews, true);
+  }
+
+  isCurrentBlockId(blockId) {
+    if (!blockId) {
+      return false;
+    }
+    if (blockId === 'current') {
+      return true;
+    }
+    if (typeof blockId === 'string') {
+      return blockId.startsWith('current-');
+    }
+    return false;
+  }
+
+  getCurrentLinkedBlockId() {
+    if (!this.currentNews || !this.currentNews.url || this.newsBlocks.size === 0) {
+      return null;
+    }
+
+    const normalizeUrl = (urlString) => {
+      try {
+        const urlObj = new URL(urlString);
+        return urlObj.origin + urlObj.pathname;
+      } catch {
+        return urlString;
+      }
+    };
+
+    const currentUrl = normalizeUrl(this.currentNews.url);
+    const entry = Array.from(this.newsBlocks.entries()).find(([, block]) => normalizeUrl(block.url) === currentUrl);
+    return entry ? entry[0] : null;
+  }
+
+  resolveBlockKeyFromElement(element) {
+    if (!element) {
+      return null;
+    }
+
+    const parentBlock = element.closest('.news-block');
+    if (parentBlock && parentBlock.dataset.blockKey) {
+      const keyCandidate = parentBlock.dataset.blockKey;
+      if (keyCandidate && keyCandidate !== 'current') {
+        const parsed = parseInt(keyCandidate, 10);
+        if (!Number.isNaN(parsed)) {
+          return parsed;
+        }
+      }
+      if (keyCandidate === 'current') {
+        const linkedId = this.getCurrentLinkedBlockId();
+        return linkedId !== null && linkedId !== undefined ? linkedId : 'current';
+      }
+    }
+
+    const rawId = element.dataset ? element.dataset.id : null;
+    if (this.isCurrentBlockId(rawId)) {
+      const linkedId = this.getCurrentLinkedBlockId();
+      return linkedId !== null && linkedId !== undefined ? linkedId : 'current';
+    }
+
+    if (rawId) {
+      const parsed = parseInt(rawId, 10);
+      if (!Number.isNaN(parsed)) {
+        return parsed;
+      }
+    }
+
+    return null;
   }
 
   // 분석된 뉴스들 렌더링
@@ -1402,11 +1537,12 @@ class AnalysisPanel {
     }
 
     const currentNews = this.activeNewsStates.get(this.activeNewsUrl);
+    const block = currentNews;
     const safeTitle = currentNews.title || '제목 없음';
     const status = currentNews.status || 'pending';
     const result = currentNews.result;
     // 다른 뉴스가 분석 중이면 버튼 비활성화
-    const isOtherAnalyzing = this.currentAnalyzingBlockId !== null && this.currentAnalyzingBlockId !== block.id;
+    const isOtherAnalyzing = this.currentAnalyzingBlockId !== null && block && this.currentAnalyzingBlockId !== block.id;
     const showAnalyzeBtn = (status === 'pending' || status === 'error') && !isOtherAnalyzing;
     const isAnalyzing = status === 'analyzing';
     const isCompleted = status === 'completed';
@@ -1706,19 +1842,22 @@ class AnalysisPanel {
   renderNewsBlock(block, isCurrent = false) {
     const { id, title, url, status, result, progress } = block;
     const { base, surface, surfaceAlt, accent, text, textMuted, border } = this.palette;
+    const urlTextColor = this.hexToRgba(text, 0.92);
+    const urlHoverColor = this.hexToRgba(accent, 0.9);
+    const blockKey = typeof block.linkedId === 'number'
+      ? block.linkedId
+      : (typeof id === 'number' ? id : (this.isCurrentBlockId(id) ? 'current' : id));
+    const blockKeyAttr = blockKey !== undefined && blockKey !== null ? blockKey : '';
     const encodedUrl = encodeURIComponent(url || '');
     const isCompleted = status === 'completed';
     const isAnalyzing = status === 'analyzing';
-    const isCompareMode = block.compareMode || false;
     const verdictColors = result && result.진위 ? this.getVerdictColors(result.진위) : null;
-    const hasGlow = isCompleted && verdictColors && !isCompareMode;
+    const hasGlow = isCompleted && verdictColors;
     const glowColor = hasGlow ? verdictColors.base : null;
 
-    const defaultBackground = this.blendColors(surface, base, isCurrent ? 0.28 : 0.22);
-    const compareBackground = this.blendColors(accent, base, 0.32);
-    let blockBackground = isCompareMode ? compareBackground : defaultBackground;
-    let borderColor = isCompareMode ? this.hexToRgba(accent, 0.6) : 'rgba(140, 110, 84, 0.55)';
-    let boxShadow = isCompareMode ? '0 14px 26px rgba(0, 0, 0, 0.35)' : '0 4px 12px rgba(0, 0, 0, 0.25)';
+    let blockBackground = this.blendColors(surface, base, isCurrent ? 0.28 : 0.22);
+    let borderColor = 'rgba(140, 110, 84, 0.55)';
+    let boxShadow = '0 4px 12px rgba(0, 0, 0, 0.25)';
     let neonGlow = '';
     let hoverNeonGlow = '';
 
@@ -1739,9 +1878,8 @@ class AnalysisPanel {
 
     const baseBoxShadow = neonGlow ? `${boxShadow}, ${neonGlow}` : boxShadow;
     const hoverBoxShadow = hasGlow ? `${boxShadow}, ${hoverNeonGlow}` : '0 12px 24px rgba(0, 0, 0, 0.35)';
-    const isClickable = isCompleted && !isCompareMode;
+    const isClickable = isCompleted;
     const cursorStyle = isClickable ? 'cursor: pointer;' : '';
-    const blockOpacity = isCompareMode ? '0.8' : '1';
 
     const factCheckInProgress = Boolean(block.factCheckInProgress);
     const factCheckProgressText = block.factCheckProgress || '사실 검증 중...';
@@ -1868,35 +2006,6 @@ class AnalysisPanel {
                   flex: 1;
                   backdrop-filter: blur(8px);
                 " onmouseover="this.style.background='${primaryButtonHover}'" onmouseout="this.style.background='${primaryButtonBase}'">다시 분석</button>
-                ${isCompleted && !block.crossVerified && id !== 'current' ? `
-                <button class="cross-verify-btn" data-id="${id}" style="
-                  background: linear-gradient(135deg, rgba(99, 102, 241, 0.3), rgba(139, 92, 246, 0.3));
-                  color: ${text};
-                  padding: 8px 16px;
-                  border-radius: 6px;
-                  font-size: 14px;
-                  border: 1px solid rgba(99, 102, 241, 0.5);
-                  cursor: pointer;
-                  transition: all 0.2s;
-                  flex: 1;
-                  backdrop-filter: blur(8px);
-                  font-weight: 600;
-                " onmouseover="this.style.background='linear-gradient(135deg, rgba(99, 102, 241, 0.4), rgba(139, 92, 246, 0.4))'" onmouseout="this.style.background='linear-gradient(135deg, rgba(99, 102, 241, 0.3), rgba(139, 92, 246, 0.3))'">🔄 교차 검증</button>
-                ` : ''}
-                ${isCompleted && block.crossVerified && id !== 'current' ? `
-                <button disabled style="
-                  background: rgba(99, 102, 241, 0.15);
-                  color: rgba(242, 242, 242, 0.5);
-                  padding: 8px 16px;
-                  border-radius: 6px;
-                  font-size: 14px;
-                  border: 1px solid rgba(99, 102, 241, 0.3);
-                  cursor: not-allowed;
-                  flex: 1;
-                  backdrop-filter: blur(8px);
-                  font-weight: 600;
-                ">✓ 검증 완료</button>
-                ` : ''}
                 ${isCompleted ? `
                 <button class="open-site-btn" data-id="${id}" data-url="${encodedUrl}" style="
                   background: ${neutralButtonBase};
@@ -1913,7 +2022,7 @@ class AnalysisPanel {
                 " onmouseover="this.style.background='${neutralButtonHover}'" onmouseout="this.style.background='${neutralButtonBase}'">사이트 이동</button>
                 ` : ''}
               </div>
-              ${isCompleted && verdictColors && block.crossVerified && id !== 'current' ? `
+              ${isCompleted && verdictColors && block.crossVerified && !isCurrent ? `
                 <div style="display: flex; gap: 8px; align-items: center;">
                   <div style="
                     background: linear-gradient(135deg, rgba(99, 102, 241, 0.2), rgba(139, 92, 246, 0.2));
@@ -1977,8 +2086,6 @@ class AnalysisPanel {
           </div>
         `;
       } else {
-        const compareButtonText = isCompareMode ? '취소' : '비교';
-
         actionButtons = `
           <div style="display: flex; gap: 8px; align-items: center; width: 100%;">
             ${isCompleted ? `
@@ -2026,35 +2133,6 @@ class AnalysisPanel {
                 box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
                 backdrop-filter: blur(12px);
               ">
-                ${isCompleted && !block.crossVerified ? `
-                <button class="cross-verify-btn" data-id="${id}" style="
-                  background: transparent;
-                  color: ${text};
-                  padding: 10px 14px;
-                  border: none;
-                  border-radius: 6px;
-                  font-size: 14px;
-                  cursor: pointer;
-                  width: 100%;
-                  text-align: left;
-                  transition: background 0.2s;
-                  white-space: nowrap;
-                " onmouseover="this.style.background='${this.hexToRgba(accent, 0.2)}'" onmouseout="this.style.background='transparent'">🔄 교차 검증</button>
-                ` : ''}
-                ${isCompleted && block.crossVerified ? `
-                <button disabled style="
-                  background: transparent;
-                  color: ${this.hexToRgba(text, 0.5)};
-                  padding: 10px 14px;
-                  border: none;
-                  border-radius: 6px;
-                  font-size: 14px;
-                  cursor: not-allowed;
-                  width: 100%;
-                  text-align: left;
-                  white-space: nowrap;
-                ">✓ 검증 완료</button>
-                ` : ''}
                 ${isCompleted ? `
                 <button class="find-similar-btn" data-id="${id}" style="
                   background: transparent;
@@ -2068,6 +2146,7 @@ class AnalysisPanel {
                   text-align: left;
                   transition: background 0.2s;
                   white-space: nowrap;
+                  display: none;
                 " onmouseover="this.style.background='${this.hexToRgba(accent, 0.2)}'" onmouseout="this.style.background='transparent'">📰 유사 기사 찾기</button>
                 ${block.factCheckResult ? `
                 <button disabled style="
@@ -2113,19 +2192,6 @@ class AnalysisPanel {
                   white-space: nowrap;
                 " onmouseover="this.style.background='${this.hexToRgba(accent, 0.2)}'" onmouseout="this.style.background='transparent'">🐛 디버그 정보</button>
                 ` : ''}
-                <button class="compare-btn" data-id="${id}" style="
-                  background: transparent;
-                  color: ${text};
-                  padding: 10px 14px;
-                  border: none;
-                  border-radius: 6px;
-                  font-size: 14px;
-                  cursor: pointer;
-                  width: 100%;
-                  text-align: left;
-                  transition: background 0.2s;
-                  white-space: nowrap;
-                " onmouseover="this.style.background='${this.hexToRgba(accent, 0.2)}'" onmouseout="this.style.background='transparent'">${isCompareMode ? '✕ 비교 취소' : '⚖️ 비교하기'}</button>
               </div>
             </div>
             <button class="delete-btn" data-id="${id}" style="
@@ -2194,10 +2260,9 @@ class AnalysisPanel {
     ` : '';
 
     return `
-      <div class="${blockClasses.join(' ')}" data-id="${id}" style="
+      <div class="${blockClasses.join(' ')}" data-id="${id}" data-block-key="${blockKeyAttr}" style="
         border-radius: 12px;
         background: ${this.blendColors(surface, base, 0.22)};
-        opacity: ${blockOpacity};
         width: 100%;
         overflow: visible;
         position: relative;
@@ -2217,7 +2282,6 @@ class AnalysisPanel {
           background: ${blockBackground};
           transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
           ${cursorStyle}
-          ${isCompareMode ? 'pointer-events: none;' : ''}
         ">
           ${block.isComparison ? `
           <div style="
@@ -2245,14 +2309,18 @@ class AnalysisPanel {
             overflow: hidden;
             width: 100%;
           ">${this.escapeHtml(title)}</h3>
-          <div style="
-            color: ${textMuted};
+          <div class="news-url-text" style="
+            color: ${urlTextColor};
             font-size: 12px;
+            font-weight: 500;
             overflow: hidden;
             text-overflow: ellipsis;
             white-space: nowrap;
             width: 100%;
-          ">${this.escapeHtml(url)}</div>
+            letter-spacing: 0.01em;
+            text-shadow: 0 0 8px rgba(0, 0, 0, 0.35);
+            transition: color 0.2s ease;
+          " onmouseover="this.style.color='${urlHoverColor}'" onmouseout="this.style.color='${urlTextColor}'">${this.escapeHtml(url)}</div>
         </div>
 
         <div class="news-actions-area" style="
@@ -2443,7 +2511,7 @@ class AnalysisPanel {
                 line-height: 1.7;
                 font-size: 14px;
                 color: ${text};
-              ">${this.renderMarkdown(block.factCheckResult.finalAnalysis.summary)}</div>
+              ">${block.factCheckResult.finalAnalysis.summary}</div>
             </div>
             ${block.factCheckResult.finalAnalysis.reasoning.reassessment_of_initial_analysis ? `
             <div style="
@@ -2468,7 +2536,7 @@ class AnalysisPanel {
                 line-height: 1.7;
                 font-size: 13px;
                 color: ${text};
-              ">${this.renderMarkdown(block.factCheckResult.finalAnalysis.reasoning.reassessment_of_initial_analysis)}</div>
+              ">${block.factCheckResult.finalAnalysis.reasoning.reassessment_of_initial_analysis}</div>
             </div>
             ` : ''}
             ${block.factCheckResult.finalAnalysis.reasoning.confirmations_from_external_data ? `
@@ -2494,7 +2562,7 @@ class AnalysisPanel {
                 line-height: 1.7;
                 font-size: 13px;
                 color: ${text};
-              ">${this.renderMarkdown(block.factCheckResult.finalAnalysis.reasoning.confirmations_from_external_data)}</div>
+              ">${block.factCheckResult.finalAnalysis.reasoning.confirmations_from_external_data}</div>
             </div>
             ` : ''}
             ${block.factCheckResult.finalAnalysis.reasoning.discrepancies_or_contradictions && block.factCheckResult.finalAnalysis.reasoning.discrepancies_or_contradictions !== '' ? `
@@ -2520,7 +2588,7 @@ class AnalysisPanel {
                 line-height: 1.7;
                 font-size: 13px;
                 color: ${text};
-              ">${this.renderMarkdown(block.factCheckResult.finalAnalysis.reasoning.discrepancies_or_contradictions)}</div>
+              ">${block.factCheckResult.finalAnalysis.reasoning.discrepancies_or_contradictions}</div>
             </div>
             ` : ''}
             ${block.factCheckResult.finalAnalysis.reasoning.unverified_claims && block.factCheckResult.finalAnalysis.reasoning.unverified_claims !== '' ? `
@@ -2546,15 +2614,18 @@ class AnalysisPanel {
                 line-height: 1.7;
                 font-size: 13px;
                 color: ${text};
-              ">${this.renderMarkdown(block.factCheckResult.finalAnalysis.reasoning.unverified_claims)}</div>
+              ">${block.factCheckResult.finalAnalysis.reasoning.unverified_claims}</div>
             </div>
             ` : ''}
           </section>
     ` : '';
 
-    const factCheckSection = (block.factCheckResult && block.factCheckResult.verification) ? `
-          <section class="fact-check-section">
-            <button type="button" class="fact-check-toggle" style="
+    const previousResult = block.factCheckResult?.previousResult || block.firstAnalysis || null;
+    const previousResultAvailable = Boolean(previousResult && (previousResult.진위 || previousResult.요약));
+
+    const previousResultSection = previousResultAvailable ? `
+          <section class="previous-result-section">
+            <button type="button" class="previous-result-toggle" style="
               width: 100%;
               background: transparent;
               border: none;
@@ -2575,120 +2646,66 @@ class AnalysisPanel {
                 background: ${this.hexToRgba(surfaceAlt, 0.12)};
                 transition: background 0.2s ease, border-color 0.2s ease;
               ">
-                <span>📊 사실 검증 결과</span>
-                <span style="
-                  background: linear-gradient(135deg, rgba(16, 185, 129, 0.25), rgba(5, 150, 105, 0.25));
-                  color: rgba(5, 150, 105, 1);
-                  border: 1px solid rgba(16, 185, 129, 0.5);
-                  padding: 4px 10px;
-                  border-radius: 8px;
-                  font-size: 11px;
-                  font-weight: 600;
-                  letter-spacing: 0.3px;
-                ">${block.factCheckResult.articles.length}개 기사 비교</span>
-                <span class="fact-check-arrow" style="margin-left: auto; font-size: 12px; color: ${mutedTextColor};">▼</span>
+                <span>⏮️ 이전 결과 확인</span>
+                <span class="previous-result-arrow" style="margin-left: auto; font-size: 12px; color: ${mutedTextColor};">▼</span>
               </div>
             </button>
-            <div class="fact-check-body" style="display: none;">
-            ${block.factCheckResult.verification.일치하는_사실 && block.factCheckResult.verification.일치하는_사실.length > 0 ? `
-            <div style="
-              background: ${this.hexToRgba('#10B981', 0.1)};
-              border: 1px solid ${this.hexToRgba('#10B981', 0.3)};
-              border-radius: 10px;
-              padding: 16px;
-              margin-bottom: 12px;
-            ">
+            <div class="previous-result-body" style="display: none;">
+              ${previousResult?.진위 ? `
               <div style="
+                color: ${verdictColors.text};
+                background: ${this.hexToRgba(verdictColors.base, 0.12)};
+                border: 1px solid ${this.hexToRgba(verdictColors.base, 0.35)};
+                padding: 14px;
+                border-radius: 10px;
                 font-weight: 600;
-                color: #10B981;
-                margin-bottom: 10px;
                 font-size: 14px;
-              ">✅ 일치하는 사실 (${block.factCheckResult.verification.일치하는_사실.length})</div>
-              <ul style="
-                margin: 0;
-                padding-left: 20px;
+                text-align: center;
+                margin-bottom: 12px;
+              ">이전 진위 판단: ${this.escapeHtml(previousResult.진위)}</div>
+              ` : ''}
+              ${previousResult?.요약 ? `
+              <div style="
+                background: ${summaryBackground};
+                border: 1px solid ${this.hexToRgba(accent, 0.35)};
+                border-radius: 10px;
+                padding: 16px;
+                margin-bottom: 14px;
                 color: ${text};
                 line-height: 1.6;
-                font-size: 13px;
               ">
-                ${block.factCheckResult.verification.일치하는_사실.map(fact => `
-                  <li style="margin-bottom: 6px;">${this.renderSourceNumbers(fact, block.factCheckResult.articles)}</li>
-                `).join('')}
-              </ul>
-            </div>
-            ` : ''}
-            ${block.factCheckResult.verification.불일치하는_사실 && block.factCheckResult.verification.불일치하는_사실.length > 0 ? `
-            <div style="
-              background: ${this.hexToRgba('#EF4444', 0.1)};
-              border: 1px solid ${this.hexToRgba('#EF4444', 0.3)};
-              border-radius: 10px;
-              padding: 16px;
-              margin-bottom: 12px;
-            ">
+                <div style="font-size: 13px; font-weight: 600; margin-bottom: 6px; color: ${this.hexToRgba(text, 0.85)};">📝 이전 요약</div>
+                ${this.renderMarkdown(previousResult.요약)}
+              </div>
+              ` : ''}
+              ${previousResult?.근거 ? `
               <div style="
-                font-weight: 600;
-                color: #EF4444;
-                margin-bottom: 10px;
-                font-size: 14px;
-              ">❌ 불일치하는 사실 (${block.factCheckResult.verification.불일치하는_사실.length})</div>
-              <ul style="
-                margin: 0;
-                padding-left: 20px;
+                background: ${this.hexToRgba(surfaceAlt, 0.12)};
+                border: 1px solid ${this.hexToRgba(border, 0.4)};
+                border-radius: 10px;
+                padding: 16px;
+                margin-bottom: 14px;
                 color: ${text};
                 line-height: 1.6;
-                font-size: 13px;
               ">
-                ${block.factCheckResult.verification.불일치하는_사실.map(fact => `
-                  <li style="margin-bottom: 6px;">${this.renderSourceNumbers(fact, block.factCheckResult.articles)}</li>
-                `).join('')}
-              </ul>
-            </div>
-            ` : ''}
-            ${block.factCheckResult.verification.검증_불가 && block.factCheckResult.verification.검증_불가.length > 0 ? `
-            <div style="
-              background: ${this.hexToRgba('#F59E0B', 0.1)};
-              border: 1px solid ${this.hexToRgba('#F59E0B', 0.3)};
-              border-radius: 10px;
-              padding: 16px;
-              margin-bottom: 12px;
-            ">
+                <div style="font-size: 13px; font-weight: 600; margin-bottom: 6px; color: ${this.hexToRgba(text, 0.85)};">📋 이전 근거</div>
+                ${this.renderMarkdown(previousResult.근거)}
+              </div>
+              ` : ''}
+              ${previousResult?.분석 ? `
               <div style="
-                font-weight: 600;
-                color: #F59E0B;
-                margin-bottom: 10px;
-                font-size: 14px;
-              ">⚠️ 검증 불가 (${block.factCheckResult.verification.검증_불가.length})</div>
-              <ul style="
-                margin: 0;
-                padding-left: 20px;
+                background: ${this.hexToRgba(surfaceAlt, 0.12)};
+                border: 1px solid ${this.hexToRgba(border, 0.4)};
+                border-radius: 10px;
+                padding: 16px;
+                margin-bottom: 14px;
                 color: ${text};
                 line-height: 1.6;
-                font-size: 13px;
               ">
-                ${block.factCheckResult.verification.검증_불가.map(fact => `
-                  <li style="margin-bottom: 6px;">${this.escapeHtml(fact)}</li>
-                `).join('')}
-              </ul>
-            </div>
-            ` : ''}
-            ${block.factCheckResult.verification.종합_평가 ? `
-            <div style="
-              background: ${cardBackground};
-              border: 1px solid ${border};
-              border-radius: 10px;
-              padding: 16px;
-              line-height: 1.6;
-              font-size: 14px;
-              color: ${text};
-            ">
-              <div style="
-                font-weight: 600;
-                margin-bottom: 8px;
-                color: ${this.hexToRgba(text, 0.9)};
-              ">📋 종합 평가</div>
-              ${this.renderMarkdown(block.factCheckResult.verification.종합_평가)}
-            </div>
-            ` : ''}
+                <div style="font-size: 13px; font-weight: 600; margin-bottom: 6px; color: ${this.hexToRgba(text, 0.85)};">🔍 이전 분석</div>
+                ${this.renderMarkdown(previousResult.분석)}
+              </div>
+              ` : ''}
             </div>
           </section>
     ` : '';
@@ -2821,9 +2838,47 @@ class AnalysisPanel {
             ">${this.renderMarkdown(summary)}</div>
           </section>
 
-          ${finalAnalysisSection}
+          ${!hasFinalAnalysis && result.근거 ? `
+          <section>
+            <h3 style="
+              font-size: 15px;
+              font-weight: 600;
+              margin: 0 0 12px 0;
+              color: ${text};
+            ">📌 근거</h3>
+            <div style="
+              background: ${this.hexToRgba(surfaceAlt, 0.18)};
+              border: 1px solid ${this.hexToRgba(border, 0.7)};
+              border-radius: 10px;
+              padding: 18px;
+              line-height: 1.6;
+              font-size: 14px;
+              color: ${text};
+            ">${this.renderMarkdown(result.근거)}</div>
+          </section>
+          ` : ''}
 
-          ${factCheckSection}
+          ${!hasFinalAnalysis && result.분석 ? `
+          <section>
+            <h3 style="
+              font-size: 15px;
+              font-weight: 600;
+              margin: 0 0 12px 0;
+              color: ${text};
+            ">🧠 분석</h3>
+            <div style="
+              background: ${this.hexToRgba(surface, 0.26)};
+              border: 1px solid ${this.hexToRgba(border, 0.65)};
+              border-radius: 10px;
+              padding: 18px;
+              line-height: 1.65;
+              font-size: 14px;
+              color: ${text};
+            ">${this.renderMarkdown(result.분석)}</div>
+          </section>
+          ` : ''}
+
+          ${finalAnalysisSection}
 
           ${suspiciousEntries ? `
           <section>
@@ -2946,6 +3001,8 @@ class AnalysisPanel {
           </section>
           ` : ''}
 
+          ${previousResultSection}
+
           ${showProcessButton || (block.factCheckResult && block.factCheckResult.articles) ? `
           <div style="
             text-align: center; 
@@ -2987,7 +3044,7 @@ class AnalysisPanel {
               cursor: pointer;
               transition: transform 0.2s ease, box-shadow 0.2s ease;
               box-shadow: 0 10px 24px rgba(0, 0, 0, 0.25);
-            ">📰 비교 검증된 뉴스 보기 (${block.factCheckResult.articles.length})</button>
+            ">📰 비교 검증된 링크 보기 (${block.factCheckResult.articles.length})</button>
             ` : ''}
           </div>
           ` : ''}
@@ -3036,18 +3093,18 @@ class AnalysisPanel {
       });
     }
 
-    const factCheckToggle = container.querySelector('.fact-check-toggle');
-    if (factCheckToggle) {
-      const factCheckBody = container.querySelector('.fact-check-body');
-      const factCheckArrow = container.querySelector('.fact-check-arrow');
-      factCheckToggle.addEventListener('click', (event) => {
+    const previousToggle = container.querySelector('.previous-result-toggle');
+    if (previousToggle) {
+      const previousBody = container.querySelector('.previous-result-body');
+      const previousArrow = container.querySelector('.previous-result-arrow');
+      previousToggle.addEventListener('click', (event) => {
         event.preventDefault();
         event.stopPropagation();
-        if (!factCheckBody) return;
-        const isOpen = factCheckBody.style.display !== 'none';
-        factCheckBody.style.display = isOpen ? 'none' : 'block';
-        if (factCheckArrow) {
-          factCheckArrow.textContent = isOpen ? '▼' : '▲';
+        if (!previousBody) return;
+        const isOpen = previousBody.style.display !== 'none';
+        previousBody.style.display = isOpen ? 'none' : 'block';
+        if (previousArrow) {
+          previousArrow.textContent = isOpen ? '▼' : '▲';
         }
       });
     }
@@ -3388,8 +3445,12 @@ class AnalysisPanel {
   updateNewsStatus(id, status, result = null, progress = null, error = null) {
     console.log('updateNewsStatus 호출됨:', { id, status, result, progress, error });
     
+    const isCurrentBlock = this.isCurrentBlockId(id);
+    const numericId = !isCurrentBlock
+      ? (typeof id === 'number' ? id : parseInt(id, 10))
+      : null;
     let block;
-    if (id === 'current') {
+    if (isCurrentBlock) {
       // 레거시 지원 - activeNewsUrl로 변환
       if (this.activeNewsUrl && this.activeNewsStates.has(this.activeNewsUrl)) {
         block = this.activeNewsStates.get(this.activeNewsUrl);
@@ -3398,7 +3459,11 @@ class AnalysisPanel {
         return;
       }
     } else {
-      block = this.newsBlocks.get(id);
+      if (numericId === null || Number.isNaN(numericId)) {
+        console.warn('[updateNewsStatus] 잘못된 블록 ID 형식:', id);
+        return;
+      }
+      block = this.newsBlocks.get(numericId);
       
       // 블록을 찾을 수 없는 경우 (확장 재시작 등)
       if (!block) {
@@ -3422,7 +3487,7 @@ class AnalysisPanel {
     }
     
     // 이 블록의 URL과 같은 activeNewsStates가 있으면 업데이트
-    if (id !== 'current' && block.url) {
+    if (!isCurrentBlock && block.url) {
       const normalizeUrl = (urlString) => {
         try {
           const urlObj = new URL(urlString);
@@ -3446,26 +3511,26 @@ class AnalysisPanel {
     }
     
     // 분석 완료 시 진위 결과 저장
-    if (status === 'completed' && result && id !== 'current') {
-      console.log('[updateNewsStatus] completeAnalysis 호출 전, id:', id, 'result 타입:', typeof result);
-      this.completeAnalysis(id, result);
+    if (status === 'completed' && result && !isCurrentBlock) {
+      console.log('[updateNewsStatus] completeAnalysis 호출 전, id:', numericId, 'result 타입:', typeof result);
+      this.completeAnalysis(numericId, result);
       
       // 분석 완료 시 currentAnalyzingBlockId 초기화
-      if (this.currentAnalyzingBlockId === id) {
+      if (numericId !== null && this.currentAnalyzingBlockId === numericId) {
         this.currentAnalyzingBlockId = null;
         console.log('[updateNewsStatus] 분석 완료, 다음 분석 가능');
       }
     }
     
     // 에러 발생 시에도 currentAnalyzingBlockId 초기화
-    if (status === 'error' && this.currentAnalyzingBlockId === id) {
+    if (status === 'error' && numericId !== null && this.currentAnalyzingBlockId === numericId) {
       this.currentAnalyzingBlockId = null;
       console.log('[updateNewsStatus] 분석 에러, 다음 분석 가능');
     }
     
     // 저장 최적화: analyzing 상태에서는 저장하지 않음 (스트리밍 중)
     // 상태 변경이나 완료/에러 시에만 저장
-    if (id !== 'current' && (status !== 'analyzing' || oldStatus !== 'analyzing')) {
+    if (!isCurrentBlock && (status !== 'analyzing' || oldStatus !== 'analyzing')) {
       this.saveNewsBlocks();
     }
     
@@ -3644,22 +3709,25 @@ class AnalysisPanel {
     }
     
     // service_worker에 중단 요청 전송
+    const runtimeId = isCurrentBlock && numericId !== null ? numericId : blockId;
     chrome.runtime.sendMessage({
       action: "stopAnalysis",
-      blockId: blockId
+      blockId: runtimeId
     }).catch(error => {
       console.error('[stopAnalysis] service_worker 메시지 전송 오류:', error);
     });
     
     // 블록 상태를 pending으로 변경
-    let block = blockId === 'current' ? this.currentNews : this.newsBlocks.get(blockId);
+    const isCurrentBlock = this.isCurrentBlockId(blockId);
+    const numericId = !isCurrentBlock ? blockId : this.getCurrentLinkedBlockId();
+    let block = isCurrentBlock ? this.currentNews : (numericId !== null ? this.newsBlocks.get(numericId) : null);
     if (block) {
       block.status = 'pending';
       block.progress = null;
       block.error = '사용자가 분석을 중단했습니다';
       
       // 저장 및 패널 업데이트
-      if (blockId !== 'current') {
+      if (!isCurrentBlock) {
         this.saveNewsBlocks();
       }
       this.updatePanel();
@@ -4035,23 +4103,17 @@ class AnalysisPanel {
       });
     });
     
-    // 교차 검증 버튼
-    container.querySelectorAll('.cross-verify-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const id = btn.dataset.id === 'current' ? 'current' : parseInt(btn.dataset.id);
-        console.log('교차 검증 버튼 클릭, ID:', id);
-        this.startCrossVerification(id);
-      });
-    });
-    
     // 분석 정지 버튼
     container.querySelectorAll('.stop-analysis-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        const id = parseInt(btn.dataset.id);
-        console.log('분석 정지 버튼 클릭, ID:', id);
-        this.stopAnalysis(id);
+        const resolvedId = this.resolveBlockKeyFromElement(btn);
+        if (resolvedId === null || resolvedId === 'current') {
+          console.warn('분석 정지 대상 ID를 확인할 수 없습니다.');
+          return;
+        }
+        console.log('분석 정지 버튼 클릭, ID:', resolvedId);
+        this.stopAnalysis(resolvedId);
       });
     });
     
@@ -4059,27 +4121,14 @@ class AnalysisPanel {
     container.querySelectorAll('.delete-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        const id = parseInt(btn.dataset.id);
-        console.log('삭제 버튼 클릭, ID:', id);
-        
-        // 비교 모드가 활성화되어 있고 현재 블록이 비교 모드가 아니면 클릭 방지
-        if (this.waitingForComparison && this.waitingForComparison !== id) {
-          console.log('비교 모드 활성화 중 - 삭제 버튼 비활성화');
+        const resolvedId = this.resolveBlockKeyFromElement(btn);
+        if (resolvedId === null || resolvedId === 'current') {
+          console.warn('삭제할 블록을 찾을 수 없습니다.');
           return;
         }
+        console.log('삭제 버튼 클릭, ID:', resolvedId);
         
-        this.deleteNews(id);
-      });
-    });
-
-    // 비교하기 버튼 (기능 비활성화)
-    container.querySelectorAll('.compare-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        alert('비교 분석 기능은 현재 준비 중입니다.');
-        // const id = parseInt(btn.dataset.id);
-        // console.log('비교하기 버튼 클릭, ID:', id, 'waitingForComparison:', this.waitingForComparison);
-        // this.toggleCompareMode(id);
+        this.deleteNews(resolvedId);
       });
     });
 
@@ -4087,9 +4136,13 @@ class AnalysisPanel {
     container.querySelectorAll('.find-similar-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        const id = parseInt(btn.dataset.id);
-        console.log('유사 기사 찾기 버튼 클릭, ID:', id);
-        this.findSimilarArticles(id);
+        const resolvedId = this.resolveBlockKeyFromElement(btn);
+        if (resolvedId === null || resolvedId === 'current') {
+          console.warn('유사 기사 찾기 대상 ID 없음');
+          return;
+        }
+        console.log('유사 기사 찾기 버튼 클릭, ID:', resolvedId);
+        this.findSimilarArticles(resolvedId);
       });
     });
 
@@ -4097,9 +4150,13 @@ class AnalysisPanel {
     container.querySelectorAll('.fact-check-search-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        const id = parseInt(btn.dataset.id);
-        console.log('사실 검증 버튼 클릭, ID:', id);
-        this.searchFactCheck(id);
+        const resolvedId = this.resolveBlockKeyFromElement(btn);
+        if (resolvedId === null || resolvedId === 'current') {
+          console.warn('사실 검증 대상 ID 없음');
+          return;
+        }
+        console.log('사실 검증 버튼 클릭, ID:', resolvedId);
+        this.searchFactCheck(resolvedId);
       });
     });
 
@@ -4107,9 +4164,13 @@ class AnalysisPanel {
     container.querySelectorAll('.debug-result-btn').forEach(btn => {
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        const id = parseInt(btn.dataset.id);
-        console.log('디버그 정보 버튼 클릭, ID:', id);
-        this.showDebugModal(id);
+        const resolvedId = this.resolveBlockKeyFromElement(btn);
+        if (resolvedId === null || resolvedId === 'current') {
+          console.warn('디버그 정보를 표시할 블록이 없습니다.');
+          return;
+        }
+        console.log('디버그 정보 버튼 클릭, ID:', resolvedId);
+        this.showDebugModal(resolvedId);
       });
     });
 
@@ -4136,10 +4197,11 @@ class AnalysisPanel {
       const id = contentArea.dataset.id;
       let newsData;
       
-      if (id === 'current') {
+      if (this.isCurrentBlockId(id)) {
         newsData = this.currentNews;
       } else {
-        newsData = this.newsBlocks.get(parseInt(id));
+        const parsedId = parseInt(id, 10);
+        newsData = Number.isNaN(parsedId) ? null : this.newsBlocks.get(parsedId);
       }
       
       if (newsData) {
@@ -4371,11 +4433,14 @@ class AnalysisPanel {
     console.log('교차 검증 시작, ID:', id);
     
     // current인 경우 currentNews 사용, 아니면 newsBlocks에서 찾기
+    const isCurrentBlock = this.isCurrentBlockId(id);
     let block;
-    if (id === 'current') {
+    if (isCurrentBlock) {
       block = this.currentNews;
     } else {
-      block = this.newsBlocks.get(id);
+      const numericId = typeof id === 'number' ? id : parseInt(id, 10);
+      block = Number.isNaN(numericId) ? null : this.newsBlocks.get(numericId);
+      id = numericId;
     }
     
     // 블록 존재 확인
@@ -4723,17 +4788,59 @@ class AnalysisPanel {
     return `${year}년 ${month}월 ${day}일 (${dayOfWeek}) ${hours}:${minutes}`;
   }
 
+  getCurrentDateTimeInfo() {
+    const now = new Date();
+    const baseOptions = {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      weekday: 'short',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    };
+
+    const localResolved = Intl.DateTimeFormat().resolvedOptions();
+    const localTimeZone = localResolved.timeZone || 'UTC';
+
+    const formatWith = (locale, timeZone) => new Intl.DateTimeFormat(locale, {
+      ...baseOptions,
+      timeZone
+    }).format(now);
+
+    return {
+      iso: now.toISOString(),
+      kst: formatWith('ko-KR', 'Asia/Seoul'),
+      local: formatWith('ko-KR', localTimeZone),
+      utc: formatWith('en-GB', 'UTC'),
+      timeZone: localTimeZone
+    };
+  }
+
+  getDateTimeContext() {
+    const dt = this.getCurrentDateTimeInfo();
+    return [
+      '### ⏱️ 분석 타임스탬프',
+      `- 한국 표준시 (KST): ${dt.kst}`,
+      `- 브라우저 기준 (${dt.timeZone}): ${dt.local}`,
+      `- UTC: ${dt.utc}`,
+      `- ISO8601: ${dt.iso}`,
+      ''
+    ].join('\n');
+  }
+
   // 분석 프롬프트 생성
   generateAnalysisPrompt(title, content, isComparison = false) {
     const articleContent = `${title}\n${content}`;
-    const currentDateTime = this.getCurrentDateTime();
+    const dateTimeContext = this.getDateTimeContext();
     
     if (isComparison) {
       return this.generateComparisonPrompt(articleContent);
     }
     
     return `
-**[현재 시각: ${currentDateTime}]**
+${dateTimeContext}
 
 ## 역할
 당신은 주어진 기사 텍스트의 **논리적 구조, 근거 제시 방식, 표현의 적절성**만을 분석하는 **'뉴스 텍스트 분석가'** 입니다.  
@@ -4751,11 +4858,11 @@ class AnalysisPanel {
 ## 판단 조건 및 중요도
 
 ※ **판단 원칙:** 여러 조건에 해당하는 경우, **가장 심각한 유형(가장 높은 중요도)**을 기준으로 '진위'를 최종 결정합니다.  
-※ **기본 판단:** 아래 조건 중 어느 것에도 해당하지 않는 경우, 해당 기사는 **'진짜 뉴스'**로 판단합니다.
+※ **기본 판단:** 아래 조건 중 어느 것에도 해당하지 않는 경우, 해당 기사는 **'사실'**로 판단합니다.
 
 ---
 
-### **[중요도: 최상] → 최종 판단: 가짜 뉴스**
+### **[중요도: 최상] → 최종 판단: 거짓**
 **유형 1. 사실 및 출처의 신뢰도 문제**
 - **1-1. 기사 내 명백한 내용상 모순:** 앞뒤 문단의 진술이 서로 충돌하거나 모순되는 경우.  
   - 예시: "A는 B라고 말했다"와 "A는 B가 아니라고 말했다"가 동시에 등장
@@ -4771,7 +4878,7 @@ class AnalysisPanel {
 
 ---
 
-### **[중요도: 높음] → 최종 판단: 가짜일 가능성이 높은 뉴스**
+### **[중요도: 높음] → 최종 판단: 대체로 거짓**
 **유형 2. 논리 및 구조적 허점**
 - **2-1. 논리적 비약:** 근거는 존재하지만, 논리적 연계성이 약하거나 생략되어 결론에 합리적으로 도달하기 어려운 경우.  
   - 예시: "A가 발생했다. 따라서 Z가 틀림없다." (중간 단계 B, C, D 생략)
@@ -4783,7 +4890,7 @@ class AnalysisPanel {
 
 ---
 
-### **[중요도: 중간] → 최종 판단: 가짜일 가능성이 있는 뉴스**
+### **[중요도: 중간] → 최종 판단: 일부 사실**
 **유형 3. 선동적·감정적 표현 방식**
 - **3-1. 단정적·선동적 어조:** 검증되지 않은 사실을 확정된 것처럼 표현하여 독자의 판단을 강요하는 경우.  
   - 문제 표현: "~임이 확실하다", "~로 밝혀졌다" (근거 없이 사용)
@@ -4805,7 +4912,7 @@ class AnalysisPanel {
 
 ---
 
-### **[중요도: 보조] → 최종 판단: 부분적으로 신뢰할 수 있는 뉴스**
+### **[중요도: 보조] → 최종 판단: 대체로 사실**
 **유형 5. 근거는 있으나 불충분한 기사**
 - **5-1. 일부 근거는 신뢰 가능하지만, 특정 문단의 주장이 모호하거나 불완전한 경우.**  
   - 예시: 70%는 명확한 근거가 있지만, 30%는 추측성 표현으로 구성
@@ -4879,10 +4986,10 @@ class AnalysisPanel {
 
 ### 근거 실존 확인
 - 근거로 인용한 문장이나 표현이 **실제 기사 내에 존재**하는가?  
-- 존재하지 않거나 불확실하다면 → **"진짜 뉴스" 또는 "부분적으로 신뢰할 수 있는 뉴스"**로 보수적 분류
+- 존재하지 않거나 불확실하다면 → **"사실" 또는 "대체로 사실"**로 보수적 분류
 
 ### 과도한 판단 방지
-- 1-2개의 경미한 문제로 "가짜 뉴스" 판단하지 않았는가?
+- 1-2개의 경미한 문제로 "거짓" 판단하지 않았는가?
 - 여러 조건 중 **가장 심각한 것**을 기준으로 최종 판단했는가?
 
 ### 문맥 재확인
@@ -4890,7 +4997,7 @@ class AnalysisPanel {
 - 인용문과 기자의 주장을 혼동하지 않았는가?
 
 **중요:** 이 검증은 허위 근거 생성(hallucination)을 방지하기 위한 필수 단계입니다.  
-**불확실하면 보수적으로 판단**하여 "진짜 뉴스" 또는 상위 단계로 분류하십시오.
+**불확실하면 보수적으로 판단**하여 "사실" 또는 상위 단계로 분류하십시오.
 
 ---
 
@@ -4911,7 +5018,7 @@ JSON 외의 문장, 주석, 코드 블록(\\\`\\\`\\\`json\\\`\\\`\\\`)은 절�
     "input": "주어진 텍스트 전체",
     "output": {
       "분석진행": "기사 구조 파악 → 근거 확인 → 논리 구조 분석 → 표현 분석 → 오탐 체크리스트 확인 → 종합 판단 순으로 단계별 추론 과정을 작성",
-      "진위": "판단 결과('가짜 뉴스' / '가짜일 가능성이 높은 뉴스' / '가짜일 가능성이 있는 뉴스' / '부분적으로 신뢰할 수 있는 뉴스' / '진짜 뉴스')",
+      "진위": "판단 결과('거짓' / '대체로 거짓' / '일부 사실' / '대체로 사실' / '사실')",
       "근거": "탐지된 중요도 조건을 <br> 태그로 반드시 구분하여 나열. 예: 1-1. 기사 내 명백한 내용상 모순<br>3-2. 감정적 표현 사용<br>4-1. 제목과 내용의 불일치",
       "분석": "다음 구조로 가독성 높게 작성하세요:<br><br>**✨ 기사 개요**<br>기사가 다루는 핵심 내용을 1-2문장으로 간단히 정리<br><br>**📊 주요 분석 결과**<br>위 근거에서 발견된 핵심 문제점 또는 신뢰할 수 있는 요소를 항목별로 명확히 설명<br><br>**⚠️ 검증 한계**<br>(있다면) 현재 검증으로는 확인 불가능한 정보나 추가 확인이 필요한 부분을 간단히 언급<br><br>**⚖️ 종합 판단**<br>위 내용을 바탕으로 최종 신뢰도 평가와 그 이유를 2-3문장으로 명확히 정리<br><br>※ 각 섹션은 <br><br>로 구분하고, 섹션 제목은 이모지+굵은 글씨(**텍스트**)로 표시하세요",
       "요약": "기사의 핵심 내용을 간결하고 정확하게 요약 (50-100자 이내, HTML 태그 사용 금지). 한 문장으로 핵심만 간결하게 작성",
@@ -4934,10 +5041,10 @@ ${articleContent}
 
   // 비교분석용 프롬프트 생성
   generateComparisonPrompt(comparisonContent) {
-    const currentDateTime = this.getCurrentDateTime();
+    const dateTimeContext = this.getDateTimeContext();
     
     return `
-**[현재 시각: ${currentDateTime}]**
+${dateTimeContext}
 
 ## 역할
 당신은 두 개의 뉴스 기사를 비교분석하는 **'뉴스 비교분석 전문가'**입니다. 주어진 두 뉴스의 관점, 내용, 신뢰도를 객관적으로 비교하여 분석해주세요.
@@ -4987,7 +5094,7 @@ ${comparisonContent}
   // 2차 교차 검증용 프롬프트 생성
   generateCrossVerificationPrompt(title, content, baselineAnalysis, previousVerification = null, currentStep = 1, totalDepth = 1, factCheckData = null) {
     const articleContent = `${title}\n${content}`;
-    const currentDateTime = this.getCurrentDateTime();
+    const dateTimeContext = this.getDateTimeContext();
     
     // 사실 검증 정보 섹션 생성 (토큰 최적화)
     let factCheckSection = '';
@@ -5021,7 +5128,7 @@ ${article.crawledContent ? `- 핵심 내용: ${article.crawledContent.substring(
     // 첫 번째 검증 (1차 분석 결과만 검토)
     if (currentStep === 1) {
       return `
-**[현재 시각: ${currentDateTime}]**
+${dateTimeContext}
 
 ## 역할
 당신은 **'AI 분석 검증 전문가'**입니다. 다른 AI가 수행한 뉴스 분석 결과를 재검토하고, 오류나 과도한 판단이 있는지 교차 검증하는 것이 당신의 임무입니다.
@@ -5059,7 +5166,7 @@ ${article.crawledContent ? `- 핵심 내용: ${article.crawledContent.substring(
     "input": "원문 기사 + 1차 분석 결과",
     "output": {
       "분석진행": "1차 분석 검토 → 원문 재평가 → 오류/과도한 판단 확인 → 최종 판단 도출 과정을 단계별로 작성",
-      "진위": "교차 검증 후 최종 판단 ('가짜 뉴스' / '가짜일 가능성이 높은 뉴스' / '가짜일 가능성이 있는 뉴스' / '부분적으로 신뢰할 수 있는 뉴스' / '진짜 뉴스')",
+      "진위": "교차 검증 후 최종 판단 ('거짓' / '대체로 거짓' / '일부 사실' / '대체로 사실' / '사실')",
       "근거": "최종 판단의 근거를 나열",
       "분석": "다음 구조로 가독성 높게 작성하세요:<br><br>**✨ 기사 개요**<br>기사가 다루는 핵심 내용을 1-2문장으로 간단히 정리<br><br>**📊 주요 분석 결과**<br>위 근거에서 발견된 핵심 문제점 또는 신뢰할 수 있는 요소를 항목별로 명확히 설명<br><br>**⚠️ 검증 한계**<br>(있다면) 현재 검증으로는 확인 불가능한 정보나 추가 확인이 필요한 부분을 간단히 언급<br><br>**⚖️ 종합 판단**<br>위 내용을 바탕으로 최종 신뢰도 평가와 그 이유를 2-3문장으로 명확히 정리<br><br>※ 각 섹션은 <br><br>로 구분하고, 섹션 제목은 이모지+굵은 글씨(**텍스트**)로 표시하세요",
       "요약": "교차 검증을 거친 최종 결론을 간결하게 요약",
@@ -5127,7 +5234,7 @@ ${factCheckSection}
     "input": "원문 기사 + 1차 분석 결과 + ${currentStep - 1}차 검증 결과",
     "output": {
       "분석진행": "원문 재확인 → 1차 분석 검토 → ${currentStep - 1}차 검증 검토 → 놓친 맥락 확인 → 최종 정밀화된 판단 도출 과정을 단계별로 작성",
-      "진위": "${currentStep}차 재귀적 검증 후 최종 판단 ('가짜 뉴스' / '가짜일 가능성이 높은 뉴스' / '가짜일 가능성이 있는 뉴스' / '부분적으로 신뢰할 수 있는 뉴스' / '진짜 뉴스')",
+      "진위": "${currentStep}차 재귀적 검증 후 최종 판단 ('거짓' / '대체로 거짓' / '일부 사실' / '대체로 사실' / '사실')",
       "근거": "최종 판단의 근거를 나열",
       "분석": "다음 구조로 가독성 높게 작성하세요:<br><br>**✨ 기사 개요**<br>기사가 다루는 핵심 내용을 1-2문장으로 간단히 정리<br><br>**📊 주요 분석 결과**<br>위 근거에서 발견된 핵심 문제점 또는 신뢰할 수 있는 요소를 항목별로 명확히 설명<br><br>**⚠️ 검증 한계**<br>(있다면) 현재 검증으로는 확인 불가능한 정보나 추가 확인이 필요한 부분을 간단히 언급<br><br>**⚖️ 종합 판단**<br>위 내용을 바탕으로 최종 신뢰도 평가와 그 이유를 2-3문장으로 명확히 정리<br><br>※ 각 섹션은 <br><br>로 구분하고, 섹션 제목은 이모지+굵은 글씨(**텍스트**)로 표시하세요",
       "요약": "${currentStep}차 재귀적 검증을 거친 최종 결론을 간결하게 요약",
@@ -5164,10 +5271,11 @@ ${factCheckSection}
   // 분석 결과 보기 모달
   showAnalysisResult(id) {
     let block;
-    if (id === 'current') {
+    if (this.isCurrentBlockId(id)) {
       block = this.currentNews;
     } else {
-      block = this.newsBlocks.get(parseInt(id));
+      const parsedId = typeof id === 'number' ? id : parseInt(id, 10);
+      block = Number.isNaN(parsedId) ? null : this.newsBlocks.get(parsedId);
     }
     
     if (!block || !block.result) {
@@ -5485,13 +5593,208 @@ ${factCheckSection}
     overlay.addEventListener('transitionend', handleTransitionEnd, { once: true });
   }
 
+  // 에러 모달 표시
+  showErrorModal(title, message, details = null) {
+    const panel = document.getElementById(this.panelId);
+    if (!panel) return;
+
+    // 기존 에러 모달 제거
+    const existingModal = panel.querySelector('.error-modal-overlay');
+    if (existingModal) {
+      existingModal.remove();
+    }
+
+    const { text, base, surface } = this.palette;
+    
+    const modalOverlay = document.createElement('div');
+    modalOverlay.className = 'error-modal-overlay';
+    modalOverlay.style.cssText = `
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      backdrop-filter: blur(4px);
+      animation: fadeIn 0.2s ease;
+    `;
+
+    const detailsHtml = details ? `
+      <details style="
+        margin-top: 16px;
+        padding: 12px;
+        background: ${this.hexToRgba(base, 0.3)};
+        border-radius: 8px;
+        font-size: 12px;
+        color: ${this.hexToRgba(text, 0.7)};
+        cursor: pointer;
+      ">
+        <summary style="font-weight: 600; margin-bottom: 8px;">상세 정보</summary>
+        <pre style="
+          white-space: pre-wrap;
+          word-break: break-word;
+          margin: 0;
+          font-family: 'Consolas', monospace;
+          font-size: 11px;
+        ">${this.escapeHtml(details)}</pre>
+      </details>
+    ` : '';
+
+    modalOverlay.innerHTML = `
+      <div style="
+        background: linear-gradient(135deg, ${this.hexToRgba(surface, 0.98)} 0%, ${this.hexToRgba(base, 0.98)} 100%);
+        border-radius: 16px;
+        padding: 28px;
+        max-width: 480px;
+        width: 90%;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        border: 1px solid ${this.hexToRgba(text, 0.1)};
+        animation: slideUp 0.3s ease;
+      ">
+        <div style="
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          margin-bottom: 16px;
+        ">
+          <div style="
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            flex-shrink: 0;
+          ">⚠️</div>
+          <h3 style="
+            margin: 0;
+            font-size: 20px;
+            font-weight: 700;
+            color: ${text};
+          ">${this.escapeHtml(title)}</h3>
+        </div>
+        <p style="
+          margin: 0 0 20px 0;
+          line-height: 1.6;
+          color: ${this.hexToRgba(text, 0.85)};
+          font-size: 15px;
+          white-space: pre-wrap;
+        ">${this.escapeHtml(message)}</p>
+        ${detailsHtml}
+        <button class="error-modal-close" style="
+          width: 100%;
+          padding: 12px;
+          background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%);
+          color: white;
+          border: none;
+          border-radius: 10px;
+          font-weight: 600;
+          font-size: 15px;
+          cursor: pointer;
+          transition: transform 0.2s ease, box-shadow 0.2s ease;
+          margin-top: 20px;
+        "
+        onmouseover="this.style.transform='scale(1.02)'; this.style.boxShadow='0 8px 20px rgba(239, 68, 68, 0.4)';"
+        onmouseout="this.style.transform='scale(1)'; this.style.boxShadow='none';">확인</button>
+      </div>
+    `;
+
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      @keyframes slideUp {
+        from { transform: translateY(20px); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+      }
+    `;
+    document.head.appendChild(style);
+
+    panel.appendChild(modalOverlay);
+
+    const closeButton = modalOverlay.querySelector('.error-modal-close');
+    closeButton.addEventListener('click', () => {
+      modalOverlay.style.animation = 'fadeOut 0.2s ease';
+      setTimeout(() => modalOverlay.remove(), 200);
+    });
+
+    // 모달 외부 클릭시 닫기
+    modalOverlay.addEventListener('click', (e) => {
+      if (e.target === modalOverlay) {
+        closeButton.click();
+      }
+    });
+  }
+
+  // API 에러 처리
+  handleApiError(error, context = '') {
+    console.error(`[handleApiError] ${context}:`, error);
+    
+    const errorMessage = error?.message || error?.error || String(error);
+    
+    // 429 에러 (할당량 초과) 감지
+    if (errorMessage.includes('429') || errorMessage.includes('quota') || errorMessage.includes('RESOURCE_EXHAUSTED')) {
+      let retryDelay = '50초';
+      
+      // retryDelay 추출 시도
+      const retryMatch = errorMessage.match(/retry.*?(\d+)s/i);
+      if (retryMatch) {
+        retryDelay = `${retryMatch[1]}초`;
+      }
+      
+      // Gemini API 할당량 초과인 경우 카운트 초기화
+      if (errorMessage.toLowerCase().includes('gemini') || errorMessage.includes('generativelanguage.googleapis.com')) {
+        console.log('[handleApiError] Gemini API 할당량 초과 - 카운트 초기화');
+        this.resetApiUsageCount('gemini');
+        this.updateApiQuotaDisplay();
+      }
+      
+      this.showErrorModal(
+        'API 할당량 초과',
+        `Gemini API의 일일 무료 할당량(200회)을 모두 사용하셨습니다.\n\n약 ${retryDelay} 후에 다시 시도하거나, 내일 다시 이용해주세요.\n\n또는 새로운 API 키를 발급받아 설정에서 변경할 수 있습니다.`,
+        errorMessage.substring(0, 500)
+      );
+      return 'quota_exceeded';
+    }
+    
+    // 기타 API 에러
+    if (errorMessage.includes('API') || errorMessage.includes('401') || errorMessage.includes('403')) {
+      this.showErrorModal(
+        'API 요청 실패',
+        'API 요청 중 오류가 발생했습니다.\n\nAPI 키가 유효한지 확인하거나, 잠시 후 다시 시도해주세요.',
+        errorMessage.substring(0, 500)
+      );
+      return 'api_error';
+    }
+    
+    return 'unknown_error';
+  }
+  
+  // API 사용 횟수 초기화
+  resetApiUsageCount(apiType) {
+    const today = new Date().toDateString();
+    const key = `api_usage_${apiType}_${today}`;
+    try {
+      localStorage.setItem(key, '0');
+      console.log(`[resetApiUsageCount] ${apiType} API 사용 횟수 초기화 완료`);
+    } catch (error) {
+      console.error('[resetApiUsageCount] 초기화 실패:', error);
+    }
+  }
+
   // 실시간 스트리밍 결과 보기 모달
   showStreamingResult(id) {
     let block;
-    if (id === 'current') {
+    if (this.isCurrentBlockId(id)) {
       block = this.currentNews;
     } else {
-      block = this.newsBlocks.get(parseInt(id));
+      const parsedId = typeof id === 'number' ? id : parseInt(id, 10);
+      block = Number.isNaN(parsedId) ? null : this.newsBlocks.get(parsedId);
     }
     
     if (!block || block.status !== 'analyzing') {
@@ -6934,8 +7237,8 @@ ${factCheckSection}
       background: linear-gradient(135deg, #F2F2F2 0%, #E8E8E8 100%);
       border-radius: 16px;
       padding: 32px;
-      width: 540px;
-      max-width: 90vw;
+      width: 620px;
+      max-width: 95vw;
       max-height: 85vh;
       overflow-y: auto;
       position: relative;
@@ -7311,6 +7614,66 @@ ${factCheckSection}
                 border-radius: 6px;
                 line-height: 1.5;
               ">⚠️ 통합 검색을 켜면 Google Search API가 <strong>1회 추가 호출</strong>됩니다. 사용량과 비용을 반드시 확인하세요.</div>
+              
+              <!-- 통합 검색 크롤링 개수 슬라이더 -->
+              <div style="
+                margin-top: 16px;
+                padding: 12px;
+                background: #F9FAFB;
+                border-radius: 6px;
+                border: 1px solid #E5E7EB;
+              ">
+                <div style="
+                  display: flex;
+                  justify-content: space-between;
+                  align-items: center;
+                  margin-bottom: 8px;
+                ">
+                  <span style="
+                    font-size: 14px;
+                    font-weight: 600;
+                    color: #0D0D0D;
+                  ">크롤링 개수</span>
+                  <span class="integrated-crawl-count-value" style="
+                    font-size: 14px;
+                    font-weight: 600;
+                    color: #10B981;
+                  ">${this.getIntegratedCrawlCountSettingFromCache()}개</span>
+                </div>
+                <input 
+                  type="range" 
+                  class="integrated-crawl-count-slider"
+                  min="1" 
+                  max="10" 
+                  value="${this.getIntegratedCrawlCountSettingFromCache()}" 
+                  style="
+                    width: 100%;
+                    height: 6px;
+                    border-radius: 3px;
+                    outline: none;
+                    -webkit-appearance: none;
+                    appearance: none;
+                    background: linear-gradient(to right, #10B981 0%, #10B981 ${(this.getIntegratedCrawlCountSettingFromCache() - 1) / 9 * 100}%, #E5E7EB ${(this.getIntegratedCrawlCountSettingFromCache() - 1) / 9 * 100}%, #E5E7EB 100%);
+                    cursor: pointer;
+                  "
+                />
+                <div style="
+                  display: flex;
+                  justify-content: space-between;
+                  margin-top: 4px;
+                  font-size: 11px;
+                  color: #9CA3AF;
+                ">
+                  <span>1</span>
+                  <span>10</span>
+                </div>
+                <div style="
+                  margin-top: 8px;
+                  font-size: 12px;
+                  color: #DC2626;
+                  line-height: 1.4;
+                ">💡 크롤링 개수가 많을수록 <strong>Gemini API 요청률이 증가</strong>합니다.</div>
+              </div>
             </div>
           </div>
         </div>
@@ -8212,6 +8575,27 @@ ${factCheckSection}
       });
     }
 
+    // 통합 검색 크롤링 개수 슬라이더 이벤트 리스너
+    const integratedCrawlSlider = modalContent.querySelector('.integrated-crawl-count-slider');
+    const integratedCrawlValue = modalContent.querySelector('.integrated-crawl-count-value');
+    
+    if (integratedCrawlSlider && integratedCrawlValue) {
+      integratedCrawlSlider.addEventListener('input', (e) => {
+        const value = parseInt(e.target.value);
+        integratedCrawlValue.textContent = `${value}개`;
+        
+        // 슬라이더 배경 그라데이션 업데이트
+        const percentage = (value - 1) / 9 * 100;
+        e.target.style.background = `linear-gradient(to right, #10B981 0%, #10B981 ${percentage}%, #E5E7EB ${percentage}%, #E5E7EB 100%)`;
+      });
+      
+      integratedCrawlSlider.addEventListener('change', async (e) => {
+        const value = parseInt(e.target.value);
+        await this.setIntegratedCrawlCountSetting(value);
+        console.log(`통합 검색 크롤링 개수 설정: ${value}`);
+      });
+    }
+
     // Google CSE ID 설정 버튼 제거됨 (기본값 사용)
     // - 뉴스 검색: a6724cd0397f24747 (Daum 뉴스 전용)
     // - 사실 검증: 241358ac91fe04cd8 (전체 웹)
@@ -8504,6 +8888,72 @@ ${factCheckSection}
     });
   }
 
+  // 통합 검색 크롤링 개수 설정
+  getIntegratedCrawlCountSettingFromCache() {
+    try {
+      const stored = localStorage.getItem('integrated_crawl_count');
+      return stored ? parseInt(stored) : 3;
+    } catch (error) {
+      console.error('Failed to read integrated crawl count from cache:', error);
+      return 3;
+    }
+  }
+
+  cacheIntegratedCrawlCountSetting(value) {
+    try {
+      localStorage.setItem('integrated_crawl_count', value.toString());
+    } catch (error) {
+      console.error('Failed to cache integrated crawl count:', error);
+    }
+  }
+
+  async getIntegratedCrawlCountSetting() {
+    const fallback = this.getIntegratedCrawlCountSettingFromCache();
+    if (!this.isChromeApiAvailable()) {
+      return fallback;
+    }
+
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.get(['integrated_crawl_count'], (data) => {
+          if (chrome.runtime.lastError) {
+            console.warn('Failed to load integrated crawl count from Chrome storage:', chrome.runtime.lastError);
+            resolve(fallback);
+            return;
+          }
+          const count = data.integrated_crawl_count !== undefined ? data.integrated_crawl_count : 3;
+          this.cacheIntegratedCrawlCountSetting(count);
+          resolve(count);
+        });
+      } catch (error) {
+        console.warn('Chrome storage unavailable, using cached integrated crawl count:', error);
+        resolve(fallback);
+      }
+    });
+  }
+
+  async setIntegratedCrawlCountSetting(value) {
+    this.cacheIntegratedCrawlCountSetting(value);
+
+    if (!this.isChromeApiAvailable()) {
+      return;
+    }
+
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.set({ integrated_crawl_count: value }, () => {
+          if (chrome.runtime.lastError) {
+            console.warn('Failed to persist integrated crawl count to Chrome storage:', chrome.runtime.lastError);
+          }
+          resolve();
+        });
+      } catch (error) {
+        console.warn('Chrome storage unavailable while saving integrated crawl count:', error);
+        resolve();
+      }
+    });
+  }
+
   markSearchResultsSource(results = [], defaultSource = 'news') {
     if (!Array.isArray(results)) {
       return [];
@@ -8768,266 +9218,6 @@ ${factCheckSection}
     }
   }
 
-  // 비교 모드 토글
-  toggleCompareMode(id) {
-    const block = this.newsBlocks.get(id);
-    if (!block) return;
-
-    if (block.compareMode) {
-      // 비교 모드 해제
-      block.compareMode = false;
-      this.waitingForComparison = null; // 대기 상태도 초기화
-      this.updatePanel();
-    } else {
-      // 첫 사용 시 경고 메시지 표시
-      if (!this.hasShownComparisonWarning()) {
-        this.showComparisonWarning(() => {
-          // 경고 확인 후 비교 모드 활성화
-          this.activateCompareMode(id);
-        });
-        return;
-      }
-      
-      this.activateCompareMode(id);
-    }
-    
-    this.saveNewsBlocks();
-  }
-
-  // 비교 모드 활성화
-  activateCompareMode(id) {
-    const block = this.newsBlocks.get(id);
-    if (!block) return;
-    
-    block.compareMode = true;
-    this.updatePanel();
-    
-    // 다른 뉴스 블록들 중에서 선택할 수 있도록 안내
-    this.showCompareSelection(id);
-  }
-
-  // 비교할 뉴스 선택 안내
-  showCompareSelection(sourceId) {
-    const availableBlocks = Array.from(this.newsBlocks.values())
-      .filter(block => block.id !== sourceId && block.status === 'completed');
-    
-    if (availableBlocks.length === 0) {
-      alert('비교할 수 있는 다른 뉴스가 없습니다. 먼저 다른 뉴스를 분석해주세요.');
-      // 비교 모드 해제
-      const block = this.newsBlocks.get(sourceId);
-      if (block) {
-        block.compareMode = false;
-        this.updatePanel();
-        this.saveNewsBlocks();
-      }
-      return;
-    }
-    
-    // 비교 대기 상태 설정
-    this.waitingForComparison = sourceId;
-    
-    // 사용자에게 다른 뉴스 블록을 클릭하라고 안내
-    this.showCompareInstructions(sourceId);
-  }
-
-  // 비교 경고를 표시했는지 확인
-  hasShownComparisonWarning() {
-    return localStorage.getItem('factcheck_comparison_warning_shown') === 'true';
-  }
-
-  // 비교 경고 표시 상태 저장
-  setComparisonWarningShown() {
-    localStorage.setItem('factcheck_comparison_warning_shown', 'true');
-  }
-
-  // 비교 분석 첫 사용 경고 모달
-  showComparisonWarning(onConfirm) {
-    const modal = document.createElement('div');
-    modal.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      background: rgba(13,13,13,0.6);
-      z-index: 2147483649;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      opacity: 0;
-      transition: opacity 0.3s ease;
-    `;
-
-    modal.innerHTML = `
-      <div style="
-        background: #E8E8E8;
-        border-radius: 16px;
-        padding: 32px;
-        width: 90%;
-        max-width: 500px;
-        position: relative;
-        transform: scale(0.95);
-        transition: all 0.3s ease;
-        border: 1px solid #BF9780;
-        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
-      ">
-        <div style="
-          background: #F2CEA2;
-          color: #1A1A1A;
-          padding: 8px 16px;
-          border-radius: 8px;
-          font-size: 14px;
-          font-weight: 600;
-          margin-bottom: 20px;
-          text-align: center;
-        ">⚠️ 비교분석 기능 안내</div>
-        
-        <h3 style="
-          color: #0D0D0D;
-          font-size: 18px;
-          font-weight: 600;
-          margin-bottom: 16px;
-          text-align: center;
-        ">비교분석을 처음 사용하시는군요!</h3>
-        
-        <div style="color: #737373; line-height: 1.6; margin-bottom: 24px;">
-          <p style="margin-bottom: 12px;">비교분석 기능은 두 개의 뉴스를 선택하여 다음과 같은 분석을 제공합니다:</p>
-          <ul style="margin-left: 20px; margin-bottom: 12px;">
-            <li>• 서로 다른 관점의 비교</li>
-            <li>• 내용의 일치점과 차이점 분석</li>
-            <li>• 각 뉴스의 신뢰도 비교</li>
-          </ul>
-          <p style="color: #BF9780; font-weight: 500; margin-bottom: 12px;">첫 번째 뉴스를 선택한 후, 비교할 두 번째 뉴스를 클릭하면 자동으로 비교분석이 시작됩니다.</p>
-          <p style="color: #DC2626; font-weight: 500; background: #FEE2E2; padding: 8px 12px; border-radius: 6px;">⏱️ 두 기사에 대한 분석을 진행하므로 평소보다 시간이 더 걸릴 수 있습니다.</p>
-        </div>
-        
-        <div style="display: flex; gap: 12px;">
-          <button id="cancel-comparison" style="
-            flex: 1;
-            padding: 12px 24px;
-            border: 1px solid #BF9780;
-            background: transparent;
-            color: #BF9780;
-            border-radius: 8px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.2s;
-          ">취소</button>
-          <button id="confirm-comparison" style="
-            flex: 1;
-            padding: 12px 24px;
-            background: #BF9780;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-weight: 500;
-            cursor: pointer;
-            transition: all 0.2s;
-          ">확인</button>
-        </div>
-      </div>
-    `;
-
-    document.body.appendChild(modal);
-
-    // 애니메이션
-    setTimeout(() => {
-      modal.style.opacity = '1';
-      const modalContent = modal.querySelector('div');
-      if (modalContent) {
-        modalContent.style.transform = 'scale(1)';
-      }
-    }, 10);
-
-    // 이벤트 리스너
-    const confirmBtn = modal.querySelector('#confirm-comparison');
-    const cancelBtn = modal.querySelector('#cancel-comparison');
-
-    const closeModal = () => {
-      modal.style.opacity = '0';
-      setTimeout(() => modal.remove(), 300);
-    };
-
-    confirmBtn.addEventListener('click', () => {
-      this.setComparisonWarningShown();
-      closeModal();
-      onConfirm();
-    });
-
-    cancelBtn.addEventListener('click', () => {
-      closeModal();
-    });
-
-    // 호버 효과
-    confirmBtn.addEventListener('mouseenter', () => {
-      confirmBtn.style.background = '#A67B5B';
-    });
-    confirmBtn.addEventListener('mouseleave', () => {
-      confirmBtn.style.background = '#BF9780';
-    });
-
-    cancelBtn.addEventListener('mouseenter', () => {
-      cancelBtn.style.background = '#BF9780';
-      cancelBtn.style.color = 'white';
-    });
-    cancelBtn.addEventListener('mouseleave', () => {
-      cancelBtn.style.background = 'transparent';
-      cancelBtn.style.color = '#BF9780';
-    });
-  }
-
-  // 비교 안내 메시지 표시 (alert 제거됨)
-  showCompareInstructions(sourceId) {
-    // alert는 제거하고 패널에서만 안내
-    console.log('비교 모드 활성화됨. 다른 뉴스를 클릭하세요.');
-  }
-
-  // 비교 분석 실행
-  createComparisonAnalysis(sourceId, targetId) {
-    const sourceBlock = this.newsBlocks.get(sourceId);
-    const targetBlock = this.newsBlocks.get(targetId);
-    
-    if (!sourceBlock || !targetBlock) return;
-
-    // 비교 분석 블록 생성
-    const comparisonId = Date.now();
-    const comparisonBlock = {
-      id: comparisonId,
-      title: `[비교분석] ${sourceBlock.title} vs ${targetBlock.title}`,
-      url: '',
-      content: `비교 대상 1: ${sourceBlock.title}\n${sourceBlock.content || ''}\n\n비교 대상 2: ${targetBlock.title}\n${targetBlock.content || ''}`,
-      status: 'pending',
-      result: null,
-      progress: '',
-      isComparison: true,
-      sourceNews: {
-        id: sourceId,
-        title: sourceBlock.title,
-        content: sourceBlock.content || '',
-        result: sourceBlock.result
-      },
-      targetNews: {
-        id: targetId,
-        title: targetBlock.title,
-        content: targetBlock.content || '',
-        result: targetBlock.result
-      }
-    };
-
-    // 비교 모드 해제 및 대기 상태 초기화
-    sourceBlock.compareMode = false;
-    this.waitingForComparison = null;
-
-    // 비교 분석 블록 추가
-    this.newsBlocks.set(comparisonId, comparisonBlock);
-    this.saveNewsBlocks();
-    this.updatePanel();
-
-    console.log('비교 분석 블록 생성됨:', comparisonBlock);
-    
-    // 비교 분석 바로 시작
-    this.startAnalysis(comparisonId);
-  }
 
   // 분석 진행 상황 업데이트 (외부에서 호출)
   updateAnalysisProgress(blockId, progress) {
@@ -9091,8 +9281,12 @@ ${factCheckSection}
     
     // 축소된 뷰의 진행 상황 텍스트 업데이트
     const collapsedProgressTextElement = document.querySelector('.collapsed-progress-text');
-    if (collapsedProgressTextElement && blockId === 'current') {
-      collapsedProgressTextElement.textContent = progressMessage;
+    if (collapsedProgressTextElement) {
+      const linkedId = this.getCurrentLinkedBlockId();
+      const isCurrentBlock = this.isCurrentBlockId(blockId) || (typeof blockId === 'number' && linkedId === blockId);
+      if (isCurrentBlock) {
+        collapsedProgressTextElement.textContent = progressMessage;
+      }
     }
   }
 
@@ -9365,7 +9559,7 @@ ${factCheckSection}
 
   // 분석 완료 후 자동 후속 작업 실행
   handlePostAnalysisAutomation(blockId) {
-    if (blockId === 'current') {
+    if (this.isCurrentBlockId(blockId)) {
       return;
     }
 
@@ -9446,8 +9640,9 @@ ${factCheckSection}
     console.log('교차 검증 단계 완료, ID:', blockId);
     
     // current인 경우 currentNews 사용, 아니면 newsBlocks에서 찾기
+    const isCurrentBlock = this.isCurrentBlockId(blockId);
     let block;
-    if (blockId === 'current') {
+    if (isCurrentBlock) {
       block = this.currentNews;
     } else {
       block = this.newsBlocks.get(blockId);
@@ -9472,7 +9667,7 @@ ${factCheckSection}
     // 모든 검증 단계가 완료되었는지 확인
     if (block.currentVerificationStep >= this.crossVerificationDepth) {
       // 최종 검증 완료
-      this.finalizeCrossVerification(blockId, block);
+      this.finalizeCrossVerification(blockId, block, isCurrentBlock);
     } else {
       // 다음 단계 검증 계속 진행
       const abortController = this.abortControllers.get(blockId);
@@ -9480,7 +9675,7 @@ ${factCheckSection}
     }
   }
   
-  finalizeCrossVerification(blockId, block) {
+  finalizeCrossVerification(blockId, block, isCurrentBlock = false) {
     console.log(`[교차 검증] 모든 검증 완료, ID: ${blockId}, 총 ${block.currentVerificationStep}차 검증`);
     
     // 타임아웃 제거
@@ -9590,7 +9785,7 @@ ${factCheckSection}
     }
     
     // 저장 및 패널 업데이트 (current가 아닌 경우만)
-    if (blockId !== 'current') {
+    if (!isCurrentBlock) {
       this.saveNewsBlocks();
     }
     this.updatePanel();
@@ -9621,8 +9816,56 @@ ${factCheckSection}
   }
 
   // 분석 실패 (외부에서 호출)
-  failAnalysis(blockId, error) {
+  failAnalysis(blockId, error, shouldDeleteBlock = false) {
     this.streamingResults.delete(blockId); // 스트리밍 결과 정리
+    
+    // 블록 삭제가 필요한 경우 (치명적인 오류)
+    if (shouldDeleteBlock) {
+      console.warn('[failAnalysis] 치명적인 오류로 블록 삭제:', blockId, error);
+      
+      // 타임아웃 제거
+      if (this.analysisTimeouts.has(blockId)) {
+        clearTimeout(this.analysisTimeouts.get(blockId));
+        this.analysisTimeouts.delete(blockId);
+      }
+      
+      // AbortController 제거
+      if (this.abortControllers.has(blockId)) {
+        this.abortControllers.delete(blockId);
+      }
+      
+      // 교차 검증 상태 제거
+      this.crossVerificationInProgress.delete(blockId);
+      
+      // 블록 삭제
+      this.newsBlocks.delete(blockId);
+      
+      // currentAnalyzingBlockId 초기화
+      if (this.currentAnalyzingBlockId === blockId) {
+        this.currentAnalyzingBlockId = null;
+      }
+      
+      // currentNews 상태 초기화
+      if (this.currentNews && this.activeNewsUrl) {
+        const currentState = this.activeNewsStates.get(this.activeNewsUrl);
+        if (currentState) {
+          this.activeNewsStates.set(this.activeNewsUrl, {
+            ...currentState,
+            status: 'idle',
+            result: null,
+            error: error,
+            progress: null
+          });
+        }
+      }
+      
+      // UI 업데이트
+      this.updatePanel();
+      
+      // 사용자에게 알림
+      alert(`⚠️ 분석을 시작할 수 없습니다.\n\n${error}`);
+      return;
+    }
     
     // 429 에러 (할당량 초과) 체크
     const is429Error = error && (
@@ -9651,7 +9894,7 @@ ${factCheckSection}
       
       // 현재까지의 검증 결과가 있으면 그것을 사용, 없으면 1차 분석 유지
       let block;
-      if (blockId === 'current') {
+      if (this.isCurrentBlockId(blockId)) {
         block = this.currentNews;
       } else {
         block = this.newsBlocks.get(blockId);
@@ -9689,7 +9932,7 @@ ${factCheckSection}
     
     // 에러 발생 시에도 기존 분석 결과는 유지 (result를 null로 넘기지 않음)
     let block;
-    if (blockId === 'current') {
+    if (this.isCurrentBlockId(blockId)) {
       block = this.currentNews;
     } else {
       block = this.newsBlocks.get(blockId);
@@ -9722,36 +9965,43 @@ ${factCheckSection}
   // 분석 정지
   stopAnalysis(id, errorMessage = '🛑 사용자에 의해 분석이 중지되었습니다.') {
     console.log('[stopAnalysis] 분석 정지, ID:', id);
+    const isCurrentBlock = this.isCurrentBlockId(id);
+    const resolvedId = !isCurrentBlock
+      ? (typeof id === 'number' ? id : parseInt(id, 10))
+      : this.getCurrentLinkedBlockId();
+    const targetId = resolvedId !== null && resolvedId !== undefined && !Number.isNaN(resolvedId)
+      ? resolvedId
+      : id;
     
     // 타임아웃 제거
-    if (this.analysisTimeouts.has(id)) {
-      clearTimeout(this.analysisTimeouts.get(id));
-      this.analysisTimeouts.delete(id);
+    if (this.analysisTimeouts.has(targetId)) {
+      clearTimeout(this.analysisTimeouts.get(targetId));
+      this.analysisTimeouts.delete(targetId);
     }
     
     // API 요청 중단
-    if (this.abortControllers.has(id)) {
-      const controller = this.abortControllers.get(id);
+    if (this.abortControllers.has(targetId)) {
+      const controller = this.abortControllers.get(targetId);
       controller.abort();
-      this.abortControllers.delete(id);
+      this.abortControllers.delete(targetId);
     }
     
     // 스트리밍 결과 정리
-    this.streamingResults.delete(id);
-    this.streamingDiffCache.delete(id);
+    this.streamingResults.delete(targetId);
+    this.streamingDiffCache.delete(targetId);
     
     // service_worker에 중단 요청 전송
     if (this.isChromeApiAvailable()) {
       chrome.runtime.sendMessage({
         action: "stopAnalysis",
-        blockId: id
+        blockId: targetId
       }).catch(error => {
         console.error('[stopAnalysis] service_worker 메시지 전송 오류:', error);
       });
     }
     
     // 에러 상태로 변경
-    this.failAnalysis(id, errorMessage);
+    this.failAnalysis(targetId, errorMessage);
   }
 
   // 뉴스 블록 데이터 저장
@@ -9915,7 +10165,7 @@ ${factCheckSection}
   }
 
   // 저장된 뉴스 블록 데이터 로드
-  loadSavedNewsBlocks() {
+  loadSavedData() {
     if (this.isChromeApiAvailable()) {
       try {
         chrome.storage.local.get(['newsBlocks'], (result) => {
@@ -10694,13 +10944,28 @@ AnalysisPanel.prototype.findSimilarArticles = async function(blockId, skipLock =
     let results;
     let integratedFallbackUsed = false;
     if (this.USE_REAL_API) {
-      // 실제 Google Search API 호출 (최대 10개 요청)
-      results = await this.callGoogleSearchAPI(searchQuery, 'news', 10);
-      
-      if (results.length === 0) {
-        console.warn('[findSimilarArticles] 검색 결과 없음');
+      try {
+        // 실제 Google Search API 호출 (최대 10개 요청)
+        results = await this.callGoogleSearchAPI(searchQuery, 'news', 10);
+        
+        if (results.length === 0) {
+          console.warn('[findSimilarArticles] 검색 결과 없음');
+          this.hideSearchLoading(blockId);
+          alert('유사한 뉴스 기사를 찾을 수 없습니다.\n다른 검색어로 시도해보세요.');
+          this.searchInProgress.delete(blockId);
+          return;
+        }
+      } catch (error) {
+        console.error('[findSimilarArticles] Google Search API 호출 실패:', error);
         this.hideSearchLoading(blockId);
-        alert('유사한 뉴스 기사를 찾을 수 없습니다.\n다른 검색어로 시도해보세요.');
+        
+        // GOOGLE_QUOTA_EXCEEDED 에러는 이미 callGoogleSearchAPI에서 모달 표시됨
+        if (error.message === 'GOOGLE_QUOTA_EXCEEDED') {
+          console.log('[findSimilarArticles] 쿼터 초과 에러, 모달 이미 표시됨');
+        } else {
+          alert('뉴스 검색 중 오류가 발생했습니다.\n잠시 후 다시 시도해주세요.');
+        }
+        
         this.searchInProgress.delete(blockId);
         return;
       }
@@ -10885,6 +11150,13 @@ AnalysisPanel.prototype.searchFactCheck = async function(blockId) {
     let integratedResults = [];
     const shouldRunIntegratedSearch = this.getIntegratedSearchSetting() && this.getGoogleSearchEnabled() && this.USE_REAL_API;
     
+    console.log('[searchFactCheck] 통합 검색 조건 체크:', {
+      integratedSearchEnabled: this.getIntegratedSearchSetting(),
+      googleEnabled: this.getGoogleSearchEnabled(),
+      useRealAPI: this.USE_REAL_API,
+      shouldRun: shouldRunIntegratedSearch
+    });
+    
     if (shouldRunIntegratedSearch) {
       console.log('[searchFactCheck] 🌐 통합 검색 병렬 실행 시작');
       this.updateFactCheckStatus(blockId, '🌐 통합 검색 병행 중...');
@@ -10899,7 +11171,14 @@ AnalysisPanel.prototype.searchFactCheck = async function(blockId) {
         }
       } catch (error) {
         console.error('[searchFactCheck] 통합 검색 실패:', error);
-        this.updateFactCheckStatus(blockId, '⚠️ 통합 검색 실패');
+        
+        // GOOGLE_QUOTA_EXCEEDED 에러는 이미 callGoogleSearchAPI에서 모달 표시됨
+        if (error.message === 'GOOGLE_QUOTA_EXCEEDED') {
+          console.log('[searchFactCheck] 쿼터 초과 에러, 모달 이미 표시됨');
+          this.updateFactCheckStatus(blockId, '⚠️ API 할당량 초과');
+        } else {
+          this.updateFactCheckStatus(blockId, '⚠️ 통합 검색 실패');
+        }
       }
     }
     
@@ -10999,6 +11278,7 @@ AnalysisPanel.prototype.searchFactCheck = async function(blockId) {
     console.log('[searchFactCheck] 🎯 정확도 모드: 크롤링으로 전체 본문 수집');
     
     const crawlingCountSetting = await this.getCrawlingCountSetting();
+    const integratedCrawlCountSetting = await this.getIntegratedCrawlCountSetting();
     
     // 뉴스와 통합 검색 결과를 분리하여 크롤링
     const newsArticles = results.filter(article => (article.searchSource || 'news') === 'news');
@@ -11006,9 +11286,12 @@ AnalysisPanel.prototype.searchFactCheck = async function(blockId) {
     
     console.log('[searchFactCheck] 크롤링 대상 - 뉴스:', newsArticles.length, '개, 통합:', integratedArticles.length, '개');
     
-    // 크롤링 계획: 뉴스 우선, 통합 검색은 별도 처리
+    // 크롤링 계획: 뉴스 우선, 통합 검색은 설정값 사용
+    // 방어 코드: 설정값이 실제 리스트 개수보다 크면 자동으로 조정
     const newsCrawlTarget = Math.min(crawlingCountSetting, newsArticles.length);
-    const integratedCrawlTarget = integratedArticles.length > 0 ? Math.min(3, integratedArticles.length) : 0;
+    const integratedCrawlTarget = integratedArticles.length > 0 ? Math.min(integratedCrawlCountSetting, integratedArticles.length) : 0;
+    
+    console.log('[searchFactCheck] 크롤링 목표 - 뉴스:', newsCrawlTarget, '개 (설정:', crawlingCountSetting, '), 통합:', integratedCrawlTarget, '개 (설정:', integratedCrawlCountSetting, ')');
     
     this.updateFactCheckStatus(blockId, `✅ 뉴스 ${newsCrawlTarget}개 크롤링 시작...`);
     
@@ -11016,10 +11299,10 @@ AnalysisPanel.prototype.searchFactCheck = async function(blockId) {
     const crawledArticles = [];
     const failedArticles = [];
     
-    // 뉴스 기사 크롤링
+    // 뉴스 기사 크롤링 (방어 코드: 목표 개수 도달 시 즉시 종료)
     for (let i = 0; i < newsArticles.length && crawledArticles.length < newsCrawlTarget; i++) {
       const article = { ...newsArticles[i], searchSource: 'news' };
-      this.updateFactCheckStatus(blockId, `📰 ${i + 1}/${newsArticles.length}: "${article.title.substring(0, 25)}..." 크롤링 중`);
+      this.updateFactCheckStatus(blockId, `📰 ${i + 1}/${newsCrawlTarget}: "${article.title.substring(0, 25)}..." 크롤링 중`);
       
       try {
         const crawledContent = await this.crawlArticleContent(article.link);
@@ -11028,6 +11311,12 @@ AnalysisPanel.prototype.searchFactCheck = async function(blockId) {
           crawledArticles.push({ ...article, crawledContent });
           this.updateFactCheckStatus(blockId, `✅ 뉴스 ${crawledArticles.length}/${newsCrawlTarget}개 크롤링 성공`);
           console.log('[searchFactCheck] 뉴스 크롤링 성공:', crawledArticles.length, '/', newsCrawlTarget);
+          
+          // 방어 코드: 목표 개수에 도달하면 즉시 루프 종료
+          if (crawledArticles.length >= newsCrawlTarget) {
+            console.log('[searchFactCheck] ✅ 뉴스 크롤링 목표 달성, 루프 종료');
+            break;
+          }
         } else {
           console.warn('[searchFactCheck] 크롤링 실패, 지능형 모드 재시도:', article.link);
           this.updateFactCheckStatus(blockId, `🤖 지능형 크롤링 시도 중...`);
@@ -11037,9 +11326,15 @@ AnalysisPanel.prototype.searchFactCheck = async function(blockId) {
             crawledArticles.push({ ...article, crawledContent: advancedContent });
             this.updateFactCheckStatus(blockId, `✅ 뉴스 ${crawledArticles.length}/${newsCrawlTarget}개 크롤링 성공 (지능형)`);
             console.log('[searchFactCheck] 지능형 크롤링 성공:', crawledArticles.length, '/', newsCrawlTarget);
+            
+            // 방어 코드: 목표 개수에 도달하면 즉시 루프 종료
+            if (crawledArticles.length >= newsCrawlTarget) {
+              console.log('[searchFactCheck] ✅ 뉴스 크롤링 목표 달성 (지능형), 루프 종료');
+              break;
+            }
           } else {
             failedArticles.push(article);
-            console.log('[searchFactCheck] 뉴스 크롤링 실패:', i + 1, '/', newsArticles.length);
+            console.log('[searchFactCheck] 뉴스 크롤링 실패:', i + 1, '/', newsCrawlTarget);
           }
         }
         
@@ -11058,7 +11353,7 @@ AnalysisPanel.prototype.searchFactCheck = async function(blockId) {
       
       for (let i = 0; i < integratedArticles.length && integratedCrawled.length < integratedCrawlTarget; i++) {
         const article = { ...integratedArticles[i], searchSource: 'integrated' };
-        this.updateFactCheckStatus(blockId, `🌐 ${i + 1}/${integratedArticles.length}: "${article.title.substring(0, 25)}..." 크롤링 중`);
+        this.updateFactCheckStatus(blockId, `🌐 ${i + 1}/${integratedCrawlTarget}: "${article.title.substring(0, 25)}..." 크롤링 중`);
         
         try {
           const crawledContent = await this.crawlArticleContent(article.link, true); // 통합은 바로 지능형 모드
@@ -11067,8 +11362,14 @@ AnalysisPanel.prototype.searchFactCheck = async function(blockId) {
             integratedCrawled.push({ ...article, crawledContent });
             this.updateFactCheckStatus(blockId, `✅ 통합 ${integratedCrawled.length}/${integratedCrawlTarget}개 크롤링 성공`);
             console.log('[searchFactCheck] 통합 크롤링 성공:', integratedCrawled.length, '/', integratedCrawlTarget);
+            
+            // 방어 코드: 목표 개수에 도달하면 즉시 루프 종료
+            if (integratedCrawled.length >= integratedCrawlTarget) {
+              console.log('[searchFactCheck] ✅ 통합 크롤링 목표 달성, 루프 종료');
+              break;
+            }
           } else {
-            console.log('[searchFactCheck] 통합 크롤링 실패:', i + 1, '/', integratedArticles.length);
+            console.log('[searchFactCheck] 통합 크롤링 실패:', i + 1, '/', integratedCrawlTarget);
           }
           
           await this.delay(500);
@@ -11106,6 +11407,7 @@ AnalysisPanel.prototype.searchFactCheck = async function(blockId) {
     this.updateFactCheckStatus(blockId, '✨ 전체 재분석 중...');
     
     // Gemini로 전체 재분석 (기존 분석 + 본문 + 사실 검증 결과)
+    const previousResultSnapshot = block.result ? JSON.parse(JSON.stringify(block.result)) : null;
     const reanalyzedResult = await this.reanalyzeWithFactCheck(block, crawledArticles, verificationResult);
     
     this.updateFactCheckStatus(blockId, '🎯 최종 통합 분석 중...');
@@ -11117,6 +11419,7 @@ AnalysisPanel.prototype.searchFactCheck = async function(blockId) {
       console.log('[searchFactCheck] ✅ 최종 통합 분석 완료:', finalAnalysis);
     } catch (error) {
       console.error('[searchFactCheck] 최종 통합 분석 실패:', error);
+      this.handleApiError(error, '최종 통합 분석');
       // 실패해도 계속 진행 (선택적 기능)
     }
     
@@ -11128,8 +11431,12 @@ AnalysisPanel.prototype.searchFactCheck = async function(blockId) {
       verification: verificationResult,
       reanalyzed: reanalyzedResult,
       finalAnalysis: finalAnalysis, // 최종 통합 분석 결과 추가
+      previousResult: previousResultSnapshot,
       timestamp: Date.now()
     };
+    if (previousResultSnapshot) {
+      block.firstAnalysis = previousResultSnapshot;
+    }
     
     console.log('[searchFactCheck] factCheckResult 저장 완료:', block.factCheckResult);
     
@@ -11159,6 +11466,12 @@ AnalysisPanel.prototype.searchFactCheck = async function(blockId) {
     this.saveNewsBlocks();
     console.log('[searchFactCheck] 블록 저장 완료 (영구 저장)');
     this.updatePanel();
+    
+    // 사실 검증 완료 후 자동으로 상세 결과 표시
+    setTimeout(() => {
+      console.log('[searchFactCheck] 사실 검증 완료, 상세 결과 자동 표시');
+      this.showAnalysisResult(blockId);
+    }, 500);
     
     // 상세 패널이 열려있으면 새로고침
     if (this.activeDetailOverlay) {
@@ -11207,6 +11520,10 @@ AnalysisPanel.prototype.saveGoogleApiKey = async function(apiKey) {
 AnalysisPanel.prototype.callGoogleSearchAPI = async function(query, type, limit) {
   console.log('[callGoogleSearchAPI] 호출:', query, type, limit);
   
+  // Google Search API 사용 횟수 증가 (호출 시작 시점에 카운트)
+  this.incrementApiUsage('google', 1);
+  console.log(`[API Count] Google Search API 호출 - 타입: ${type}, 쿼리: ${query}`);
+  
   // CSE ID 고정값 사용
   const CSE_ID_NEWS = "70364eb765310426e";      // 뉴스 전용 검색 엔진
   const CSE_ID_KEYWORD = "241358ac91fe04cd8";   // 기존 키워드 검색
@@ -11226,7 +11543,18 @@ AnalysisPanel.prototype.callGoogleSearchAPI = async function(query, type, limit)
     throw new Error('API_KEY_MISSING');
   }
   
-  const url = `https://www.googleapis.com/customsearch/v1?key=${encodeURIComponent(apiKey)}&cx=${cseId}&q=${encodeURIComponent(query)}&num=${limit}`;
+  // 날짜 필터 추가 (최근 1년 이내)
+  const dt = this.getCurrentDateTimeInfo();
+  const oneYearAgo = new Date(dt.iso);
+  oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+  const dateRestrict = oneYearAgo.toISOString().split('T')[0]; // YYYY-MM-DD
+  
+  let url = `https://www.googleapis.com/customsearch/v1?key=${encodeURIComponent(apiKey)}&cx=${cseId}&q=${encodeURIComponent(query)}&num=${limit}`;
+  
+  // 뉴스 검색 시 날짜 정렬 추가
+  if (type === 'news') {
+    url += `&sort=date&dateRestrict=y1`; // 최근 1년, 날짜순 정렬
+  }
   
   try {
     const response = await fetch(url, {
@@ -11242,13 +11570,35 @@ AnalysisPanel.prototype.callGoogleSearchAPI = async function(query, type, limit)
       
       if (response.status === 403) {
         // API 키 문제 또는 쿼터 초과
-        if (errorData.error && errorData.error.message && errorData.error.message.includes('quota')) {
-          throw new Error('QUOTA_EXCEEDED');
+        const errorMessage = errorData.error?.message || '';
+        if (errorMessage.includes('quota') || errorMessage.includes('Limit Exceeded') || errorMessage.includes('Daily Limit')) {
+          // Google Search API 할당량 초과 - 카운트 초기화 및 모달 표시
+          console.log('[callGoogleSearchAPI] Google Search API 할당량 초과 - 카운트 초기화');
+          this.resetApiUsageCount('google');
+          this.updateApiQuotaDisplay();
+          
+          this.showErrorModal(
+            'Google Search API 할당량 초과',
+            'Google Custom Search API의 일일 무료 할당량(100회)을 모두 사용하셨습니다.\n\n내일 다시 이용하거나, Google Cloud Console에서 유료 플랜으로 업그레이드할 수 있습니다.\n\n또는 새로운 API 키를 발급받아 설정에서 변경할 수 있습니다.',
+            `상태 코드: ${response.status}\n메시지: ${errorMessage}`
+          );
+          
+          throw new Error('GOOGLE_QUOTA_EXCEEDED');
         }
         throw new Error('API_KEY_INVALID');
       } else if (response.status === 429) {
         // Too Many Requests: 할당량 초과
-        throw new Error('QUOTA_EXCEEDED');
+        console.log('[callGoogleSearchAPI] Google Search API 할당량 초과 (429) - 카운트 초기화');
+        this.resetApiUsageCount('google');
+        this.updateApiQuotaDisplay();
+        
+        this.showErrorModal(
+          'Google Search API 할당량 초과',
+          'Google Custom Search API의 일일 무료 할당량(100회)을 모두 사용하셨습니다.\n\n내일 다시 이용하거나, Google Cloud Console에서 유료 플랜으로 업그레이드할 수 있습니다.\n\n또는 새로운 API 키를 발급받아 설정에서 변경할 수 있습니다.',
+          `상태 코드: ${response.status}`
+        );
+        
+        throw new Error('GOOGLE_QUOTA_EXCEEDED');
       } else if (response.status === 400) {
         throw new Error('INVALID_REQUEST');
       } else if (response.status === 404) {
@@ -11291,13 +11641,14 @@ AnalysisPanel.prototype.callGoogleSearchAPI = async function(query, type, limit)
     
     let orderedItems = filteredItems;
 
-    if (type === 'keyword' || type === 'integrated') {
+    // 통합 검색은 필터링하지 않음 (신뢰 도메인 검증 스킵)
+    if (type === 'keyword') {
       orderedItems = await this.prioritizeFactCheckResults(filteredItems);
     }
 
     // 결과 포맷팅
     const sourceTag = type === 'integrated' ? 'integrated' : 'news';
-    return orderedItems.slice(0, limit).map(item => ({
+    let formattedResults = orderedItems.slice(0, limit).map(item => ({
       title: item.title || '제목 없음',
       snippet: item.snippet || '요약 없음',
       link: item.link || '',
@@ -11305,6 +11656,15 @@ AnalysisPanel.prototype.callGoogleSearchAPI = async function(query, type, limit)
       pagemap: item.pagemap || {},
       searchSource: sourceTag
     }));
+    
+    // ✅ 1단계: URL 정규화 및 중복 제거 (뉴스 검색에만 적용)
+    if (type === 'news') {
+      console.log('[callGoogleSearchAPI] 중복 제거 전:', formattedResults.length, '개');
+      formattedResults = this.deduplicateArticles(formattedResults);
+      console.log('[callGoogleSearchAPI] 중복 제거 후:', formattedResults.length, '개');
+    }
+    
+    return formattedResults;
     
   } catch (error) {
     console.error('[callGoogleSearchAPI] 요청 실패:', error);
@@ -11316,6 +11676,147 @@ AnalysisPanel.prototype.callGoogleSearchAPI = async function(query, type, limit)
     
     throw error;
   }
+};
+
+// ✅ URL 정규화 함수: 추적 파라미터 제거
+AnalysisPanel.prototype.normalizeURL = function(urlString) {
+  try {
+    const url = new URL(urlString);
+    
+    // 추적용 쿼리 파라미터 제거 (utm_, fbclid, gclid 등)
+    const trackingParams = [
+      'utm_source', 'utm_medium', 'utm_campaign', 'utm_content', 'utm_term',
+      'fbclid', 'gclid', 'msclkid', 
+      'mc_cid', 'mc_eid', // Mailchimp
+      '_ga', '_gl', // Google Analytics
+      'ref', 'referrer', // 레퍼러
+      'source', 'share', // 공유 추적
+      'ncid', 'cmpid' // 뉴스 캠페인 ID
+    ];
+    
+    trackingParams.forEach(param => {
+      url.searchParams.delete(param);
+    });
+    
+    // 정규화된 URL 반환 (origin + pathname + 정리된 쿼리)
+    let normalized = url.origin + url.pathname;
+    
+    // 남은 쿼리가 있으면 추가
+    const remainingParams = url.searchParams.toString();
+    if (remainingParams) {
+      normalized += '?' + remainingParams;
+    }
+    
+    return normalized;
+  } catch (error) {
+    console.warn('[normalizeURL] URL 파싱 실패:', urlString, error);
+    return urlString; // 실패 시 원본 반환
+  }
+};
+
+// ✅ 제목 전처리 함수: 불필요한 태그/특수문자 제거
+AnalysisPanel.prototype.normalizeTitle = function(title) {
+  if (!title) return '';
+  
+  let normalized = title;
+  
+  // 1. 뉴스 태그 제거 ([단독], [속보], [영상] 등)
+  normalized = normalized.replace(/\[.*?\]/g, '');
+  normalized = normalized.replace(/【.*?】/g, '');
+  
+  // 2. 괄호 안 부가 설명 제거 (예: "사건 발생 (상세)")
+  normalized = normalized.replace(/\(.*?\)/g, '');
+  normalized = normalized.replace(/（.*?）/g, '');
+  
+  // 3. 따옴표 제거
+  normalized = normalized.replace(/["'「」『』""'']/g, '');
+  
+  // 4. 특수문자 정리 (공백으로 치환)
+  normalized = normalized.replace(/[^\w\sㄱ-ㅎㅏ-ㅣ가-힣]/g, ' ');
+  
+  // 5. 연속 공백 제거
+  normalized = normalized.replace(/\s+/g, ' ').trim();
+  
+  // 6. 소문자 변환
+  normalized = normalized.toLowerCase();
+  
+  return normalized;
+};
+
+// ✅ 제목 유사도 계산 함수 (단순 토큰 기반 Jaccard 유사도)
+AnalysisPanel.prototype.calculateTitleSimilarity = function(title1, title2) {
+  const tokens1 = new Set(this.normalizeTitle(title1).split(/\s+/).filter(t => t.length > 0));
+  const tokens2 = new Set(this.normalizeTitle(title2).split(/\s+/).filter(t => t.length > 0));
+  
+  // 교집합
+  const intersection = new Set([...tokens1].filter(t => tokens2.has(t)));
+  
+  // 합집합
+  const union = new Set([...tokens1, ...tokens2]);
+  
+  if (union.size === 0) return 0;
+  
+  // Jaccard 유사도
+  return intersection.size / union.size;
+};
+
+// ✅ 중복 기사 제거 (1단계: URL, 2단계: 언론사 + 제목)
+AnalysisPanel.prototype.deduplicateArticles = function(articles) {
+  console.log('[deduplicateArticles] 중복 제거 시작, 총:', articles.length, '개');
+  
+  // 1단계: URL 기준 중복 제거
+  const urlMap = new Map();
+  
+  articles.forEach(article => {
+    const normalizedURL = this.normalizeURL(article.link);
+    
+    // 같은 정규화 URL이 이미 있으면 스킵 (먼저 들어온 것 유지)
+    if (!urlMap.has(normalizedURL)) {
+      urlMap.set(normalizedURL, article);
+    } else {
+      console.log('[deduplicateArticles] 🔗 URL 중복 제거:', article.title);
+    }
+  });
+  
+  console.log('[deduplicateArticles] URL 정규화 후:', urlMap.size, '개');
+  
+  // 2단계: 같은 언론사 + 제목 유사도 기반 중복 제거
+  const uniqueArticles = [];
+  const urlMapValues = Array.from(urlMap.values());
+  
+  urlMapValues.forEach(article => {
+    const currentDomain = article.displayLink || '';
+    const currentTitle = article.title || '';
+    
+    // 이미 추가된 기사들 중 같은 언론사인 것들과 비교
+    const isDuplicate = uniqueArticles.some(existing => {
+      const existingDomain = existing.displayLink || '';
+      
+      // 같은 언론사인가?
+      if (currentDomain !== existingDomain) {
+        return false; // 다른 언론사면 중복 아님
+      }
+      
+      // 제목 유사도 계산
+      const similarity = this.calculateTitleSimilarity(currentTitle, existing.title);
+      
+      // 유사도 0.9 이상이면 중복으로 판단
+      if (similarity >= 0.9) {
+        console.log('[deduplicateArticles] 📰 제목 유사 중복 제거:', currentTitle, '(유사도:', similarity.toFixed(2), ')');
+        return true;
+      }
+      
+      return false;
+    });
+    
+    if (!isDuplicate) {
+      uniqueArticles.push(article);
+    }
+  });
+  
+  console.log('[deduplicateArticles] ✅ 최종 결과:', uniqueArticles.length, '개 (제거:', articles.length - uniqueArticles.length, '개)');
+  
+  return uniqueArticles;
 };
 
 // 검색 에러 메시지 변환
@@ -12261,7 +12762,10 @@ AnalysisPanel.prototype.filterArticlesWithAI = async function(block, articles) {
     console.log('[filterArticlesWithAI] 검색된 기사 목록:\n' + articlesList);
     
     // AI 프롬프트 생성
-    const prompt = `당신은 뉴스 관련성 분석 전문가입니다. 주어진 원본 뉴스와 검색된 유사 기사들을 비교하여, **현재 뉴스와 관련 없는 기사들을 제외**해주세요.
+    const dateTimeContext = this.getDateTimeContext();
+    const prompt = `${dateTimeContext}
+
+당신은 뉴스 관련성 분석 전문가입니다. 주어진 원본 뉴스와 검색된 유사 기사들을 비교하여, **현재 뉴스와 관련 없는 기사들을 제외**해주세요.
 
 **원본 뉴스:**
 제목: ${currentNews.title}
@@ -12446,7 +12950,7 @@ AnalysisPanel.prototype.showQuotaErrorToast = function(blockId) {
     style.remove();
   }, 3000);
 
-  if (blockId && blockId !== 'current') {
+  if (blockId && !this.isCurrentBlockId(blockId)) {
     this.updateNewsStatus(blockId, 'error', null, '할당량을 전부 사용했습니다.');
   }
 };
@@ -12596,7 +13100,10 @@ AnalysisPanel.prototype.parseHtmlWithAI = async function(html, url) {
     console.log('[parseHtmlWithAI] 📤 AI에게 전달할 HTML 길이:', truncatedHtml.length, '자');
     
     // Gemini API로 HTML에서 제목과 본문 추출 요청
-    const prompt = `다음은 뉴스 기사 웹페이지의 HTML 코드입니다. 이 HTML에서 **기사 제목**과 **본문 내용**만 추출해서 JSON 형식으로 반환하세요.
+    const dateTimeContext = this.getDateTimeContext();
+    const prompt = `${dateTimeContext}
+
+다음은 뉴스 기사 웹페이지의 HTML 코드입니다. 이 HTML에서 **기사 제목**과 **본문 내용**만 추출해서 JSON 형식으로 반환하세요.
 
 규칙:
 - 광고, 메뉴, 관련 기사 링크, 댓글, 네비게이션은 제외
@@ -12653,13 +13160,29 @@ ${truncatedHtml}
       return null;
     }
     
-    if (parsed && parsed.title && parsed.content) {
-      const formatted = `제목: ${parsed.title}\n\n${parsed.content}`;
-      console.log('[parseHtmlWithAI] ✅ AI 파싱 성공 - 제목:', parsed.title.substring(0, 30), '/ 본문:', parsed.content.length, '자');
-      return formatted;
+    if (parsed && parsed.title) {
+      // content가 있으면 사용, 없으면 HTML에서 텍스트 추출 시도
+      let content = parsed.content;
+      
+      if (!content || content.length < 50) {
+        console.warn('[parseHtmlWithAI] ⚠️ AI 파싱 content 부족, HTML에서 텍스트 추출 시도');
+        // HTML에서 간단하게 텍스트 추출
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = html.substring(0, 10000); // 앞부분만
+        const textContent = tempDiv.textContent || tempDiv.innerText || '';
+        const cleaned = textContent.replace(/\s+/g, ' ').trim();
+        content = cleaned.substring(0, 3000); // 최대 3000자
+        console.log('[parseHtmlWithAI] 📄 HTML 텍스트 추출:', content.length, '자');
+      }
+      
+      if (content && content.length >= 50) {
+        const formatted = `제목: ${parsed.title}\n\n${content}`;
+        console.log('[parseHtmlWithAI] ✅ AI 파싱 성공 - 제목:', parsed.title.substring(0, 30), '/ 본문:', content.length, '자');
+        return formatted;
+      }
     }
     
-    console.error('[parseHtmlWithAI] JSON 파싱 실패:', parsed);
+    console.error('[parseHtmlWithAI] JSON 파싱 실패 또는 content 부족:', parsed);
     return null;
     
   } catch (error) {
@@ -12811,7 +13334,9 @@ AnalysisPanel.prototype.verifyFactsWithAI = async function(originalBlock, compar
     };
   }
   
-  const prompt = `
+  const dateTimeContext = this.getDateTimeContext();
+  const prompt = `${dateTimeContext}
+
 당신은 사실 검증 전문가입니다. 원본 뉴스 기사와 비교 기사들을 분석하여 사실 여부를 검증하세요.
 
 ## 원본 기사
@@ -12971,19 +13496,70 @@ AnalysisPanel.prototype.performFinalIntegratedAnalysis = async function(original
 3. 사실 검증 참고 기사와 사실 검증 요약 데이터를 대조하여 확인된 사실, 모순, 미확인 주장을 구분하세요.
 4. 외부 증거를 근거로 초기 분석을 보완하거나 수정하고 최종 판단을 명확한 근거와 함께 작성하세요.
 
-## 출력 형식 (JSON만 출력)
-\`\`\`json
-{
-  "final_verdict": "진짜 뉴스|가짜일 가능성이 있는 뉴스|가짜일 가능성이 높은 뉴스",
-  "summary": "최종 결론 (2~3문장)",
-  "reasoning": {
-    "reassessment_of_initial_analysis": "초기 분석 데이터 재검토 내용",
-    "confirmations_from_external_data": "뒷받침하는 외부 증거들",
-    "discrepancies_or_contradictions": "반박/상충 증거들 (없으면 빈 문자열)",
-    "unverified_claims": "검증 불가능한 주장들 (없으면 빈 문자열)"
-  }
-}
-\`\`\`
+## 출력 형식 (HTML만 출력)
+다음과 같은 구조의 HTML을 출력하세요. **반드시 가독성을 위해 다음 규칙을 따르세요:**
+- 목록은 <ul>, <li> 태그 사용
+- 강조는 <strong> 또는 <b> 태그 사용
+- 인용문은 <blockquote> 태그 사용
+- 단락 구분은 <p> 태그 사용
+- 제목은 <h4>, <h5> 태그 사용
+
+HTML 구조 예시:
+<div class="final-analysis-result">
+  <div class="verdict-section">
+    <h3>🎯 최종 판단</h3>
+    <p class="verdict-text">[사실|대체로 사실|일부 사실|대체로 거짓|거짓]</p>
+  </div>
+  
+  <div class="summary-section">
+    <h3>📝 최종 결론 요약</h3>
+    <p>[2~3문장의 최종 결론. HTML 태그로 가독성 높게 작성]</p>
+  </div>
+  
+  <div class="reasoning-section">
+    <h3>🔍 상세 분석</h3>
+    
+    <div class="reasoning-item">
+      <h4>📊 초기 분석 재검토</h4>
+      <div class="content">
+        <p>[초기 분석 내용. 목록으로 작성 시:]</p>
+        <ul>
+          <li><b>항목명:</b> 상세 내용</li>
+          <li><b>항목명2:</b> 상세 내용</li>
+        </ul>
+      </div>
+    </div>
+    
+    <div class="reasoning-item">
+      <h4>✅ 외부 데이터로 확인된 사실</h4>
+      <div class="content">
+        <p>[확인된 사실들을 목록으로:]</p>
+        <ul>
+          <li><b>주요 사실:</b> 세부 내용 및 출처 <blockquote>"인용문 예시"</blockquote></li>
+        </ul>
+      </div>
+    </div>
+    
+    <div class="reasoning-item">
+      <h4>⚠️ 반박 또는 상충 증거</h4>
+      <div class="content">
+        <p>[반박 증거가 있으면 목록으로, 없으면 "발견되지 않음"]</p>
+      </div>
+    </div>
+    
+    <div class="reasoning-item">
+      <h4>❓ 검증 불가능한 주장</h4>
+      <div class="content">
+        <p>[검증 불가 항목이 있으면 목록으로, 없으면 "없음"]</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+**중요:** 
+1. 위 HTML 구조를 그대로 사용하되, 대괄호 [] 안의 내용을 실제 분석 결과로 채워서 출력하세요.
+2. **목록, 강조, 인용문 등 HTML 태그를 적극 활용하여 가독성을 높이세요.**
+3. 인용문은 반드시 <blockquote> 태그로 감싸서 표시하세요.
 
 ---
 
@@ -13020,7 +13596,13 @@ ${factCheckSummary}
         }
         
         if (response.status === '분석 완료 및 결과 전송 성공' && response.result) {
-          resolve(response.result);
+          // API 사용 횟수 증가
+          if (response.incrementApiUsage) {
+            this.incrementApiUsage(response.incrementApiUsage.type, response.incrementApiUsage.count);
+          }
+          // HTML 응답을 JSON 구조로 변환
+          const parsedResult = this.parseHtmlFinalAnalysis(response.result);
+          resolve(parsedResult);
         } else {
           console.warn('[performFinalIntegratedAnalysis] 응답 파싱 실패:', response);
           resolve(null);
@@ -13031,6 +13613,66 @@ ${factCheckSummary}
   } catch (error) {
     console.error('[performFinalIntegratedAnalysis] 최종 통합 분석 오류:', error);
     return null;
+  }
+};
+
+// HTML 형식의 최종 통합 분석 결과를 JSON 구조로 파싱
+AnalysisPanel.prototype.parseHtmlFinalAnalysis = function(htmlString) {
+  try {
+    // HTML을 파싱하기 위한 임시 DOM 생성
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(htmlString, 'text/html');
+    
+    // 각 섹션에서 데이터 추출
+    const verdictText = doc.querySelector('.verdict-section .verdict-text')?.textContent?.trim() || '분석 결과 없음';
+    
+    // summary는 HTML을 그대로 유지
+    const summaryElement = doc.querySelector('.summary-section p');
+    const summaryText = summaryElement ? summaryElement.innerHTML : '';
+    
+    // reasoning 항목들 추출 (HTML 그대로 유지)
+    const reasoningItems = doc.querySelectorAll('.reasoning-item');
+    const reasoning = {
+      reassessment_of_initial_analysis: '',
+      confirmations_from_external_data: '',
+      discrepancies_or_contradictions: '',
+      unverified_claims: ''
+    };
+    
+    reasoningItems.forEach((item) => {
+      const title = item.querySelector('h4')?.textContent?.trim() || '';
+      const contentElement = item.querySelector('.content');
+      const content = contentElement ? contentElement.innerHTML : '';
+      
+      if (title.includes('초기 분석 재검토')) {
+        reasoning.reassessment_of_initial_analysis = content;
+      } else if (title.includes('외부 데이터로 확인된 사실')) {
+        reasoning.confirmations_from_external_data = content;
+      } else if (title.includes('반박 또는 상충 증거')) {
+        reasoning.discrepancies_or_contradictions = content;
+      } else if (title.includes('검증 불가능한 주장')) {
+        reasoning.unverified_claims = content;
+      }
+    });
+    
+    return {
+      final_verdict: verdictText,
+      summary: summaryText,
+      reasoning: reasoning
+    };
+  } catch (error) {
+    console.error('[parseHtmlFinalAnalysis] HTML 파싱 오류:', error);
+    // 파싱 실패 시 원본 텍스트를 그대로 사용
+    return {
+      final_verdict: '분석 결과 파싱 실패',
+      summary: htmlString,
+      reasoning: {
+        reassessment_of_initial_analysis: '',
+        confirmations_from_external_data: '',
+        discrepancies_or_contradictions: '',
+        unverified_claims: ''
+      }
+    };
   }
 };
 
@@ -13079,25 +13721,44 @@ ${comparisonArticles.map((article, i) => {
 - 종합 평가: ${verificationResult.종합_평가}
 
 ## 작업
-위 사실 검증 결과를 반영하여 **기존 분석을 업데이트**하세요:
+위 사실 검증 결과를 **근거와 분석에 자연스럽게 통합**하여 업데이트하세요:
 
 1. **진위**: 검증 결과를 반영하여 최종 판단 (진짜 뉴스 / 가짜일 가능성이 높은 뉴스 / 가짜일 가능성이 있는 뉴스 / 진짜 뉴스)
+
 2. **요약**: 사실 검증 결과를 포함한 핵심 요약 (2-3문장)
+
 3. **근거**: 
-   - 기존 근거 유지
-   - **✅ 사실 검증**: ${comparisonArticles.length}개 기사와 교차 검증 완료
-   - 일치/불일치하는 사실 요약
+   - 기존 근거를 유지하되, **사실 검증 결과를 자연스럽게 통합**
+   - 형식 예시:
+     "... (기존 근거 내용) ...
+     
+     **✅ 일치하는 사실 (${verificationResult.일치하는_사실?.length || 0}개)**
+     ${verificationResult.일치하는_사실?.map((fact, i) => `${i + 1}. ${fact}`).join('\n') || '(없음)'}
+     
+     ${verificationResult.불일치하는_사실?.length > 0 ? `**❌ 불일치하는 사실 (${verificationResult.불일치하는_사실.length}개)**
+     ${verificationResult.불일치하는_사실.map((fact, i) => `${i + 1}. ${fact}`).join('\n')}` : ''}
+     
+     ${verificationResult.검증_불가?.length > 0 ? `**⚠️ 검증 불가 (${verificationResult.검증_불가.length}개)**
+     ${verificationResult.검증_불가.map((fact, i) => `${i + 1}. ${fact}`).join('\n')}` : ''}"
+
 4. **분석**: 
-   - 기존 분석 내용
-   - **사실 검증 반영**: 비교 기사들에서 확인된 사항, 의심스러운 부분 등 상세히 기술
+   - 기존 분석을 유지하되, **사실 검증 내용을 상세히 통합**
+   - ${comparisonArticles.length}개 기사와의 교차 검증 결과를 자연스럽게 서술
+   - 확인된 사실, 의심스러운 부분, 불일치 사항을 맥락에 맞게 설명
+   - 검증 불가한 주장이 있다면 그 이유와 함께 기술
+   - 종합 평가 내용을 분석에 녹여서 표현
+
 5. **키워드**: 기존 유지
+
 6. **검색어**: 기존 유지
+
 7. **사실검증완료**: true (새로 추가)
 
-**중요**: 
-- "사실 검증 완료" 또는 "교차 검증됨" 등의 표시를 명확히 포함
-- 일치하는 사실은 ✅, 불일치는 ❌ 마크 사용
-- 비교 검증된 기사 개수 명시
+**중요 원칙**: 
+- 근거와 분석이 **하나의 연속된 서술**처럼 읽히도록 작성 (별도 소제목·리스트만 나열하지 말 것)
+- 사실 검증 결과를 별도 섹션이 아닌 **문단 안에 자연스럽게 포함**
+- 일치(✅), 불일치(❌), 검증불가(⚠️) 마크를 사용하되 자연스럽게 배치
+- 비교 검증된 기사 개수를 명시
 
 JSON 형식으로 응답:
 \`\`\`json

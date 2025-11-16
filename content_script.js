@@ -127,25 +127,29 @@ async function getSavedVerdict() {
  */
 function getColorScheme(verdict) {
   const colors = {
-    '진짜 뉴스': {
-      background: 'rgba(232, 245, 232, 0.4)', // 연한 초록 (투명도 60%)
+    '사실': {
+      background: 'rgba(232, 245, 232, 0.4)', // 진한 초록
       border: '#4CAF50'
     },
-    '가짜일 가능성이 있는 뉴스': {
-      background: 'rgba(242, 206, 162, 0.4)', // 주황 (투명도 60%)
-      border: '#BF9780'
+    '대체로 사실': {
+      background: 'rgba(209, 250, 229, 0.4)', // 연한 초록
+      border: '#10B981'
     },
-    '가짜일 가능성이 높은 뉴스': {
-      background: 'rgba(255, 235, 238, 0.5)', // 연한 빨강 (투명도 50%)
-      border: '#F44336'
+    '일부 사실': {
+      background: 'rgba(254, 243, 199, 0.4)', // 노랑
+      border: '#F59E0B'
     },
-    '가짜 뉴스': {
-      background: 'rgba(255, 235, 238, 0.6)', // 연한 빨강 (투명도 40%)
-      border: '#D32F2F'
+    '대체로 거짓': {
+      background: 'rgba(254, 215, 170, 0.4)', // 주황
+      border: '#F97316'
+    },
+    '거짓': {
+      background: 'rgba(254, 202, 202, 0.5)', // 빨강
+      border: '#EF4444'
     }
   };
   
-  return colors[verdict] || colors['가짜일 가능성이 있는 뉴스'];
+  return colors[verdict] || colors['일부 사실'];
 }
 
 /**
@@ -742,7 +746,7 @@ window.showErrorModal = showErrorModal;
 // 테스트용 함수들
 window.testHighlightColors = function(verdict) {
   console.log('테스트: 하이라이트 색상 변경 -', verdict);
-  updateHighlightColors(verdict || '진짜 뉴스');
+  updateHighlightColors(verdict || '사실');
 };
 
 window.forceCheckAnalysis = function() {
@@ -794,23 +798,23 @@ function sendToGeminiForAnalysis(blockId) {
 ## 판단 조건 및 중요도
 
 ※ **판단 원칙:** 여러 조건에 해당하는 경우, **가장 심각한 유형(가장 높은 중요도)을 기준으로 '진위'를 최종 결정**합니다.
-※ **기본 판단:** 아래 조건 중 어느 것에도 해당하지 않는 경우, 해당 기사는 **'진짜 뉴스'**로 판단합니다.
+※ **기본 판단:** 아래 조건 중 어느 것에도 해당하지 않는 경우, 해당 기사는 **'사실'**로 판단합니다.
 
-#### **[중요도: 최상] → 최종 판단: 가짜뉴스**
+#### **[중요도: 최상] → 최종 판단: 거짓**
 *   **유형: 1. 사실 및 출처의 신뢰도 문제**
     *   기사의 주장을 뒷받침하는 근거 제시 방식에 심각한 결함이 있어 신뢰도를 근본적으로 훼손하는 유형입니다.
     *   **1-1. 기사 내 명백한 내용상 모순:** 기사의 앞부분과 뒷부분의 내용이 서로 충돌하거나 모순되는 경우. (예: 도입부에서는 'A가 발생했다'고 서술하고, 뒷부분에서는 'A는 발생하지 않았다'고 서술하는 경우)
     *   **1-2. 불분명하거나 신뢰할 수 없는 출처:** 주장의 근거를 제시하지 않거나, 의도적으로 모호하게 표현하여 권위를 부여하는 방식. (예: "익명의 관계자에 따르면", "전문가들은 입을 모아 말한다")
     *   **1-3. 통계 왜곡 및 오용:** 통계의 일부만 보여주거나(체리피킹), "출처가 명시되지 않은 통계 자료"를 근거로 삼는 등 의도적으로 표본이 편향된 설문조사 결과를 인용하여 독자의 판단을 흐리는 경우.
 
-#### **[중요도: 높음] → 최종 판단: 가짜일 가능성이 높은 뉴스**
+#### **[중요도: 높음] → 최종 판단: 대체로 거짓**
 *   **유형: 2. 논리 및 구조적 허점**
     *   기사의 주장을 뒷받침하는 과정이 비논리적이거나 구조적으로 허술한 경우입니다.
     *   **2-1. 논리적 비약:** 제시된 근거만으로는 도저히 결론에 도달할 수 없을 정도로, 근거와 주장 사이에 합리적인 연결고리가 부족한 경우. (예: "A라는 작은 사건이 발생했다. 그러므로 B라는 거대한 음모가 있는 것이 틀림없다.")
     *   **2-2. 근거 없는 의혹 제기:** 명확한 근거 없이 언론사가 자체적으로 의혹을 만들고 "~라는 의혹이 있다", "~일 수 있다" 와 같이 애매한 표현으로 마무리하여 독자에게 의심과 불신을 심어주는 방식.
         *   **⚠️판단 가이드:** 언론사가 자체적으로 제기하는 근거 없는 의혹과, **특정 기관(검찰, 경찰, 감사원 등)의 수사나 공식 발표 내용을 인용하며 '의혹'을 보도하는 것은 명확히 구분**해야 합니다. 후자의 경우, 명확한 정보 출처가 있으므로 이 항목에 해당하지 않습니다.
 
-#### **[중요도: 중간] → 최종 판단: 가짜일 가능성이 있는 뉴스**
+#### **[중요도: 중간] → 최종 판단: 일부 사실**
 *   **유형: 3. 선동적·감정적 표현 방식**
     *   객관적인 정보 전달보다 독자의 감정을 자극하여 특정 여론을 형성하려는 의도가 보이는 경우입니다.
     *   **3-1. 단정적·선동적 어조:** 검증되지 않은 사실을 확정된 것처럼 표현하여 독자의 판단을 '강요'하는 방식. (예: "이것은 명백한 조작이다.", "~임이 틀림없다.")
@@ -841,11 +845,11 @@ function sendToGeminiForAnalysis(blockId) {
     "input": "주어진 텍스트 전체",
     "output": {
       "분석진행": "분석을 위한 당신의 추론 내용을 투명하게 꼼꼼히 적으세요. 추론은 반드시 어떻게 분석할 것인지, 어떤 분석을 해야 할지를 순서를 정하여 순서대로 하나씩 분석합니다. (정확한 분석을 위하여 최소 4개 이상의 분석 단계를 만드세요. 정말 필요 없을 정도로 간단한 경우만 2개까지 허용합니다.) 모든 단계별 분석이 끝나면 그 분석된 내용들을 전부 합치고 정리하여 최종 진위, 근거, 분석, 요약을 도출합니다. 비교분석의 경우 진위/근거는 두 기사 내용의 일치성과 신뢰도를 기준으로 판단하세요. **이 내용은 반드시 마크다운 문법으로 작성하세요 (## 제목, **강조**, - 리스트 등 사용).**",
-      "진위": "판단 결과('가짜 뉴스' / '가짜일 가능성이 높은 뉴스' / '가짜일 가능성이 있는 뉴스' / '진짜 뉴스')가 여기에 위치합니다.",
+      "진위": "판단 결과('거짓' / '대체로 거짓' / '일부 사실' / '대체로 사실' / '사실')가 여기에 위치합니다.",
       "근거": "탐지된 중요도의 조건 번호와 이름이 위치합니다. 여러 개일 경우 '1. 첫 번째 근거\\n2. 두 번째 근거\\n' 형식으로 숫자 리스트로 나열하세요. 예시: 1. 2-2. 근거 없는 의혹 제기\\n2. 3-1. 단정적·선동적 어조\\n",
       "분석": "위 근거들을 종합하여 기사의 어떤 부분이 왜 문제인지 혹은 신뢰할 수 있는지를 구체적으로 서술합니다. 여러 항목이 있는 경우 '1. 첫 번째 분석 내용\\n2. 두 번째 분석 내용\\n' 형식으로 숫자 리스트로 작성하세요.",
       "요약": "기사의 핵심 내용을 간결하면서 정확하게 요약합니다. 비교분석을 대비하여 핵심 내용 / 단어를 최대한 많이 포함합니다. 여러 항목이 있는 경우 '1. 첫 번째 요약 내용\\n2. 두 번째 요약 내용\\n' 형식으로 숫자 리스트로 작성하세요.",
-      "수상한문장": "기사에서 발견된 논리적 결함, 근거 없는 주장, 모호한 표현 등의 문제가 있는 문장을 **원문 그대로** 키로 사용하고, 왜 수상한지 그 이유를 값으로 하는 JSON 객체입니다. 문장은 기사에서 추출한 원본 텍스트를 그대로 복사해야 합니다. 예시: { \"익명의 관계자에 따르면\": \"출처가 불분명하여 신뢰도 낮음\", \"전문가들은 입을 모아 말한다\": \"구체적인 전문가 명시 없음\" }. '진짜 뉴스'인 경우 빈 객체 {}를 반환하세요."
+      "수상한문장": "기사에서 발견된 논리적 결함, 근거 없는 주장, 모호한 표현 등의 문제가 있는 문장을 **원문 그대로** 키로 사용하고, 왜 수상한지 그 이유를 값으로 하는 JSON 객체입니다. 문장은 기사에서 추출한 원본 텍스트를 그대로 복사해야 합니다. 예시: { \"익명의 관계자에 따르면\": \"출처가 불분명하여 신뢰도 낮음\", \"전문가들은 입을 모아 말한다\": \"구체적인 전문가 명시 없음\" }. '사실'인 경우 빈 객체 {}를 반환하세요."
     }
   }
 ]
@@ -853,8 +857,8 @@ function sendToGeminiForAnalysis(blockId) {
 ### 다음은 **반드시 지켜야 할** 출력 형식에 대한 설명입니다.
 - 반드시 명시된 키("진위", "근거", "분석", "요약", "수상한문장")를 가진 유효한(valid) JSON 형식으로만 응답해주세요.
 - 다른 설명이나 부가적인 텍스트 없이 JSON 객체만 출력해야 합니다.
-- '진짜 뉴스'라면 '근거'란이 비어있어야 합니다.(예시: "근거": "",) 그리고 '수상한문장'은 빈 객체여야 합니다.(예시: "수상한문장": {})
-- 진짜 뉴스 '분석'란은 왜 진짜인지를 뉴스 기사의 적힌 텍스트를 최대한 인용해서 작성하세요.
+- '사실'라면 '근거'란이 비어있어야 합니다.(예시: "근거": "",) 그리고 '수상한문장'은 빈 객체여야 합니다.(예시: "수상한문장": {})
+- 사실 '분석'란은 왜 사실인지를 뉴스 기사의 적힌 텍스트를 최대한 인용해서 작성하세요.
 - **'수상한문장' 필드의 키는 반드시 기사 원문에서 그대로 복사한 문장이어야 합니다.** 요약하거나 변경하지 마세요.
 - 출력 텍스트는 **한국어**여야 합니다. 특정 사람 이름이나, 기사에서 따로 표시해둔 명사 형태의 언어는 원본 언어 그대로 유지해도 됩니다.
 - instruction 필드는 예시에 **주어진 내용과 동일하게 고정**됩니다.
@@ -924,6 +928,11 @@ if (isChromeApiAvailable()) {
         if (panel && panel.__analysisPanel) {
           console.log('분석 결과 표시:', message.blockId, message.result);
           
+          // API 사용 횟수 증가 (service_worker에서 전달된 정보)
+          if (message.incrementApiUsage) {
+            panel.__analysisPanel.incrementApiUsage(message.incrementApiUsage.type, message.incrementApiUsage.count);
+          }
+          
           // updateNewsStatus를 통해 상태를 completed로 변경 (자동으로 completeAnalysis 호출됨)
           panel.__analysisPanel.updateNewsStatus(message.blockId, 'completed', message.result);
           
@@ -943,20 +952,32 @@ if (isChromeApiAvailable()) {
         // 오류를 패널에 표시
         const panel = document.getElementById('news-analysis-panel');
         if (panel && panel.__analysisPanel) {
-          console.log('분석 오류 표시:', message.blockId, message.error);
-          panel.__analysisPanel.failAnalysis(message.blockId, message.error);
+          console.log('분석 오류 표시:', message.blockId, message.error, 'shouldDeleteBlock:', message.shouldDeleteBlock);
+          panel.__analysisPanel.failAnalysis(message.blockId, message.error, message.shouldDeleteBlock);
+          if (message.resetApiUsageType && typeof panel.__analysisPanel.resetApiUsageCount === 'function') {
+            panel.__analysisPanel.resetApiUsageCount(message.resetApiUsageType);
+            panel.__analysisPanel.updateApiQuotaDisplay();
+          }
         }
       } else if (message.action === "displayErrorModal" && message.error) {
-        // 에러 모달 표시 (3번 재시도 후 최종 실패)
+        // 에러 모달 표시 (할당량 초과 등)
         const panel = document.getElementById('news-analysis-panel');
         if (panel && panel.__analysisPanel) {
-          console.log('최종 에러 모달 표시:', message.blockId, message.error);
+          console.log('에러 모달 표시:', message.blockId, message.error);
           
           // 분석 실패 처리
           panel.__analysisPanel.failAnalysis(message.blockId, message.error);
+          if (message.resetApiUsageType && typeof panel.__analysisPanel.resetApiUsageCount === 'function') {
+            panel.__analysisPanel.resetApiUsageCount(message.resetApiUsageType);
+            panel.__analysisPanel.updateApiQuotaDisplay();
+          }
           
-          // 에러 모달 생성 (제목 포함)
-          showErrorModal(message.error, message.errorTitle || 'API 호출 실패');
+          // 패널의 showErrorModal 사용
+          panel.__analysisPanel.showErrorModal(
+            message.errorTitle || 'API 호출 실패',
+            message.error,
+            null
+          );
         }
       } else if (message.action === "updateStreamingResult" && message.partialResult) {
         // 실시간 스트리밍 결과 업데이트

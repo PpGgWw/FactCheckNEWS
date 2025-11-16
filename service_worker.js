@@ -85,9 +85,12 @@ function isChromeApiAvailable() {
 // 현재 진행 중인 분석 ID 추적
 const activeAnalyses = new Set();
 
-// Host permission 확인 (이미 manifest에 선언되어 있으면 즉시 통과)
+// Host permission 확인 및 요청
+// activeTab + optional_host_permissions 전략: 탭 생성 시 자동으로 권한 획득
 async function ensureHostPermissionForUrl(rawUrl) {
+  // Chrome permissions API 없으면 바로 통과
   if (!chrome.permissions || !chrome.permissions.contains) {
+    console.log('[ensureHostPermissionForUrl] Permissions API not available, proceeding');
     return true;
   }
 
@@ -97,23 +100,26 @@ async function ensureHostPermissionForUrl(rawUrl) {
     originPattern = `${url.origin}/*`;
   } catch (error) {
     console.warn('[ensureHostPermissionForUrl] Invalid URL:', rawUrl);
-    return true; // URL 파싱 실패해도 시도는 허용
+    return true;
   }
 
-  // 이미 권한이 있는지 확인만 (request는 user gesture 필요하므로 manifest에서 처리)
+  // 권한 확인
   return new Promise((resolve) => {
     chrome.permissions.contains({ origins: [originPattern] }, (alreadyGranted) => {
       if (chrome.runtime.lastError) {
-        console.warn('[ensureHostPermissionForUrl] Permission check failed:', chrome.runtime.lastError.message);
-        resolve(true); // 확인 실패해도 시도는 허용
+        console.warn('[ensureHostPermissionForUrl] Check failed:', chrome.runtime.lastError.message);
+        // activeTab 권한으로 탭 생성 시 자동 권한 획득되므로 통과
+        resolve(true);
         return;
       }
+      
       if (alreadyGranted) {
-        console.log('[ensureHostPermissionForUrl] ✅ Host permission already granted:', originPattern);
+        console.log('[ensureHostPermissionForUrl] ✅ Permission exists:', originPattern);
         resolve(true);
       } else {
-        console.warn('[ensureHostPermissionForUrl] ⚠️ No permission for:', originPattern, '- manifest에 추가 필요');
-        resolve(true); // 권한 없어도 일단 시도 (실패 시 다른 fallback 작동)
+        // optional_host_permissions에 있으므로 탭 생성 시 자동 획득됨
+        console.log('[ensureHostPermissionForUrl] ⏳ Permission will be granted on tab creation:', originPattern);
+        resolve(true);
       }
     });
   });
@@ -167,6 +173,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // CORS 우회 크롤링 요청 처리 (강화된 우회 전략)
   if (message.action === "fetchWithCORS") {
     console.log("[fetchWithCORS] 크롤링 요청:", message.url);
+    
+    // HTTP URL 차단 (보안)
+    if (message.url.startsWith('http://')) {
+      console.warn("[fetchWithCORS] HTTP URL 차단:", message.url);
+      sendResponse({ success: false, error: 'HTTP URLs are blocked for security. Only HTTPS allowed.' });
+      return true;
+    }
     
     // 전략 1: 직접 fetch (가장 빠름)
     const tryDirectFetch = () => {
@@ -280,48 +293,80 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             };
 
             const extractHtmlFromTab = async () => {
+              // 전략 1: chrome.scripting.executeScript (가장 안정적)
               if (chrome.scripting && chrome.scripting.executeScript) {
                 try {
-                  // JavaScript 렌더링 대기
-                  await new Promise(resolveWait => setTimeout(resolveWait, 2000));
+                  // 페이지 로딩 대기 (더 길게)
+                  await new Promise(resolveWait => setTimeout(resolveWait, 3000));
 
                   const [result] = await chrome.scripting.executeScript({
-                    target: { tabId },
+                    target: { tabId, allFrames: false },
                     func: () => {
+                      // 모든 가능한 방법으로 콘텐츠 추출
                       const fullHtml = document.documentElement.outerHTML;
                       const bodyText = document.body ? document.body.innerText : '';
+                      
+                      // 주요 콘텐츠 영역 찾기
+                      const selectors = ['article', 'main', '[role="main"]', '.content', '.article', '#content', '.post'];
+                      let mainContent = '';
+                      for (const selector of selectors) {
+                        const elem = document.querySelector(selector);
+                        if (elem && elem.innerText.length > 200) {
+                          mainContent = elem.innerText;
+                          break;
+                        }
+                      }
+                      
                       return {
                         html: fullHtml,
                         text: bodyText,
-                        length: fullHtml.length
+                        mainContent: mainContent,
+                        length: fullHtml.length,
+                        title: document.title || ''
                       };
-                    }
+                    },
+                    world: 'MAIN' // 페이지의 메인 world에서 실행 (더 강력)
                   });
 
                   const extracted = result?.result || {};
-                  const htmlPreview = extracted.html ? extracted.html.substring(0, 200) + '...' : '(없음)';
-                  const textPreview = extracted.text ? extracted.text.substring(0, 200) + '...' : '(없음)';
-                  console.log('[fetchWithCORS] 추출 결과 - HTML:', extracted.length, '자');
-                  console.log('[fetchWithCORS] HTML 미리보기:', htmlPreview);
-                  console.log('[fetchWithCORS] Text 길이:', extracted.text?.length, '자, 미리보기:', textPreview);
+                  console.log('[fetchWithCORS] ✅ executeScript 성공 - HTML:', extracted.length, '자, Main:', extracted.mainContent?.length || 0, '자');
 
+                  // HTML이 충분하면 사용
                   if (extracted.html && extracted.html.length > 1000) {
-                    console.log('[fetchWithCORS] ✅ HTML 사용 (', extracted.html.length, '자)');
                     return extracted.html;
                   }
 
-                  if (extracted.text && extracted.text.length > 500) {
-                    console.log('[fetchWithCORS] ⚠️ HTML 부족, body text 사용 (', extracted.text.length, '자)');
+                  // 메인 콘텐츠가 있으면 우선 사용
+                  if (extracted.mainContent && extracted.mainContent.length > 300) {
+                    console.log('[fetchWithCORS] ✅ Main content 사용');
+                    return `<html><head><title>${extracted.title || ''}</title></head><body><article>${extracted.mainContent}</article></body></html>`;
+                  }
+
+                  // body text 사용
+                  if (extracted.text && extracted.text.length > 200) {
+                    console.log('[fetchWithCORS] ⚠️ Body text 사용');
                     return `<html><body>${extracted.text}</body></html>`;
                   }
 
-                  console.warn('[fetchWithCORS] ❌ 추출 실패 - HTML:', extracted.html?.length || 0, '자, Text:', extracted.text?.length || 0, '자');
-                  return extracted.html || '';
+                  // 최소한의 HTML이라도
+                  if (extracted.html) {
+                    console.warn('[fetchWithCORS] ⚠️ HTML 짧지만 반환');
+                    return extracted.html;
+                  }
+
+                  throw new Error('No content extracted');
                 } catch (error) {
-                  console.warn('[fetchWithCORS] executeScript 추출 실패, fallback 사용:', error.message);
+                  console.warn('[fetchWithCORS] executeScript 실패, 전략 2 시도:', error.message);
+                  try {
+                    const debugHtml = await extractHtmlViaDebugger(tabId);
+                    if (debugHtml && debugHtml.length > 100) {
+                      console.log('[fetchWithCORS] ✅ Debugger 추출 성공 - 길이:', debugHtml.length);
+                      return debugHtml;
+                    }
+                  } catch (dbgError) {
+                    console.warn('[fetchWithCORS] debugger 추출 실패:', dbgError.message);
+                  }
                 }
-              } else {
-                console.warn('[fetchWithCORS] chrome.scripting API 미지원, fallback 사용');
               }
 
               return new Promise((resolveExtract, rejectExtract) => {
@@ -441,7 +486,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               await sendMessageWithRetry(sender.tab.id, {
                 action: "displayError",
                 error: "API 키가 설정되지 않았습니다. 설정 버튼을 클릭하여 API 키를 입력해주세요.",
-                blockId: message.blockId
+                blockId: message.blockId,
+                shouldDeleteBlock: true
               });
             } catch (msgError) {
               console.error("메시지 전송 오류:", msgError);
@@ -461,7 +507,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               await sendMessageWithRetry(sender.tab.id, {
                 action: "displayError",
                 error: "API 키 복호화에 실패했습니다. API 키를 다시 설정해주세요.",
-                blockId: message.blockId
+                blockId: message.blockId,
+                shouldDeleteBlock: true
               });
             } catch (msgError) {
               console.error("메시지 전송 오류:", msgError);
@@ -483,7 +530,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               await sendMessageWithRetry(sender.tab.id, {
                 action: "displayError",
                 error: "분석할 내용이 비어있습니다.",
-                blockId: message.blockId
+                blockId: message.blockId,
+                shouldDeleteBlock: true
               });
             } catch (msgError) {
               console.error("메시지 전송 오류:", msgError);
@@ -512,7 +560,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                   await sendMessageWithRetry(sender.tab.id, {
                     action: "displayAnalysisResult",
                     result: result,
-                    blockId: message.blockId
+                    blockId: message.blockId,
+                    incrementApiUsage: { type: 'gemini', count: 1 }
                   });
                 } catch (error) {
                   console.error("결과 전송 오류:", error);
@@ -546,31 +595,71 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               console.log("--- Gemini API 비스트리밍 완료 ---");
               console.log(response);
               
+              // 429 에러 체크
+              if (!response.success && response.isQuotaExceeded) {
+                // content script에 할당량 초과 알림
+                if (isChromeApiAvailable() && sender?.tab?.id) {
+                  sendMessageWithRetry(sender.tab.id, {
+                    action: "displayErrorModal",
+                    error: "Gemini API의 일일 무료 할당량(200회)을 모두 사용하셨습니다.\n\n약 50초 후에 다시 시도하거나, 내일 다시 이용해주세요.\n\n또는 새로운 API 키를 발급받아 설정에서 변경할 수 있습니다.",
+                    errorTitle: "API 할당량 초과",
+                    blockId: message.blockId,
+                    resetApiUsageType: 'gemini'
+                  }).catch(err => console.error("에러 모달 전송 실패:", err));
+                }
+                sendResponse({ 
+                  success: false,
+                  status: "API 할당량 초과", 
+                  error: response.error,
+                  isQuotaExceeded: true
+                });
+                return;
+              }
+              
               // sendResponse로 직접 반환 (content script로 전송 안 함)
               sendResponse({ 
                 success: true,
                 status: "분석 완료 및 결과 전송 성공", 
                 result: response.result || response,
-                quota: response.quota
+                quota: response.quota,
+                incrementApiUsage: { type: 'gemini', count: 1 }
               });
             })
             .catch(async error => {
               console.error("Gemini API 비스트리밍 처리 중 오류:", error);
               const errorText = (error?.message || '').toLowerCase();
-              if (isChromeApiAvailable() && sender?.tab?.id && (errorText.includes('429') || errorText.includes('quota'))) {
-                const friendlyMsg = '할당량을 전부 사용했습니다.';
+              const is429Error = errorText.includes('429') || errorText.includes('quota') || errorText.includes('resource_exhausted');
+              
+              if (isChromeApiAvailable() && sender?.tab?.id && is429Error) {
+                try {
+                  await sendMessageWithRetry(sender.tab.id, {
+                    action: "displayErrorModal",
+                    error: "Gemini API의 일일 무료 할당량(200회)을 모두 사용하셨습니다.\n\n약 50초 후에 다시 시도하거나, 내일 다시 이용해주세요.\n\n또는 새로운 API 키를 발급받아 설정에서 변경할 수 있습니다.",
+                    errorTitle: "API 할당량 초과",
+                    blockId: message.blockId,
+                    resetApiUsageType: 'gemini'
+                  });
+                } catch (sendError) {
+                  console.error("에러 모달 전송 실패:", sendError);
+                }
+              } else if (isChromeApiAvailable() && sender?.tab?.id) {
                 try {
                   await sendMessageWithRetry(sender.tab.id, {
                     action: "displayError",
-                    error: friendlyMsg,
+                    error: error.message,
                     blockId: message.blockId
                   });
                 } catch (sendError) {
                   console.error("오류 전송 실패:", sendError);
                 }
-                chrome.runtime.sendMessage({ action: 'notifyQuotaError', blockId: message.blockId }).catch(() => {});
               }
-              sendResponse({ success: false, status: "API 처리 오류", error: error.message });
+              
+              sendResponse({ 
+                success: false, 
+                status: "API 처리 오류", 
+                error: error.message,
+                isQuotaExceeded: is429Error
+              });
             });
         }
       });
@@ -748,7 +837,7 @@ async function callGeminiAPIWithRealStreaming(prompt, apiUrl, tabId, blockId) {
       errorTitle = 'API 할당량 부족';
       errorMessage = '할당량을 전부 사용했습니다.';
       if (isChromeApiAvailable()) {
-        chrome.runtime.sendMessage({ action: 'notifyQuotaError', blockId }).catch(() => {});
+        chrome.runtime.sendMessage({ action: 'notifyQuotaError', blockId, resetApiUsageType: 'gemini' }).catch(() => {});
       }
     } else {
       errorMessage = `API 호출에 ${MAX_RETRIES}번 실패했습니다.\n\n오류 내용:\n${lastError.message}`;
@@ -758,12 +847,16 @@ async function callGeminiAPIWithRealStreaming(prompt, apiUrl, tabId, blockId) {
     
     if (isChromeApiAvailable()) {
       try {
-        await sendMessageWithRetry(tabId, {
+        const payload = {
           action: "displayErrorModal",
           error: errorMessage,
           errorTitle: errorTitle,
           blockId: blockId
-        });
+        };
+        if (lastErrorText.includes('429') || lastErrorText.includes('quota')) {
+          payload.resetApiUsageType = 'gemini';
+        }
+        await sendMessageWithRetry(tabId, payload);
       } catch (error) {
         console.error("에러 모달 전송 오류:", error);
       }
@@ -867,7 +960,19 @@ async function callGeminiAPINonStreaming(prompt, apiKey, blockId = null) {
 
     if (!response.ok) {
       const errorBody = await response.json();
-      throw new Error(`API 요청 실패: ${response.status} ${response.statusText} - ${JSON.stringify(errorBody)}`);
+      const errorMsg = `API 요청 실패: ${response.status} ${response.statusText} - ${JSON.stringify(errorBody)}`;
+      
+      // 429 에러(할당량 초과)인 경우 특별 처리
+      if (response.status === 429) {
+        return {
+          success: false,
+          error: errorMsg,
+          isQuotaExceeded: true,
+          statusCode: 429
+        };
+      }
+      
+      throw new Error(errorMsg);
     }
 
     const data = await response.json();
@@ -1064,7 +1169,7 @@ function extractNewsContentTest() {
                   "instruction": "해당 기사는 진위 여부판단을 목적으로 수집되었습니다. 조건에 따라서 종합적으로 검토 후 판단 결과를 진위,근거,분석 항목으로 나누어 출력하세요.",
                   "input": "주어진 텍스트 전체",
                   "output": {
-                    "진위": "진짜 뉴스",
+                    "진위": "사실",
                     "근거": "",
                     "분석": "이 뉴스는 논리적 구조와 근거 제시 방식이 명확하며, 외부 정보 없이도 신뢰할 수 있습니다."
                   }
@@ -1077,4 +1182,74 @@ function extractNewsContentTest() {
     ]
   };
   return extractNewsContent(sampleData);
+}
+
+// Debugger API 유틸리티 (Playwright 수준의 강력한 크롤링을 위한 백업)
+function sendDebuggerCommand(debuggee, method, params = {}) {
+  return new Promise((resolve, reject) => {
+    chrome.debugger.sendCommand(debuggee, method, params, (result) => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+      resolve(result);
+    });
+  });
+}
+
+async function extractHtmlViaDebugger(tabId) {
+  if (!chrome.debugger || !chrome.debugger.attach) {
+    throw new Error('Debugger API unavailable');
+  }
+
+  const debuggee = { tabId };
+  await new Promise((resolve, reject) => {
+    chrome.debugger.attach(debuggee, '1.3', () => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+      resolve();
+    });
+  });
+
+  try {
+    await sendDebuggerCommand(debuggee, 'Page.enable');
+    await sendDebuggerCommand(debuggee, 'DOM.enable');
+    await sendDebuggerCommand(debuggee, 'Runtime.enable');
+
+    const htmlEval = await sendDebuggerCommand(debuggee, 'Runtime.evaluate', {
+      expression: 'document.documentElement.outerHTML',
+      returnByValue: true,
+      awaitPromise: false
+    });
+
+    let html = htmlEval?.result?.value || '';
+
+    if (!html || html.length < 100) {
+      const doc = await sendDebuggerCommand(debuggee, 'DOM.getDocument', { depth: -1, pierce: true }).catch(() => null);
+      if (doc && doc.root?.nodeId) {
+        const outer = await sendDebuggerCommand(debuggee, 'DOM.getOuterHTML', { nodeId: doc.root.nodeId }).catch(() => null);
+        if (outer?.outerHTML) {
+          html = outer.outerHTML;
+        }
+      }
+    }
+
+    if (!html || html.length < 100) {
+      throw new Error('Debugger extraction returned empty HTML');
+    }
+
+    console.log('[debuggerExtract] ✅ HTML 길이:', html.length);
+    return html;
+  } finally {
+    await new Promise((resolve) => {
+      chrome.debugger.detach(debuggee, () => {
+        if (chrome.runtime.lastError) {
+          console.warn('[debuggerExtract] Detach warning:', chrome.runtime.lastError.message);
+        }
+        resolve();
+      });
+    });
+  }
 }
