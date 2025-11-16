@@ -82,11 +82,88 @@ function isChromeApiAvailable() {
   }
 }
 
+// 현재 진행 중인 분석 ID 추적
+const activeAnalyses = new Set();
+
+// Host permission 확인 (이미 manifest에 선언되어 있으면 즉시 통과)
+async function ensureHostPermissionForUrl(rawUrl) {
+  if (!chrome.permissions || !chrome.permissions.contains) {
+    return true;
+  }
+
+  let originPattern;
+  try {
+    const url = new URL(rawUrl);
+    originPattern = `${url.origin}/*`;
+  } catch (error) {
+    console.warn('[ensureHostPermissionForUrl] Invalid URL:', rawUrl);
+    return true; // URL 파싱 실패해도 시도는 허용
+  }
+
+  // 이미 권한이 있는지 확인만 (request는 user gesture 필요하므로 manifest에서 처리)
+  return new Promise((resolve) => {
+    chrome.permissions.contains({ origins: [originPattern] }, (alreadyGranted) => {
+      if (chrome.runtime.lastError) {
+        console.warn('[ensureHostPermissionForUrl] Permission check failed:', chrome.runtime.lastError.message);
+        resolve(true); // 확인 실패해도 시도는 허용
+        return;
+      }
+      if (alreadyGranted) {
+        console.log('[ensureHostPermissionForUrl] ✅ Host permission already granted:', originPattern);
+        resolve(true);
+      } else {
+        console.warn('[ensureHostPermissionForUrl] ⚠️ No permission for:', originPattern, '- manifest에 추가 필요');
+        resolve(true); // 권한 없어도 일단 시도 (실패 시 다른 fallback 작동)
+      }
+    });
+  });
+}
+
+// 메시지를 안전하게 전송 (탭 리로드 시 재시도)
+async function sendMessageWithRetry(tabId, message, options = {}) {
+  const {
+    retries = 5,
+    delayMs = 400
+  } = options;
+  const recoverableKeywords = [
+    'could not establish connection',
+    'receiving end does not exist',
+    'no tab with id',
+    'message port closed'
+  ];
+
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      await chrome.tabs.sendMessage(tabId, message);
+      return true;
+    } catch (error) {
+      const normalized = (error?.message || '').toLowerCase();
+      const isRecoverable = recoverableKeywords.some(keyword => normalized.includes(keyword));
+      const isLastAttempt = attempt === retries;
+
+      if (!isRecoverable || isLastAttempt) {
+        console.error(`[sendMessageWithRetry] 전송 실패 (시도 ${attempt + 1}/${retries + 1}):`, error?.message || error);
+        throw error;
+      }
+
+      const waitMs = delayMs * Math.min(attempt + 1, 5);
+      console.warn(`[sendMessageWithRetry] 수신 측 없음, ${waitMs}ms 후 재시도...`);
+      await new Promise(resolve => setTimeout(resolve, waitMs));
+    }
+  }
+
+  return false;
+}
+
 // 활성 중인 타이핑 효과 추적
 const activeTypingEffects = new Map();
 
 // content_script로부터 메시지를 수신하는 리스너
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.action === 'getActiveAnalyses') {
+    sendResponse({ activeBlockIds: Array.from(activeAnalyses) });
+    return true;
+  }
   // CORS 우회 크롤링 요청 처리 (강화된 우회 전략)
   if (message.action === "fetchWithCORS") {
     console.log("[fetchWithCORS] 크롤링 요청:", message.url);
@@ -171,130 +248,125 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
       console.log("[fetchWithCORS] 🚨 최후의 수단: 실제 탭 열기");
 
-      return new Promise((resolve, reject) => {
-        chrome.tabs.create({ url: message.url, active: false }, (tab) => {
-          if (chrome.runtime.lastError || !tab || typeof tab.id !== 'number') {
-            const error = chrome.runtime.lastError ? chrome.runtime.lastError.message : 'Failed to open tab';
-            console.error('[fetchWithCORS] 탭 생성 실패:', error);
-            reject(new Error(error));
-            return;
-          }
-
-          const tabId = tab.id;
-          let timeoutId = null;
-          let updateListener = null;
-
-          const cleanupAndFinish = (error, html = '') => {
-            if (updateListener) {
-              chrome.tabs.onUpdated.removeListener(updateListener);
-            }
-            if (timeoutId) {
-              clearTimeout(timeoutId);
+      return ensureHostPermissionForUrl(message.url)
+        .then(() => new Promise((resolve, reject) => {
+          chrome.tabs.create({ url: message.url, active: false }, (tab) => {
+            if (chrome.runtime.lastError || !tab || typeof tab.id !== 'number') {
+              const error = chrome.runtime.lastError ? chrome.runtime.lastError.message : 'Failed to open tab';
+              console.error('[fetchWithCORS] 탭 생성 실패:', error);
+              reject(new Error(error));
+              return;
             }
 
-            chrome.tabs.remove(tabId, () => {
-              if (error) {
-                reject(error);
-              } else {
-                resolve(html);
+            const tabId = tab.id;
+            let timeoutId = null;
+            let updateListener = null;
+
+            const cleanupAndFinish = (error, html = '') => {
+              if (updateListener) {
+                chrome.tabs.onUpdated.removeListener(updateListener);
               }
-            });
-          };
-
-          const extractHtmlFromTab = async () => {
-            if (chrome.scripting && chrome.scripting.executeScript) {
-              try {
-                // JavaScript 렌더링 대기
-                await new Promise(resolve => setTimeout(resolve, 2000));
-                
-                const [result] = await chrome.scripting.executeScript({
-                  target: { tabId },
-                  func: () => {
-                    // 전체 HTML 추출
-                    const fullHtml = document.documentElement.outerHTML;
-                    
-                    // 본문 텍스트만 추출 (fallback)
-                    const bodyText = document.body ? document.body.innerText : '';
-                    
-                    return {
-                      html: fullHtml,
-                      text: bodyText,
-                      length: fullHtml.length
-                    };
-                  }
-                });
-                
-                const extracted = result?.result || {};
-                const htmlPreview = extracted.html ? extracted.html.substring(0, 200) + '...' : '(없음)';
-                const textPreview = extracted.text ? extracted.text.substring(0, 200) + '...' : '(없음)';
-                console.log('[fetchWithCORS] 추출 결과 - HTML:', extracted.length, '자');
-                console.log('[fetchWithCORS] HTML 미리보기:', htmlPreview);
-                console.log('[fetchWithCORS] Text 길이:', extracted.text?.length, '자, 미리보기:', textPreview);
-                
-                // HTML이 충분히 길면 사용
-                if (extracted.html && extracted.html.length > 1000) {
-                  console.log('[fetchWithCORS] ✅ HTML 사용 (', extracted.html.length, '자)');
-                  return extracted.html;
-                }
-                
-                // HTML이 짧으면 body text 사용
-                if (extracted.text && extracted.text.length > 500) {
-                  console.log('[fetchWithCORS] ⚠️ HTML 부족, body text 사용 (', extracted.text.length, '자)');
-                  return `<html><body>${extracted.text}</body></html>`;
-                }
-                
-                console.warn('[fetchWithCORS] ❌ 추출 실패 - HTML:', extracted.html?.length || 0, '자, Text:', extracted.text?.length || 0, '자');
-                return extracted.html || '';
-              } catch (error) {
-                console.warn('[fetchWithCORS] executeScript 추출 실패, fallback 사용:', error.message);
+              if (timeoutId) {
+                clearTimeout(timeoutId);
               }
-            } else {
-              console.warn('[fetchWithCORS] chrome.scripting API 미지원, fallback 사용');
-            }
 
-            return new Promise((resolveExtract, rejectExtract) => {
-              chrome.tabs.sendMessage(tabId, { action: 'extractContent' }, (response) => {
-                if (chrome.runtime.lastError) {
-                  rejectExtract(new Error('Content script communication failed'));
-                  return;
-                }
-                resolveExtract(response?.html || '');
-              });
-            });
-          };
-
-          const handleExtraction = () => {
-            extractHtmlFromTab()
-              .then((html) => {
-                if (html.length > 100) {
-                  console.log('[fetchWithCORS] ✅ 탭에서 콘텐츠 추출 성공, 탭 닫음');
-                  cleanupAndFinish(null, html);
+              chrome.tabs.remove(tabId, () => {
+                if (error) {
+                  reject(error);
                 } else {
-                  cleanupAndFinish(new Error('Extracted content too short'));
+                  resolve(html);
                 }
-              })
-              .catch((error) => {
-                console.error('[fetchWithCORS] 탭 콘텐츠 추출 실패:', error.message);
-                cleanupAndFinish(error);
               });
-          };
+            };
 
-          updateListener = (tabIdUpdate, changeInfo) => {
-            if (tabIdUpdate === tabId && changeInfo.status === 'complete') {
-              chrome.tabs.onUpdated.removeListener(updateListener);
-              handleExtraction();
-            }
-          };
+            const extractHtmlFromTab = async () => {
+              if (chrome.scripting && chrome.scripting.executeScript) {
+                try {
+                  // JavaScript 렌더링 대기
+                  await new Promise(resolveWait => setTimeout(resolveWait, 2000));
 
-          chrome.tabs.onUpdated.addListener(updateListener);
+                  const [result] = await chrome.scripting.executeScript({
+                    target: { tabId },
+                    func: () => {
+                      const fullHtml = document.documentElement.outerHTML;
+                      const bodyText = document.body ? document.body.innerText : '';
+                      return {
+                        html: fullHtml,
+                        text: bodyText,
+                        length: fullHtml.length
+                      };
+                    }
+                  });
 
-          timeoutId = setTimeout(() => {
-            console.error('[fetchWithCORS] ⏱️ 탭 크롤링 타임아웃 (15초)');
-            cleanupAndFinish(new Error('Tab crawl timeout'));
-          }, 15000); // 15초로 증가
-        });
-      });
-    };
+                  const extracted = result?.result || {};
+                  const htmlPreview = extracted.html ? extracted.html.substring(0, 200) + '...' : '(없음)';
+                  const textPreview = extracted.text ? extracted.text.substring(0, 200) + '...' : '(없음)';
+                  console.log('[fetchWithCORS] 추출 결과 - HTML:', extracted.length, '자');
+                  console.log('[fetchWithCORS] HTML 미리보기:', htmlPreview);
+                  console.log('[fetchWithCORS] Text 길이:', extracted.text?.length, '자, 미리보기:', textPreview);
+
+                  if (extracted.html && extracted.html.length > 1000) {
+                    console.log('[fetchWithCORS] ✅ HTML 사용 (', extracted.html.length, '자)');
+                    return extracted.html;
+                  }
+
+                  if (extracted.text && extracted.text.length > 500) {
+                    console.log('[fetchWithCORS] ⚠️ HTML 부족, body text 사용 (', extracted.text.length, '자)');
+                    return `<html><body>${extracted.text}</body></html>`;
+                  }
+
+                  console.warn('[fetchWithCORS] ❌ 추출 실패 - HTML:', extracted.html?.length || 0, '자, Text:', extracted.text?.length || 0, '자');
+                  return extracted.html || '';
+                } catch (error) {
+                  console.warn('[fetchWithCORS] executeScript 추출 실패, fallback 사용:', error.message);
+                }
+              } else {
+                console.warn('[fetchWithCORS] chrome.scripting API 미지원, fallback 사용');
+              }
+
+              return new Promise((resolveExtract, rejectExtract) => {
+                chrome.tabs.sendMessage(tabId, { action: 'extractContent' }, (response) => {
+                  if (chrome.runtime.lastError) {
+                    rejectExtract(new Error('Content script communication failed'));
+                    return;
+                  }
+                  resolveExtract(response?.html || '');
+                });
+              });
+            };
+
+            const handleExtraction = () => {
+              extractHtmlFromTab()
+                .then((html) => {
+                  if (html.length > 100) {
+                    console.log('[fetchWithCORS] ✅ 탭에서 콘텐츠 추출 성공, 탭 닫음');
+                    cleanupAndFinish(null, html);
+                  } else {
+                    cleanupAndFinish(new Error('Extracted content too short'));
+                  }
+                })
+                .catch((error) => {
+                  console.error('[fetchWithCORS] 탭 콘텐츠 추출 실패:', error.message);
+                  cleanupAndFinish(error);
+                });
+            };
+
+            updateListener = (tabIdUpdate, changeInfo) => {
+              if (tabIdUpdate === tabId && changeInfo.status === 'complete') {
+                chrome.tabs.onUpdated.removeListener(updateListener);
+                handleExtraction();
+              }
+            };
+
+            chrome.tabs.onUpdated.addListener(updateListener);
+
+            timeoutId = setTimeout(() => {
+              console.error('[fetchWithCORS] ⏱️ 탭 크롤링 타임아웃 (15초)');
+              cleanupAndFinish(new Error('Tab crawl timeout'));
+            }, 15000);
+          });
+        }));
+      };
     
     // 순차적 fallback 시도
     tryDirectFetch()
@@ -325,6 +397,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // 분석 중단 요청 처리
   if (message.action === "stopAnalysis") {
     console.log("[stopAnalysis] 분석 중단 요청 받음, blockId:", message.blockId);
+    if (typeof message.blockId !== 'undefined' && message.blockId !== null) {
+      activeAnalyses.delete(message.blockId);
+    }
     
     // 활성 타이핑 효과 중단
     if (activeTypingEffects.has(message.blockId)) {
@@ -362,11 +437,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (!API_KEY) {
           console.error("API 키가 설정되지 않았습니다.");
           if (isChromeApiAvailable()) {
-            chrome.tabs.sendMessage(sender.tab.id, {
-              action: "displayError",
-              error: "API 키가 설정되지 않았습니다. 설정 버튼을 클릭하여 API 키를 입력해주세요.",
-              blockId: message.blockId
-            }).catch(error => console.error("메시지 전송 오류:", error));
+            try {
+              await sendMessageWithRetry(sender.tab.id, {
+                action: "displayError",
+                error: "API 키가 설정되지 않았습니다. 설정 버튼을 클릭하여 API 키를 입력해주세요.",
+                blockId: message.blockId
+              });
+            } catch (msgError) {
+              console.error("메시지 전송 오류:", msgError);
+            }
           }
           sendResponse({ status: "API 키 없음", error: "API 키가 설정되지 않았습니다." });
           return;
@@ -378,11 +457,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         } catch (decryptError) {
           console.error("API 키 복호화 오류:", decryptError);
           if (isChromeApiAvailable()) {
-            chrome.tabs.sendMessage(sender.tab.id, {
-              action: "displayError",
-              error: "API 키 복호화에 실패했습니다. API 키를 다시 설정해주세요.",
-              blockId: message.blockId
-            }).catch(error => console.error("메시지 전송 오류:", error));
+            try {
+              await sendMessageWithRetry(sender.tab.id, {
+                action: "displayError",
+                error: "API 키 복호화에 실패했습니다. API 키를 다시 설정해주세요.",
+                blockId: message.blockId
+              });
+            } catch (msgError) {
+              console.error("메시지 전송 오류:", msgError);
+            }
           }
           sendResponse({ status: "복호화 오류", error: "API 키 복호화에 실패했습니다." });
           return;
@@ -396,11 +479,15 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (!promptText || promptText.trim().length === 0) {
           console.error("[analyzeNewsWithGemini] 빈 prompt/newsContent 수신!");
           if (isChromeApiAvailable()) {
-            chrome.tabs.sendMessage(sender.tab.id, {
-              action: "displayError",
-              error: "분석할 내용이 비어있습니다.",
-              blockId: message.blockId
-            }).catch(error => console.error("메시지 전송 오류:", error));
+            try {
+              await sendMessageWithRetry(sender.tab.id, {
+                action: "displayError",
+                error: "분석할 내용이 비어있습니다.",
+                blockId: message.blockId
+              });
+            } catch (msgError) {
+              console.error("메시지 전송 오류:", msgError);
+            }
           }
           sendResponse({ status: "빈 콘텐츠", error: "분석할 내용이 없습니다." });
           return;
@@ -415,38 +502,46 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         if (useStreaming) {
           // Gemini API 호출 함수 실행 (실제 스트리밍 방식)
           callGeminiAPIWithRealStreaming(promptText, API_URL, sender.tab.id, message.blockId)
-            .then(result => {
+            .then(async result => {
               console.log("--- Gemini API 스트리밍 완료 ---");
               console.log(result);
               
               // 최종 결과를 content script로 다시 전송 (blockId 포함)
               if (isChromeApiAvailable()) {
-                chrome.tabs.sendMessage(sender.tab.id, {
-                  action: "displayAnalysisResult",
-                  result: result,
-                  blockId: message.blockId
-                }).catch(error => console.error("결과 전송 오류:", error));
+                try {
+                  await sendMessageWithRetry(sender.tab.id, {
+                    action: "displayAnalysisResult",
+                    result: result,
+                    blockId: message.blockId
+                  });
+                } catch (error) {
+                  console.error("결과 전송 오류:", error);
+                }
               }
               
               sendResponse({ status: "분석 완료 및 결과 전송 성공", result: result });
             })
-            .catch(error => {
+            .catch(async error => {
               console.error("Gemini API 처리 중 오류 발생:", error);
               
               // 오류를 content script로 전송 (blockId 포함)
               if (isChromeApiAvailable()) {
-                chrome.tabs.sendMessage(sender.tab.id, {
-                  action: "displayError",
-                  error: error.message,
-                  blockId: message.blockId
-                }).catch(sendError => console.error("오류 전송 실패:", sendError));
+                try {
+                  await sendMessageWithRetry(sender.tab.id, {
+                    action: "displayError",
+                    error: error.message,
+                    blockId: message.blockId
+                  });
+                } catch (sendError) {
+                  console.error("오류 전송 실패:", sendError);
+                }
               }
               
               sendResponse({ status: "API 처리 오류", error: error.message });
             });
         } else {
           // 비스트리밍 모드: 한번에 결과 받기
-          callGeminiAPINonStreaming(promptText, API_KEY)
+          callGeminiAPINonStreaming(promptText, API_KEY, message.blockId)
             .then(response => {
               console.log("--- Gemini API 비스트리밍 완료 ---");
               console.log(response);
@@ -459,16 +554,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
                 quota: response.quota
               });
             })
-            .catch(error => {
+            .catch(async error => {
               console.error("Gemini API 비스트리밍 처리 중 오류:", error);
               const errorText = (error?.message || '').toLowerCase();
               if (isChromeApiAvailable() && sender?.tab?.id && (errorText.includes('429') || errorText.includes('quota'))) {
                 const friendlyMsg = '할당량을 전부 사용했습니다.';
-                chrome.tabs.sendMessage(sender.tab.id, {
-                  action: "displayError",
-                  error: friendlyMsg,
-                  blockId: message.blockId
-                }).catch(sendError => console.error("오류 전송 실패:", sendError));
+                try {
+                  await sendMessageWithRetry(sender.tab.id, {
+                    action: "displayError",
+                    error: friendlyMsg,
+                    blockId: message.blockId
+                  });
+                } catch (sendError) {
+                  console.error("오류 전송 실패:", sendError);
+                }
                 chrome.runtime.sendMessage({ action: 'notifyQuotaError', blockId: message.blockId }).catch(() => {});
               }
               sendResponse({ success: false, status: "API 처리 오류", error: error.message });
@@ -498,171 +597,184 @@ async function callGeminiAPIWithRealStreaming(prompt, apiUrl, tabId, blockId) {
   const RETRY_DELAY = 1000; // 1초
   
   let lastError = null;
-  
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    try {
-      console.log(`API 스트리밍 호출 시도 ${attempt}/${MAX_RETRIES}`);
-      
-      // 타이핑 상태 등록
-      const typingState = { shouldStop: false };
-      activeTypingEffects.set(blockId, typingState);
-      
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          contents: [{
-            parts: [{
-              text: prompt
+  const shouldTrack = blockId !== undefined && blockId !== null;
+  if (shouldTrack) {
+    activeAnalyses.add(blockId);
+  }
+  try {
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        console.log(`API 스트리밍 호출 시도 ${attempt}/${MAX_RETRIES}`);
+        
+        // 타이핑 상태 등록
+        const typingState = { shouldStop: false };
+        activeTypingEffects.set(blockId, typingState);
+        
+        const response = await fetch(apiUrl, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            contents: [{
+              parts: [{
+                text: prompt
+              }]
             }]
-          }]
-        })
-      });
+          })
+        });
 
-      const quotaInfo = {
-        remaining: response.headers.get('x-goog-quota-remaining') || response.headers.get('x-ratelimit-remaining'),
-        limit: response.headers.get('x-goog-quota-limit') || response.headers.get('x-ratelimit-limit'),
-        reset: response.headers.get('x-goog-quota-reset') || response.headers.get('x-ratelimit-reset')
-      };
-      console.log('[callGeminiAPIWithRealStreaming] 할당량 정보:', quotaInfo);
+        const quotaInfo = {
+          remaining: response.headers.get('x-goog-quota-remaining') || response.headers.get('x-ratelimit-remaining'),
+          limit: response.headers.get('x-goog-quota-limit') || response.headers.get('x-ratelimit-limit'),
+          reset: response.headers.get('x-goog-quota-reset') || response.headers.get('x-ratelimit-reset')
+        };
+        console.log('[callGeminiAPIWithRealStreaming] 할당량 정보:', quotaInfo);
 
-      if (!response.ok) {
-        const errorBody = await response.text();
-        const errorMsg = `API 요청 실패: ${response.status} ${response.statusText} - ${errorBody}`;
-        throw new Error(errorMsg);
-      }
-
-      // SSE 스트림 읽기
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let fullText = '';
-      let buffer = '';
-      let usageMetadataLogged = false;
-      
-      while (true) {
-        // 중단 요청 확인
-        if (typingState.shouldStop) {
-          console.log('[callGeminiAPIWithRealStreaming] 스트리밍 중단됨:', blockId);
-          reader.cancel();
-          activeTypingEffects.delete(blockId);
-          throw new Error('사용자가 분석을 중단했습니다.');
+        if (!response.ok) {
+          const errorBody = await response.text();
+          const errorMsg = `API 요청 실패: ${response.status} ${response.statusText} - ${errorBody}`;
+          throw new Error(errorMsg);
         }
+
+        // SSE 스트림 읽기
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let fullText = '';
+        let buffer = '';
+        let usageMetadataLogged = false;
         
-        const { done, value } = await reader.read();
-        
-        if (done) {
-          break;
-        }
-        
-        // 청크를 텍스트로 변환
-        buffer += decoder.decode(value, { stream: true });
-        
-        // SSE 형식 파싱 (data: 로 시작하는 라인들)
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || ''; // 마지막 불완전한 라인은 버퍼에 보관
-        
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            const jsonStr = line.slice(6); // 'data: ' 제거
-            
-            if (jsonStr.trim() === '') continue;
-            
-            try {
-              const data = JSON.parse(jsonStr);
-              if (data.usageMetadata && !usageMetadataLogged) {
-                usageMetadataLogged = true;
-                const usage = data.usageMetadata;
-                console.log('[Gemini Usage][Streaming] prompt:', usage.promptTokenCount ?? 'N/A',
-                  '| response:', usage.candidatesTokenCount ?? usage.responseTokenCount ?? 'N/A',
-                  '| total:', usage.totalTokenCount ?? 'N/A');
-              }
+        while (true) {
+          // 중단 요청 확인
+          if (typingState.shouldStop) {
+            console.log('[callGeminiAPIWithRealStreaming] 스트리밍 중단됨:', blockId);
+            reader.cancel();
+            activeTypingEffects.delete(blockId);
+            throw new Error('사용자가 분석을 중단했습니다.');
+          }
+          
+          const { done, value } = await reader.read();
+          
+          if (done) {
+            break;
+          }
+          
+          // 청크를 텍스트로 변환
+          buffer += decoder.decode(value, { stream: true });
+          
+          // SSE 형식 파싱 (data: 로 시작하는 라인들)
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || ''; // 마지막 불완전한 라인은 버퍼에 보관
+          
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const jsonStr = line.slice(6); // 'data: ' 제거
               
-              // 응답에서 텍스트 추출
-              if (data.candidates && data.candidates[0] && 
-                  data.candidates[0].content && 
-                  data.candidates[0].content.parts && 
-                  data.candidates[0].content.parts[0]) {
-                const text = data.candidates[0].content.parts[0].text;
+              if (jsonStr.trim() === '') continue;
+              
+              try {
+                const data = JSON.parse(jsonStr);
+                if (data.usageMetadata && !usageMetadataLogged) {
+                  usageMetadataLogged = true;
+                  const usage = data.usageMetadata;
+                  console.log('[Gemini Usage][Streaming] prompt:', usage.promptTokenCount ?? 'N/A',
+                    '| response:', usage.candidatesTokenCount ?? usage.responseTokenCount ?? 'N/A',
+                    '| total:', usage.totalTokenCount ?? 'N/A');
+                }
                 
-                if (text) {
-                  fullText += text;
+                // 응답에서 텍스트 추출
+                if (data.candidates && data.candidates[0] && 
+                    data.candidates[0].content && 
+                    data.candidates[0].content.parts && 
+                    data.candidates[0].content.parts[0]) {
+                  const text = data.candidates[0].content.parts[0].text;
                   
-                  // 실시간으로 content script에 전송
-                  if (isChromeApiAvailable()) {
-                    chrome.tabs.sendMessage(tabId, {
-                      action: "updateStreamingResult",
-                      partialResult: fullText,
-                      blockId: blockId
-                    }).catch(error => {
-                      console.error("스트리밍 메시지 전송 오류:", error);
-                    });
+                  if (text) {
+                    fullText += text;
+                    
+                    // 실시간으로 content script에 전송
+                    if (isChromeApiAvailable()) {
+                      chrome.tabs.sendMessage(tabId, {
+                        action: "updateStreamingResult",
+                        partialResult: fullText,
+                        blockId: blockId
+                      }).catch(error => {
+                        console.error("스트리밍 메시지 전송 오류:", error);
+                      });
+                    }
                   }
                 }
+              } catch (parseError) {
+                console.warn('JSON 파싱 오류 (스트림 중):', parseError, 'Line:', jsonStr);
               }
-            } catch (parseError) {
-              console.warn('JSON 파싱 오류 (스트림 중):', parseError, 'Line:', jsonStr);
             }
           }
         }
-      }
-      
-      // 타이핑 상태 제거
-      activeTypingEffects.delete(blockId);
-      
-      // 최종 결과 파싱
-      const finalResult = extractNewsContentFromText(fullText);
-      
-      console.log(`API 스트리밍 호출 성공 (시도 ${attempt}/${MAX_RETRIES})`);
-      return finalResult;
-      
-    } catch (error) {
-      lastError = error;
-      activeTypingEffects.delete(blockId);
-      console.error(`API 스트리밍 호출 실패 (시도 ${attempt}/${MAX_RETRIES}):`, error.message);
-      
-      // 사용자가 중단한 경우 재시도하지 않음
-      if (error.message.includes('중단')) {
-        throw error;
-      }
-      
-      // 마지막 시도가 아니면 재시도
-      if (attempt < MAX_RETRIES) {
-        console.log(`${RETRY_DELAY / 1000}초 후 재시도합니다...`);
-        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+        
+        // 타이핑 상태 제거
+        activeTypingEffects.delete(blockId);
+        
+        // 최종 결과 파싱
+        const finalResult = extractNewsContentFromText(fullText);
+        
+        console.log(`API 스트리밍 호출 성공 (시도 ${attempt}/${MAX_RETRIES})`);
+        return finalResult;
+        
+      } catch (error) {
+        lastError = error;
+        activeTypingEffects.delete(blockId);
+        console.error(`API 스트리밍 호출 실패 (시도 ${attempt}/${MAX_RETRIES}):`, error.message);
+        
+        // 사용자가 중단한 경우 재시도하지 않음
+        if (error.message.includes('중단')) {
+          throw error;
+        }
+        
+        // 마지막 시도가 아니면 재시도
+        if (attempt < MAX_RETRIES) {
+          console.log(`${RETRY_DELAY / 1000}초 후 재시도합니다...`);
+          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+        }
       }
     }
-  }
-  
-  // 모든 재시도 실패 시 에러 메시지를 content script로 전송
-  let errorMessage;
-  let errorTitle = 'API 호출 실패';
-  const lastErrorText = lastError?.message?.toLowerCase() || '';
-  
-  // 429 에러 (할당량 초과) 체크
-  if (lastErrorText.includes('429') || lastErrorText.includes('quota')) {
-    errorTitle = 'API 할당량 부족';
-    errorMessage = '할당량을 전부 사용했습니다.';
+    
+    // 모든 재시도 실패 시 에러 메시지를 content script로 전송
+    let errorMessage;
+    let errorTitle = 'API 호출 실패';
+    const lastErrorText = lastError?.message?.toLowerCase() || '';
+    
+    // 429 에러 (할당량 초과) 체크
+    if (lastErrorText.includes('429') || lastErrorText.includes('quota')) {
+      errorTitle = 'API 할당량 부족';
+      errorMessage = '할당량을 전부 사용했습니다.';
+      if (isChromeApiAvailable()) {
+        chrome.runtime.sendMessage({ action: 'notifyQuotaError', blockId }).catch(() => {});
+      }
+    } else {
+      errorMessage = `API 호출에 ${MAX_RETRIES}번 실패했습니다.\n\n오류 내용:\n${lastError.message}`;
+    }
+    
+    console.error("최종 실패:", errorMessage);
+    
     if (isChromeApiAvailable()) {
-      chrome.runtime.sendMessage({ action: 'notifyQuotaError', blockId }).catch(() => {});
+      try {
+        await sendMessageWithRetry(tabId, {
+          action: "displayErrorModal",
+          error: errorMessage,
+          errorTitle: errorTitle,
+          blockId: blockId
+        });
+      } catch (error) {
+        console.error("에러 모달 전송 오류:", error);
+      }
     }
-  } else {
-    errorMessage = `API 호출에 ${MAX_RETRIES}번 실패했습니다.\n\n오류 내용:\n${lastError.message}`;
+    
+    throw lastError;
+  } finally {
+    if (shouldTrack) {
+      activeAnalyses.delete(blockId);
+    }
   }
-  
-  console.error("최종 실패:", errorMessage);
-  
-  if (isChromeApiAvailable()) {
-    chrome.tabs.sendMessage(tabId, {
-      action: "displayErrorModal",
-      error: errorMessage,
-      errorTitle: errorTitle,
-      blockId: blockId
-    }).catch(error => console.error("에러 모달 전송 오류:", error));
-  }
-  
-  throw lastError;
 }
 
 /**
@@ -721,9 +833,12 @@ async function simulateTypingEffect(text, tabId, blockId) {
  * @param {string} apiKey - Gemini API 키
  * @returns {Promise<object>} - API가 반환한 결과 객체
  */
-async function callGeminiAPINonStreaming(prompt, apiKey) {
+async function callGeminiAPINonStreaming(prompt, apiKey, blockId = null) {
   const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
-  
+  const shouldTrack = blockId !== null && blockId !== undefined;
+  if (shouldTrack) {
+    activeAnalyses.add(blockId);
+  }
   try {
     console.log('[callGeminiAPINonStreaming] 비스트리밍 API 호출 시작');
     
@@ -775,6 +890,10 @@ async function callGeminiAPINonStreaming(prompt, apiKey) {
   } catch (error) {
     console.error("[callGeminiAPINonStreaming] API 호출 오류:", error);
     throw error;
+  } finally {
+    if (shouldTrack) {
+      activeAnalyses.delete(blockId);
+    }
   }
 }
 
