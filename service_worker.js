@@ -451,13 +451,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               console.log("--- Gemini API 비스트리밍 완료 ---");
               console.log(response);
               
-              // 할당량 정보 로깅
-              if (response.quota) {
-                console.log('[Quota Info] 남은 요청:', response.quota.remaining);
-                console.log('[Quota Info] 전체 한도:', response.quota.limit);
-                console.log('[Quota Info] 리셋 시간:', response.quota.reset);
-              }
-              
               // sendResponse로 직접 반환 (content script로 전송 안 함)
               sendResponse({ 
                 success: true,
@@ -468,6 +461,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             })
             .catch(error => {
               console.error("Gemini API 비스트리밍 처리 중 오류:", error);
+              const errorText = (error?.message || '').toLowerCase();
+              if (isChromeApiAvailable() && sender?.tab?.id && (errorText.includes('429') || errorText.includes('quota'))) {
+                const friendlyMsg = '할당량을 전부 사용했습니다.';
+                chrome.tabs.sendMessage(sender.tab.id, {
+                  action: "displayError",
+                  error: friendlyMsg,
+                  blockId: message.blockId
+                }).catch(sendError => console.error("오류 전송 실패:", sendError));
+                chrome.runtime.sendMessage({ action: 'notifyQuotaError', blockId: message.blockId }).catch(() => {});
+              }
               sendResponse({ success: false, status: "API 처리 오류", error: error.message });
             });
         }
@@ -518,6 +521,13 @@ async function callGeminiAPIWithRealStreaming(prompt, apiUrl, tabId, blockId) {
         })
       });
 
+      const quotaInfo = {
+        remaining: response.headers.get('x-goog-quota-remaining') || response.headers.get('x-ratelimit-remaining'),
+        limit: response.headers.get('x-goog-quota-limit') || response.headers.get('x-ratelimit-limit'),
+        reset: response.headers.get('x-goog-quota-reset') || response.headers.get('x-ratelimit-reset')
+      };
+      console.log('[callGeminiAPIWithRealStreaming] 할당량 정보:', quotaInfo);
+
       if (!response.ok) {
         const errorBody = await response.text();
         const errorMsg = `API 요청 실패: ${response.status} ${response.statusText} - ${errorBody}`;
@@ -529,6 +539,7 @@ async function callGeminiAPIWithRealStreaming(prompt, apiUrl, tabId, blockId) {
       const decoder = new TextDecoder();
       let fullText = '';
       let buffer = '';
+      let usageMetadataLogged = false;
       
       while (true) {
         // 중단 요청 확인
@@ -560,6 +571,13 @@ async function callGeminiAPIWithRealStreaming(prompt, apiUrl, tabId, blockId) {
             
             try {
               const data = JSON.parse(jsonStr);
+              if (data.usageMetadata && !usageMetadataLogged) {
+                usageMetadataLogged = true;
+                const usage = data.usageMetadata;
+                console.log('[Gemini Usage][Streaming] prompt:', usage.promptTokenCount ?? 'N/A',
+                  '| response:', usage.candidatesTokenCount ?? usage.responseTokenCount ?? 'N/A',
+                  '| total:', usage.totalTokenCount ?? 'N/A');
+              }
               
               // 응답에서 텍스트 추출
               if (data.candidates && data.candidates[0] && 
@@ -620,33 +638,14 @@ async function callGeminiAPIWithRealStreaming(prompt, apiUrl, tabId, blockId) {
   // 모든 재시도 실패 시 에러 메시지를 content script로 전송
   let errorMessage;
   let errorTitle = 'API 호출 실패';
+  const lastErrorText = lastError?.message?.toLowerCase() || '';
   
   // 429 에러 (할당량 초과) 체크
-  if (lastError.message.includes('429') || lastError.message.includes('quota')) {
-    errorTitle = 'API 할당량 초과';
-    errorMessage = `Gemini API의 일일 무료 할당량(200회)을 모두 사용했습니다.\n\n다음 방법을 시도해보세요:\n\n1. 설정에서 "유사 기사 AI 필터링"을 끄기\n2. 내일 자정(UTC 기준)까지 대기\n3. 유료 플랜으로 업그레이드\n\n현재 크롤링 우선순위를 "속도"로 설정하면 API 사용을 줄일 수 있습니다.`;
-    
-    // 할당량 0으로 저장
-    const exhaustedInfo = {
-      remaining: '0',
-      limit: '200',
-      reset: null,
-      timestamp: Date.now(),
-      exhausted: true
-    };
-    
-    if (chrome?.storage?.local) {
-      try {
-        await chrome.storage.local.set({ gemini_quota_info: exhaustedInfo });
-      } catch (storageError) {
-        console.error('할당량 chrome.storage 저장 실패:', storageError);
-      }
-    }
-    
+  if (lastErrorText.includes('429') || lastErrorText.includes('quota')) {
+    errorTitle = 'API 할당량 부족';
+    errorMessage = '할당량을 전부 사용했습니다.';
     if (isChromeApiAvailable()) {
-      chrome.runtime.sendMessage({
-        action: 'saveQuotaExhausted'
-      }).catch(e => console.error('할당량 저장 실패:', e));
+      chrome.runtime.sendMessage({ action: 'notifyQuotaError', blockId }).catch(() => {});
     }
   } else {
     errorMessage = `API 호출에 ${MAX_RETRIES}번 실패했습니다.\n\n오류 내용:\n${lastError.message}`;
@@ -757,6 +756,14 @@ async function callGeminiAPINonStreaming(prompt, apiKey) {
     }
 
     const data = await response.json();
+    const usageMetadata = data.usageMetadata || data.candidates?.[0]?.usageMetadata;
+    if (usageMetadata) {
+      console.log('[Gemini Usage][Non-Streaming] prompt:', usageMetadata.promptTokenCount ?? 'N/A',
+        '| response:', usageMetadata.candidatesTokenCount ?? usageMetadata.responseTokenCount ?? 'N/A',
+        '| total:', usageMetadata.totalTokenCount ?? 'N/A');
+    } else {
+      console.log('[Gemini Usage][Non-Streaming] usageMetadata가 제공되지 않았습니다.');
+    }
     const resultText = data.candidates[0]?.content?.parts[0]?.text || '{}';
     
     console.log('[callGeminiAPINonStreaming] 응답 텍스트 길이:', resultText.length);

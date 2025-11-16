@@ -55,6 +55,7 @@ class AnalysisPanel {
     this.autoFactCheckEnabled = this.getAutoFactCheckSetting();
     this.autoCrossVerificationEnabled = this.getAutoCrossVerificationSetting();
     this.autoFactCheckQueue = new Set();
+    this.integratedSearchEnabled = this.getIntegratedSearchSetting();
     
     // Google Search API 관련
     this.searchCache = new Map(); // 메모리 캐시 (세션 내)
@@ -71,9 +72,8 @@ class AnalysisPanel {
     this.applyDefaultSettings();
     this.syncApiKeyCacheFromChrome();
     
-    // 메시지/스토리지 리스너 등록 (할당량 변동 감지)
+    // 메시지 리스너 등록 (서비스 워커 오류 전달)
     this.setupMessageListener();
-    this.initializeQuotaState();
   }
   
   hasLocalApiKey(keyName) {
@@ -219,6 +219,7 @@ class AnalysisPanel {
     const autoFactCheckBtn = rootEl.querySelector('.auto-factcheck-btn');
     const autoCrossBtn = rootEl.querySelector('.auto-crossverify-btn');
     const filterBtn = rootEl.querySelector('.article-filter-btn');
+    const integratedToggle = rootEl.querySelector('.integrated-search-toggle-btn');
 
     const disableButton = (button, enabled, tooltip) => {
       if (!button) return;
@@ -234,6 +235,7 @@ class AnalysisPanel {
     disableButton(autoFactCheckBtn, geminiReady && googleReady, 'Gemini와 Google API 키 모두 필요합니다.');
     disableButton(autoCrossBtn, geminiReady, 'Gemini API 키를 먼저 입력하세요.');
     disableButton(filterBtn, geminiReady, 'Gemini API 키를 먼저 입력하세요.');
+    disableButton(integratedToggle, googleReady && this.getGoogleSearchEnabled(), 'Google Search API 사용을 먼저 켜세요.');
   }
 
   enforceApiKeyDependencies() {
@@ -251,6 +253,9 @@ class AnalysisPanel {
     }
     if (!geminiReady && this.getArticleFilterSetting()) {
       this.setArticleFilterSetting(false);
+    }
+    if ((!googleReady || !this.getGoogleSearchEnabled()) && this.getIntegratedSearchSetting()) {
+      this.setIntegratedSearchSetting(false);
     }
   }
 
@@ -356,53 +361,16 @@ class AnalysisPanel {
   // 메시지 리스너 설정
   setupMessageListener() {
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-      if (message.action === 'saveQuotaExhausted') {
-        console.log('[AnalysisPanel] 할당량 소진 메시지 수신');
-        this.saveQuotaExhausted();
-        sendResponse({ success: true });
+      if (message.action === 'notifyQuotaError') {
+        console.warn('[AnalysisPanel] 할당량 오류 알림 수신');
+        this.showQuotaErrorToast(message.blockId || null);
+        if (typeof sendResponse === 'function') {
+          sendResponse({ success: true });
+        }
+        return true;
       }
-      return true;
+      return false;
     });
-  }
-
-  // chrome.storage.local과 동기화해 패널이 닫혀도 할당량 상태를 복원
-  initializeQuotaState() {
-    if (!chrome?.storage?.local) {
-      this.updateQuotaDisplay();
-      return;
-    }
-    
-    chrome.storage.local.get(['gemini_quota_info'], (result) => {
-      if (chrome.runtime.lastError) {
-        console.warn('할당량 초기화 실패:', chrome.runtime.lastError.message);
-        this.updateQuotaDisplay();
-        return;
-      }
-      if (result.gemini_quota_info) {
-        this.persistQuotaInfoLocally(result.gemini_quota_info);
-      }
-      this.updateQuotaDisplay();
-    });
-    
-    chrome.storage.onChanged.addListener((changes, areaName) => {
-      if (areaName !== 'local' || !changes.gemini_quota_info) return;
-      const newValue = changes.gemini_quota_info.newValue;
-      if (newValue) {
-        this.persistQuotaInfoLocally(newValue);
-      } else {
-        localStorage.removeItem('gemini_quota_info');
-      }
-      this.updateQuotaDisplay();
-    });
-  }
-
-  // localStorage에 안전하게 저장
-  persistQuotaInfoLocally(quotaInfo) {
-    try {
-      localStorage.setItem('gemini_quota_info', JSON.stringify(quotaInfo));
-    } catch (error) {
-      console.error('Failed to persist quota info locally:', error);
-    }
   }
 
   // 초기 실행 시 기본 설정 값 주입
@@ -448,6 +416,7 @@ class AnalysisPanel {
 
     ensureLocal('factcheck_auto_fact_check', false);
     ensureLocal('factcheck_auto_cross_verify', false);
+    ensureLocal('factcheck_integrated_search_enabled', false);
     ensureLocal('factcheck_auto_open', true);
     ensureLocal('factcheck_panel_opacity', '1');
     ensureLocal('factcheck_cross_verification_depth', '3');
@@ -1128,28 +1097,6 @@ class AnalysisPanel {
                 ">연결됨</span>
               </div>
               
-              <!-- API 할당량 표시 -->
-              <div id="quota-display" style="
-                display: flex;
-                align-items: center;
-                gap: 6px;
-                padding: 6px 12px;
-                background: rgba(13, 13, 13, 0.25);
-                border: 1px solid ${border};
-                border-radius: 8px;
-                margin-right: 8px;
-              ">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="${textMuted}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                  <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
-                </svg>
-                <span style="
-                  font-size: 11px;
-                  color: ${textMuted};
-                  font-weight: 600;
-                  letter-spacing: -0.3px;
-                "><span id="quota-remaining">-</span> / <span id="quota-limit">-</span></span>
-              </div>
-              
               <button id="settings-btn" style="
                 width: 36px;
                 height: 36px;
@@ -1399,7 +1346,6 @@ class AnalysisPanel {
               cursor: pointer;
               transition: all 0.2s ease;
             " onmouseover="this.style.background='rgba(140, 110, 84, 0.4)';" onmouseout="this.style.background='rgba(140, 110, 84, 0.28)';">분석하기</button>
-            ${this.isQuotaExhausted() ? `<span style="font-size: 11px; color: ${this.hexToRgba(text, 0.8)};">⚠️ 현재 할당량이 소진된 상태로 표시되지만, 다시 시도하여 상태를 새로고침할 수 있습니다.</span>` : ''}
           </div>
         ` : ''}
         ${isAnalyzing ? `
@@ -1468,7 +1414,6 @@ class AnalysisPanel {
                   cursor: pointer;
                   transition: all 0.2s ease;
                 " onmouseover="this.style.background='rgba(140, 110, 84, 0.34)';" onmouseout="this.style.background='rgba(140, 110, 84, 0.22)';">분석하기</button>
-                ${this.isQuotaExhausted() ? `<span style="font-size: 10px; color: ${this.hexToRgba(text, 0.7)};">⚠️ 할당량 소진 상태를 다시 확인 중</span>` : ''}
               </div>` : '';
         const openButton = encodedUrl ? `
               <button class="mini-action-btn mini-open-btn" data-url="${encodedUrl}" style="
@@ -1683,7 +1628,6 @@ class AnalysisPanel {
       } else {
         switch (status) {
         case 'pending': {
-          const quotaWarningActive = this.isQuotaExhausted();
           actionButtons = `
             <div style="display: flex; flex-direction: column; gap: 6px; width: 100%;">
               <button class="analyze-current-btn" data-id="${id}" style="
@@ -1698,14 +1642,6 @@ class AnalysisPanel {
                 width: 100%;
                 backdrop-filter: blur(8px);
               " onmouseover="this.style.background='${primaryButtonHover}'" onmouseout="this.style.background='${primaryButtonBase}'">분석하기</button>
-              ${quotaWarningActive ? `<div style="
-                font-size: 12px;
-                color: ${this.hexToRgba(text, 0.8)};
-                background: rgba(191, 151, 128, 0.2);
-                border: 1px dashed rgba(140, 110, 84, 0.4);
-                padding: 8px 10px;
-                border-radius: 6px;
-              ">⚠️ 현재 저장된 정보상 할당량이 소진되었습니다. 분석하기를 눌러 상태를 다시 확인하세요.</div>` : ''}
             </div>
           `;
           break;
@@ -2513,7 +2449,7 @@ class AnalysisPanel {
     const oldStatus = block.status;
     block.status = status;
     if (progress) block.progress = progress;
-    if (result) block.result = result;
+    if (result !== null && result !== undefined) block.result = result;
     if (error) block.error = error;
     
     // 진행 상태 텍스트 실시간 업데이트
@@ -2538,7 +2474,7 @@ class AnalysisPanel {
       if (normalizeUrl(block.url) === normalizeUrl(this.currentNews.url)) {
         this.currentNews.status = status;
         if (progress) this.currentNews.progress = progress;
-        if (result) this.currentNews.result = result;
+        if (result !== null && result !== undefined) this.currentNews.result = result;
         if (error) this.currentNews.error = error;
       }
     }
@@ -2580,9 +2516,6 @@ class AnalysisPanel {
       if (analyzedContainer) {
         analyzedContainer.innerHTML = this.renderAnalyzedNews();
       }
-      
-      // 할당량 정보 업데이트
-      this.updateQuotaDisplay();
       
       // 축소된 요약 뷰 업데이트 (축소 상태일 때)
       if (this.isHistoryCollapsed) {
@@ -3942,7 +3875,11 @@ JSON 외의 문장, 주석, 코드 블록(\\\`\\\`\\\`json\\\`\\\`\\\`)은 절�
       "분석": "다음 구조로 가독성 높게 작성하세요:<br><br>**✨ 기사 개요**<br>기사가 다루는 핵심 내용을 1-2문장으로 간단히 정리<br><br>**📊 주요 분석 결과**<br>위 근거에서 발견된 핵심 문제점 또는 신뢰할 수 있는 요소를 항목별로 명확히 설명<br><br>**⚠️ 검증 한계**<br>(있다면) 현재 검증으로는 확인 불가능한 정보나 추가 확인이 필요한 부분을 간단히 언급<br><br>**⚖️ 종합 판단**<br>위 내용을 바탕으로 최종 신뢰도 평가와 그 이유를 2-3문장으로 명확히 정리<br><br>※ 각 섹션은 <br><br>로 구분하고, 섹션 제목은 이모지+굵은 글씨(**텍스트**)로 표시하세요",
       "요약": "기사의 핵심 내용을 간결하고 정확하게 요약 (50-100자 이내, HTML 태그 사용 금지). 한 문장으로 핵심만 간결하게 작성",
       "키워드": "기사의 핵심 키워드 3-5개를 추출 (쉼표로 구분, HTML 태그 사용 금지). 예: 정치, 한동훈, 국민의힘, 대장동 사건, 여론",
-      "검색어": "유사 기사 검색 또는 사실 검증에 적합한 검색어 1개 (20-50자, 고유명사 + 핵심 사건/주제 조합, HTML 태그 사용 금지). 예: 한동훈 대장동 사건 항소 포기"
+      "검색어": "유사 기사 검색 또는 사실 검증에 적합한 검색어 1개 (20-50자, 고유명사 + 핵심 사건/주제 조합, HTML 태그 사용 금지). 예: 한동훈 대장동 사건 항소 포기",
+      "verification_queries": {
+        "news": "Daum 뉴스 전용 CSE에 사용할 검색어 (20-45자, 사건 핵심 키워드 + 인물/기관 조합, 따옴표/마침표/해시태그 금지)",
+        "all": "전체 웹(정부·기관 보도자료, 공식 문서 등)에서 사실을 직접 확인하기 위한 검색어 (25-60자, 구체적 키워드 + 비교용 조건 포함, 특수문자 금지)"
+      }
     }
   }
 ]
@@ -4272,12 +4209,16 @@ ${factCheckSection}
 
     const result = block.result || {};
     const analysisProcess = result.분석진행 || '';
-    const verdict = result.진위 || '분석 결과 없음';
+    const initialVerdict = result.진위 || '분석 결과 없음';
     const evidence = result.근거 || 'N/A';
-    const analysis = result.분석 || 'N/A';
     const summary = result.요약 || 'N/A';
+    const normalizedVerificationQueries = this.normalizeVerificationQueries(result.verification_queries);
     const { base, surface, surfaceAlt, accent, text, textMuted, border } = this.palette;
-    const verdictColors = this.getVerdictColors(verdict);
+    const hasFinalAnalysis = Boolean(block.factCheckResult && block.factCheckResult.finalAnalysis);
+    const finalVerdict = hasFinalAnalysis && block.factCheckResult.finalAnalysis.final_verdict
+      ? block.factCheckResult.finalAnalysis.final_verdict
+      : initialVerdict;
+    const verdictColors = this.getVerdictColors(finalVerdict || '분석 결과 없음');
     const suspiciousBorder = this.hexToRgba(verdictColors.base, 0.35);
     const suspiciousBackground = this.hexToRgba(verdictColors.base, 0.08);
     const suspiciousEntries = result.수상한문장 && Object.keys(result.수상한문장).length > 0
@@ -4304,6 +4245,289 @@ ${factCheckSection}
     const summaryBackground = `linear-gradient(135deg, ${this.hexToRgba(accent, 0.18)} 0%, ${this.hexToRgba(surfaceAlt, 0.15)} 100%)`;
     const safeTitle = this.escapeHtml(block.title || '제목 없음');
     const showProcessButton = Boolean(analysisProcess && analysisProcess !== 'N/A');
+
+    const finalAnalysisSection = (block.factCheckResult && block.factCheckResult.finalAnalysis) ? `
+          <section>
+            <h3 style="
+              font-size: 16px;
+              font-weight: 700;
+              margin: 0 0 14px 0;
+              color: ${text};
+              display: flex;
+              align-items: center;
+              gap: 10px;
+              padding-bottom: 12px;
+              border-bottom: 2px solid ${this.hexToRgba(accent, 0.3)};
+            ">
+              <span style="font-size: 20px;">🎯</span>
+              최종 통합 분석
+            </h3>
+            <div style="
+              background: ${cardBackground};
+              border: 1px solid ${border};
+              border-radius: 10px;
+              padding: 18px;
+              margin-bottom: 16px;
+            ">
+              <div style="
+                font-weight: 600;
+                color: ${this.hexToRgba(text, 0.9)};
+                margin-bottom: 10px;
+                font-size: 14px;
+              ">📝 최종 요약</div>
+              <div style="
+                line-height: 1.7;
+                font-size: 14px;
+                color: ${text};
+              ">${this.renderMarkdown(block.factCheckResult.finalAnalysis.summary)}</div>
+            </div>
+            ${block.factCheckResult.finalAnalysis.reasoning.reassessment_of_initial_analysis ? `
+            <div style="
+              background: ${this.hexToRgba('#3B82F6', 0.08)};
+              border: 1px solid ${this.hexToRgba('#3B82F6', 0.3)};
+              border-radius: 10px;
+              padding: 16px;
+              margin-bottom: 12px;
+            ">
+              <div style="
+                font-weight: 600;
+                color: #3B82F6;
+                margin-bottom: 10px;
+                font-size: 14px;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+              ">
+                <span>🔄</span> 초기 분석 데이터 재검토
+              </div>
+              <div style="
+                line-height: 1.7;
+                font-size: 13px;
+                color: ${text};
+              ">${this.renderMarkdown(block.factCheckResult.finalAnalysis.reasoning.reassessment_of_initial_analysis)}</div>
+            </div>
+            ` : ''}
+            ${block.factCheckResult.finalAnalysis.reasoning.confirmations_from_external_data ? `
+            <div style="
+              background: ${this.hexToRgba('#10B981', 0.08)};
+              border: 1px solid ${this.hexToRgba('#10B981', 0.3)};
+              border-radius: 10px;
+              padding: 16px;
+              margin-bottom: 12px;
+            ">
+              <div style="
+                font-weight: 600;
+                color: #10B981;
+                margin-bottom: 10px;
+                font-size: 14px;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+              ">
+                <span>✅</span> 외부 데이터 확증
+              </div>
+              <div style="
+                line-height: 1.7;
+                font-size: 13px;
+                color: ${text};
+              ">${this.renderMarkdown(block.factCheckResult.finalAnalysis.reasoning.confirmations_from_external_data)}</div>
+            </div>
+            ` : ''}
+            ${block.factCheckResult.finalAnalysis.reasoning.discrepancies_or_contradictions && block.factCheckResult.finalAnalysis.reasoning.discrepancies_or_contradictions !== '' ? `
+            <div style="
+              background: ${this.hexToRgba('#EF4444', 0.08)};
+              border: 1px solid ${this.hexToRgba('#EF4444', 0.3)};
+              border-radius: 10px;
+              padding: 16px;
+              margin-bottom: 12px;
+            ">
+              <div style="
+                font-weight: 600;
+                color: #EF4444;
+                margin-bottom: 10px;
+                font-size: 14px;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+              ">
+                <span>⚠️</span> 불일치 또는 모순
+              </div>
+              <div style="
+                line-height: 1.7;
+                font-size: 13px;
+                color: ${text};
+              ">${this.renderMarkdown(block.factCheckResult.finalAnalysis.reasoning.discrepancies_or_contradictions)}</div>
+            </div>
+            ` : ''}
+            ${block.factCheckResult.finalAnalysis.reasoning.unverified_claims && block.factCheckResult.finalAnalysis.reasoning.unverified_claims !== '' ? `
+            <div style="
+              background: ${this.hexToRgba('#F59E0B', 0.08)};
+              border: 1px solid ${this.hexToRgba('#F59E0B', 0.3)};
+              border-radius: 10px;
+              padding: 16px;
+              margin-bottom: 12px;
+            ">
+              <div style="
+                font-weight: 600;
+                color: #F59E0B;
+                margin-bottom: 10px;
+                font-size: 14px;
+                display: flex;
+                align-items: center;
+                gap: 6px;
+              ">
+                <span>❓</span> 검증 불가 주장
+              </div>
+              <div style="
+                line-height: 1.7;
+                font-size: 13px;
+                color: ${text};
+              ">${this.renderMarkdown(block.factCheckResult.finalAnalysis.reasoning.unverified_claims)}</div>
+            </div>
+            ` : ''}
+          </section>
+    ` : '';
+
+    const factCheckSection = (block.factCheckResult && block.factCheckResult.verification) ? `
+          <section class="fact-check-section">
+            <button type="button" class="fact-check-toggle" style="
+              width: 100%;
+              background: transparent;
+              border: none;
+              padding: 0;
+              margin: 0 0 12px 0;
+              cursor: pointer;
+            ">
+              <div style="
+                font-size: 15px;
+                font-weight: 600;
+                color: ${text};
+                display: flex;
+                align-items: center;
+                gap: 8px;
+                border-radius: 8px;
+                padding: 10px 12px;
+                border: 1px solid ${this.hexToRgba(border, 0.6)};
+                background: ${this.hexToRgba(surfaceAlt, 0.12)};
+                transition: background 0.2s ease, border-color 0.2s ease;
+              ">
+                <span>📊 사실 검증 결과</span>
+                <span style="
+                  background: linear-gradient(135deg, rgba(16, 185, 129, 0.25), rgba(5, 150, 105, 0.25));
+                  color: rgba(5, 150, 105, 1);
+                  border: 1px solid rgba(16, 185, 129, 0.5);
+                  padding: 4px 10px;
+                  border-radius: 8px;
+                  font-size: 11px;
+                  font-weight: 600;
+                  letter-spacing: 0.3px;
+                ">${block.factCheckResult.articles.length}개 기사 비교</span>
+                <span class="fact-check-arrow" style="margin-left: auto; font-size: 12px; color: ${mutedText};">▼</span>
+              </div>
+            </button>
+            <div class="fact-check-body" style="display: none;">
+            ${block.factCheckResult.verification.일치하는_사실 && block.factCheckResult.verification.일치하는_사실.length > 0 ? `
+            <div style="
+              background: ${this.hexToRgba('#10B981', 0.1)};
+              border: 1px solid ${this.hexToRgba('#10B981', 0.3)};
+              border-radius: 10px;
+              padding: 16px;
+              margin-bottom: 12px;
+            ">
+              <div style="
+                font-weight: 600;
+                color: #10B981;
+                margin-bottom: 10px;
+                font-size: 14px;
+              ">✅ 일치하는 사실 (${block.factCheckResult.verification.일치하는_사실.length})</div>
+              <ul style="
+                margin: 0;
+                padding-left: 20px;
+                color: ${text};
+                line-height: 1.6;
+                font-size: 13px;
+              ">
+                ${block.factCheckResult.verification.일치하는_사실.map(fact => `
+                  <li style="margin-bottom: 6px;">${this.renderSourceNumbers(fact, block.factCheckResult.articles)}</li>
+                `).join('')}
+              </ul>
+            </div>
+            ` : ''}
+            ${block.factCheckResult.verification.불일치하는_사실 && block.factCheckResult.verification.불일치하는_사실.length > 0 ? `
+            <div style="
+              background: ${this.hexToRgba('#EF4444', 0.1)};
+              border: 1px solid ${this.hexToRgba('#EF4444', 0.3)};
+              border-radius: 10px;
+              padding: 16px;
+              margin-bottom: 12px;
+            ">
+              <div style="
+                font-weight: 600;
+                color: #EF4444;
+                margin-bottom: 10px;
+                font-size: 14px;
+              ">❌ 불일치하는 사실 (${block.factCheckResult.verification.불일치하는_사실.length})</div>
+              <ul style="
+                margin: 0;
+                padding-left: 20px;
+                color: ${text};
+                line-height: 1.6;
+                font-size: 13px;
+              ">
+                ${block.factCheckResult.verification.불일치하는_사실.map(fact => `
+                  <li style="margin-bottom: 6px;">${this.renderSourceNumbers(fact, block.factCheckResult.articles)}</li>
+                `).join('')}
+              </ul>
+            </div>
+            ` : ''}
+            ${block.factCheckResult.verification.검증_불가 && block.factCheckResult.verification.검증_불가.length > 0 ? `
+            <div style="
+              background: ${this.hexToRgba('#F59E0B', 0.1)};
+              border: 1px solid ${this.hexToRgba('#F59E0B', 0.3)};
+              border-radius: 10px;
+              padding: 16px;
+              margin-bottom: 12px;
+            ">
+              <div style="
+                font-weight: 600;
+                color: #F59E0B;
+                margin-bottom: 10px;
+                font-size: 14px;
+              ">⚠️ 검증 불가 (${block.factCheckResult.verification.검증_불가.length})</div>
+              <ul style="
+                margin: 0;
+                padding-left: 20px;
+                color: ${text};
+                line-height: 1.6;
+                font-size: 13px;
+              ">
+                ${block.factCheckResult.verification.검증_불가.map(fact => `
+                  <li style="margin-bottom: 6px;">${this.escapeHtml(fact)}</li>
+                `).join('')}
+              </ul>
+            </div>
+            ` : ''}
+            ${block.factCheckResult.verification.종합_평가 ? `
+            <div style="
+              background: ${cardBackground};
+              border: 1px solid ${border};
+              border-radius: 10px;
+              padding: 16px;
+              line-height: 1.6;
+              font-size: 14px;
+              color: ${text};
+            ">
+              <div style="
+                font-weight: 600;
+                margin-bottom: 8px;
+                color: ${this.hexToRgba(text, 0.9)};
+              ">📋 종합 평가</div>
+              ${this.renderMarkdown(block.factCheckResult.verification.종합_평가)}
+            </div>
+            ` : ''}
+            </div>
+          </section>
+    ` : '';
 
     const overlay = document.createElement('div');
     overlay.className = 'analysis-detail-layer';
@@ -4405,6 +4629,18 @@ ${factCheckSection}
                 letter-spacing: 0.3px;
               ">✅ 사실 검증 완료</span>
               ` : ''}
+              ${hasFinalAnalysis ? `
+              <span style="
+                background: linear-gradient(135deg, rgba(139, 92, 246, 0.25), rgba(79, 70, 229, 0.25));
+                color: rgba(79, 70, 229, 1);
+                border: 1px solid rgba(99, 102, 241, 0.5);
+                padding: 4px 10px;
+                border-radius: 8px;
+                font-size: 11px;
+                font-weight: 600;
+                letter-spacing: 0.3px;
+              ">⚡ 최종 통합 분석</span>
+              ` : ''}
             </h3>
             <div style="
               color: ${verdictColors.text};
@@ -4415,8 +4651,22 @@ ${factCheckSection}
               font-weight: 600;
               font-size: 16px;
               text-align: center;
-            ">${verdict}</div>
-            ${block.crossVerified && block.firstAnalysis && block.firstAnalysis.진위 !== verdict ? `
+            ">${finalVerdict}</div>
+            ${hasFinalAnalysis && finalVerdict !== initialVerdict ? `
+            <div style="
+              margin-top: 12px;
+              background: rgba(99, 102, 241, 0.1);
+              border: 1px solid rgba(99, 102, 241, 0.3);
+              border-radius: 10px;
+              padding: 14px;
+              font-size: 13px;
+              color: ${text};
+            ">
+              <div style="font-weight: 600; color: rgba(99, 102, 241, 1); margin-bottom: 6px;">최종 분석으로 판단 업데이트</div>
+              <div style="color: ${mutedText};">초기 판단: <strong>${initialVerdict}</strong> → 최종 판단: <strong>${finalVerdict}</strong></div>
+            </div>
+            ` : ''}
+            ${!hasFinalAnalysis && block.crossVerified && block.firstAnalysis && block.firstAnalysis.진위 !== finalVerdict ? `
             <div style="
               margin-top: 12px;
               background: rgba(255, 193, 7, 0.1);
@@ -4427,7 +4677,7 @@ ${factCheckSection}
               color: ${text};
             ">
               <div style="font-weight: 600; color: rgba(255, 193, 7, 1); margin-bottom: 6px;">⚠️ 1차 분석과 다른 결과</div>
-              <div style="color: ${mutedText};">1차 판단: <strong>${block.firstAnalysis.진위}</strong> → 2차 재검토: <strong>${verdict}</strong></div>
+              <div style="color: ${mutedText};">1차 판단: <strong>${block.firstAnalysis.진위}</strong> → 2차 재검토: <strong>${finalVerdict}</strong></div>
             </div>
             ` : ''}
           </section>
@@ -4458,7 +4708,7 @@ ${factCheckSection}
               font-weight: 600;
               margin: 0 0 12px 0;
               color: ${text};
-            ">핵심 요약</h3>
+            ">내용 요약</h3>
             <div style="
               background: ${summaryBackground};
               border: 1px solid ${this.hexToRgba(accent, 0.35)};
@@ -4471,152 +4721,9 @@ ${factCheckSection}
             ">${this.renderMarkdown(summary)}</div>
           </section>
 
-          ${block.factCheckResult && block.factCheckResult.verification ? `
-          <section>
-            <h3 style="
-              font-size: 15px;
-              font-weight: 600;
-              margin: 0 0 12px 0;
-              color: ${text};
-              display: flex;
-              align-items: center;
-              gap: 8px;
-            ">
-              📊 사실 검증 결과
-              <span style="
-                background: linear-gradient(135deg, rgba(16, 185, 129, 0.25), rgba(5, 150, 105, 0.25));
-                color: rgba(5, 150, 105, 1);
-                border: 1px solid rgba(16, 185, 129, 0.5);
-                padding: 4px 10px;
-                border-radius: 8px;
-                font-size: 11px;
-                font-weight: 600;
-                letter-spacing: 0.3px;
-              ">${block.factCheckResult.articles.length}개 기사 비교</span>
-            </h3>
-            
-            ${block.factCheckResult.verification.일치하는_사실 && block.factCheckResult.verification.일치하는_사실.length > 0 ? `
-            <div style="
-              background: ${this.hexToRgba('#10B981', 0.1)};
-              border: 1px solid ${this.hexToRgba('#10B981', 0.3)};
-              border-radius: 10px;
-              padding: 16px;
-              margin-bottom: 12px;
-            ">
-              <div style="
-                font-weight: 600;
-                color: #10B981;
-                margin-bottom: 10px;
-                font-size: 14px;
-              ">✅ 일치하는 사실 (${block.factCheckResult.verification.일치하는_사실.length})</div>
-              <ul style="
-                margin: 0;
-                padding-left: 20px;
-                color: ${text};
-                line-height: 1.6;
-                font-size: 13px;
-              ">
-                ${block.factCheckResult.verification.일치하는_사실.map(fact => `
-                  <li style="margin-bottom: 6px;">${this.renderSourceNumbers(fact, block.factCheckResult.articles)}</li>
-                `).join('')}
-              </ul>
-            </div>
-            ` : ''}
-            
-            ${block.factCheckResult.verification.불일치하는_사실 && block.factCheckResult.verification.불일치하는_사실.length > 0 ? `
-            <div style="
-              background: ${this.hexToRgba('#EF4444', 0.1)};
-              border: 1px solid ${this.hexToRgba('#EF4444', 0.3)};
-              border-radius: 10px;
-              padding: 16px;
-              margin-bottom: 12px;
-            ">
-              <div style="
-                font-weight: 600;
-                color: #EF4444;
-                margin-bottom: 10px;
-                font-size: 14px;
-              ">❌ 불일치하는 사실 (${block.factCheckResult.verification.불일치하는_사실.length})</div>
-              <ul style="
-                margin: 0;
-                padding-left: 20px;
-                color: ${text};
-                line-height: 1.6;
-                font-size: 13px;
-              ">
-                ${block.factCheckResult.verification.불일치하는_사실.map(fact => `
-                  <li style="margin-bottom: 6px;">${this.renderSourceNumbers(fact, block.factCheckResult.articles)}</li>
-                `).join('')}
-              </ul>
-            </div>
-            ` : ''}
-            
-            ${block.factCheckResult.verification.검증_불가 && block.factCheckResult.verification.검증_불가.length > 0 ? `
-            <div style="
-              background: ${this.hexToRgba('#F59E0B', 0.1)};
-              border: 1px solid ${this.hexToRgba('#F59E0B', 0.3)};
-              border-radius: 10px;
-              padding: 16px;
-              margin-bottom: 12px;
-            ">
-              <div style="
-                font-weight: 600;
-                color: #F59E0B;
-                margin-bottom: 10px;
-                font-size: 14px;
-              ">⚠️ 검증 불가 (${block.factCheckResult.verification.검증_불가.length})</div>
-              <ul style="
-                margin: 0;
-                padding-left: 20px;
-                color: ${text};
-                line-height: 1.6;
-                font-size: 13px;
-              ">
-                ${block.factCheckResult.verification.검증_불가.map(fact => `
-                  <li style="margin-bottom: 6px;">${this.escapeHtml(fact)}</li>
-                `).join('')}
-              </ul>
-            </div>
-            ` : ''}
-            
-            ${block.factCheckResult.verification.종합_평가 ? `
-            <div style="
-              background: ${cardBackground};
-              border: 1px solid ${border};
-              border-radius: 10px;
-              padding: 16px;
-              line-height: 1.6;
-              font-size: 14px;
-              color: ${text};
-            ">
-              <div style="
-                font-weight: 600;
-                margin-bottom: 8px;
-                color: ${this.hexToRgba(text, 0.9)};
-              ">📋 종합 평가</div>
-              ${this.renderMarkdown(block.factCheckResult.verification.종합_평가)}
-            </div>
-            ` : ''}
-          </section>
-          ` : ''}
+          ${finalAnalysisSection}
 
-          <section>
-            <h3 style="
-              font-size: 15px;
-              font-weight: 600;
-              margin: 0 0 12px 0;
-              color: ${text};
-            ">상세 분석</h3>
-            <div style="
-              background: ${cardBackground};
-              border: 1px solid ${border};
-              border-radius: 10px;
-              padding: 18px;
-              line-height: 1.7;
-              font-size: 14px;
-              color: ${text};
-            ">${this.renderMarkdown(analysis)}</div>
-          </section>
+          ${factCheckSection}
 
           ${suspiciousEntries ? `
           <section>
@@ -4659,29 +4766,82 @@ ${factCheckSection}
           </section>
           ` : ''}
 
-          ${result.검색어 ? `
+          ${(normalizedVerificationQueries || result.검색어) ? `
           <section>
             <h3 style="
               font-size: 15px;
               font-weight: 600;
               margin: 0 0 12px 0;
               color: ${text};
-            ">🔍 추천 검색어</h3>
-            <div style="
-              background: ${this.hexToRgba(surfaceAlt, 0.2)};
-              border: 1px solid ${this.hexToRgba(accent, 0.4)};
-              border-radius: 10px;
-              padding: 16px;
-              line-height: 1.6;
-              font-size: 14px;
-              color: ${text};
-              font-weight: 500;
-              display: flex;
-              align-items: center;
-              gap: 10px;
-            ">
-              <span style="font-size: 18px;">💡</span>
-              <span>${this.escapeHtml(result.검색어)}</span>
+            ">🔍 검증 검색어</h3>
+            <div style="display: flex; flex-direction: column; gap: 10px;">
+              ${normalizedVerificationQueries?.news ? `
+              <div style="
+                background: ${this.hexToRgba('#2563EB', 0.08)};
+                border: 1px solid ${this.hexToRgba('#2563EB', 0.35)};
+                border-radius: 10px;
+                padding: 14px;
+              ">
+                <div style="
+                  font-size: 12px;
+                  font-weight: 700;
+                  letter-spacing: 0.04em;
+                  color: #1D4ED8;
+                  text-transform: uppercase;
+                  margin-bottom: 4px;
+                ">뉴스 검색어</div>
+                <div style="font-size: 14px; color: ${text}; font-weight: 500;">
+                  ${this.escapeHtml(normalizedVerificationQueries.news)}
+                </div>
+                <div style="font-size: 12px; color: ${this.hexToRgba(text, 0.65)}; margin-top: 6px;">
+                  Daum 뉴스 전용 검색 엔진
+                </div>
+              </div>
+              ` : ''}
+              ${normalizedVerificationQueries?.all ? `
+              <div style="
+                background: ${this.hexToRgba('#7C3AED', 0.08)};
+                border: 1px solid ${this.hexToRgba('#7C3AED', 0.35)};
+                border-radius: 10px;
+                padding: 14px;
+              ">
+                <div style="
+                  font-size: 12px;
+                  font-weight: 700;
+                  letter-spacing: 0.04em;
+                  color: #5B21B6;
+                  text-transform: uppercase;
+                  margin-bottom: 4px;
+                ">통합 검색어</div>
+                <div style="font-size: 14px; color: ${text}; font-weight: 500;">
+                  ${this.escapeHtml(normalizedVerificationQueries.all)}
+                </div>
+                <div style="font-size: 12px; color: ${this.hexToRgba(text, 0.65)}; margin-top: 6px;">
+                  전체 웹(공식 문서·보도자료) 탐색용
+                </div>
+              </div>
+              ` : ''}
+              ${result.검색어 ? `
+              <div style="
+                background: ${this.hexToRgba(surfaceAlt, 0.2)};
+                border: 1px solid ${this.hexToRgba(accent, 0.4)};
+                border-radius: 10px;
+                padding: 16px;
+                line-height: 1.6;
+                font-size: 14px;
+                color: ${text};
+                font-weight: 500;
+                display: flex;
+                align-items: center;
+                gap: 10px;
+              ">
+                <span style="font-size: 18px;">💡</span>
+                <div>
+                  <div style="font-size: 12px; color: ${this.hexToRgba(text, 0.65)}; font-weight: 600;">AI 추천 검색어</div>
+                  <div>${this.escapeHtml(result.검색어)}</div>
+                </div>
+              </div>
+              ` : ''}
             </div>
           </section>
           ` : ''}
@@ -4824,6 +4984,22 @@ ${factCheckSection}
       comparisonButton.addEventListener('mouseleave', () => {
         comparisonButton.style.transform = 'translateY(0)';
         comparisonButton.style.boxShadow = '0 10px 24px rgba(0, 0, 0, 0.25)';
+      });
+    }
+
+    const factCheckToggle = overlay.querySelector('.fact-check-toggle');
+    if (factCheckToggle) {
+      const factCheckBody = overlay.querySelector('.fact-check-body');
+      const factCheckArrow = overlay.querySelector('.fact-check-arrow');
+      factCheckToggle.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        if (!factCheckBody) return;
+        const isOpen = factCheckBody.style.display !== 'none';
+        factCheckBody.style.display = isOpen ? 'none' : 'block';
+        if (factCheckArrow) {
+          factCheckArrow.textContent = isOpen ? '▼' : '▲';
+        }
       });
     }
 
@@ -6909,8 +7085,53 @@ ${factCheckSection}
                 <strong>뉴스 검색:</strong> Daum 뉴스 전용
               </div>
               <div>
-                <strong>사실 검증:</strong> 전체 웹 검색
+                <strong>통합 검색:</strong> 전체 웹 공식 자료/보도자료
               </div>
+            </div>
+            <div style="
+              margin-top: 16px;
+              padding-top: 16px;
+              border-top: 1px solid rgba(191, 151, 128, 0.2);
+            ">
+              <div style="
+                display: flex;
+                align-items: flex-start;
+                justify-content: space-between;
+                gap: 12px;
+              ">
+                <div>
+                  <div style="
+                    font-size: 14px;
+                    font-weight: 600;
+                    color: #0D0D0D;
+                    margin-bottom: 4px;
+                  ">통합 검색 (전체 웹)</div>
+                  <div style="
+                    font-size: 13px;
+                    color: #737373;
+                  ">뉴스 기사 외 정부·기관 자료까지 동시에 검색합니다.</div>
+                </div>
+                <button class="integrated-search-toggle-btn" style="
+                  background: ${this.getIntegratedSearchSetting() ? '#10B981' : '#9CA3AF'};
+                  color: white;
+                  padding: 8px 16px;
+                  border-radius: 6px;
+                  font-weight: 600;
+                  border: none;
+                  cursor: pointer;
+                  transition: background-color 0.2s;
+                  font-size: 14px;
+                ">${this.getIntegratedSearchSetting() ? '켜짐' : '꺼짐'}</button>
+              </div>
+              <div style="
+                margin-top: 8px;
+                font-size: 12px;
+                color: #B45309;
+                background: rgba(191, 151, 128, 0.18);
+                padding: 8px 10px;
+                border-radius: 6px;
+                line-height: 1.5;
+              ">⚠️ 통합 검색을 켜면 Google Search API가 <strong>1회 추가 호출</strong>됩니다. 사용량과 비용을 반드시 확인하세요.</div>
             </div>
           </div>
         </div>
@@ -7715,6 +7936,7 @@ ${factCheckSection}
     // Google Search API 토글 버튼
     const googleSearchToggleBtn = modalContent.querySelector('.google-search-toggle-btn');
     const googleApiKeySection = modalContent.querySelector('.google-api-key-section');
+    const integratedSearchToggleBtn = modalContent.querySelector('.integrated-search-toggle-btn');
     
     if (googleSearchToggleBtn) {
       // 초기 상태 설정
@@ -7740,6 +7962,8 @@ ${factCheckSection}
         if (!newSetting) {
           this.closeBrandSelectionMenu();
         }
+
+        this.updateApiKeyDependentControls(modalContent);
       });
 
       // 호버 효과
@@ -7750,6 +7974,36 @@ ${factCheckSection}
       googleSearchToggleBtn.addEventListener('mouseleave', () => {
         googleSearchToggleBtn.style.transform = 'translateY(0)';
         googleSearchToggleBtn.style.boxShadow = 'none';
+      });
+    }
+
+    if (integratedSearchToggleBtn) {
+      const updateIntegratedToggle = () => {
+        const enabled = this.getIntegratedSearchSetting();
+        integratedSearchToggleBtn.textContent = enabled ? '켜짐' : '꺼짐';
+        integratedSearchToggleBtn.style.backgroundColor = enabled ? '#10B981' : '#9CA3AF';
+      };
+
+      updateIntegratedToggle();
+
+      integratedSearchToggleBtn.addEventListener('click', () => {
+        if (!this.getGoogleSearchEnabled()) {
+          alert('먼저 Google Search API 사용을 켠 뒤 통합 검색을 활성화하세요.');
+          return;
+        }
+        const newSetting = !this.getIntegratedSearchSetting();
+        this.setIntegratedSearchSetting(newSetting);
+        updateIntegratedToggle();
+      });
+
+      integratedSearchToggleBtn.addEventListener('mouseenter', () => {
+        integratedSearchToggleBtn.style.transform = 'translateY(-2px)';
+        integratedSearchToggleBtn.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
+      });
+
+      integratedSearchToggleBtn.addEventListener('mouseleave', () => {
+        integratedSearchToggleBtn.style.transform = 'translateY(0)';
+        integratedSearchToggleBtn.style.boxShadow = 'none';
       });
     }
 
@@ -7892,6 +8146,26 @@ ${factCheckSection}
       console.log('Auto cross verification setting updated:', value);
     } catch (error) {
       console.error('Failed to save auto cross verification setting:', error);
+    }
+  }
+
+  getIntegratedSearchSetting() {
+    try {
+      const setting = localStorage.getItem('factcheck_integrated_search_enabled');
+      return setting !== null ? JSON.parse(setting) : false;
+    } catch (error) {
+      console.error('Failed to get integrated search setting:', error);
+      return false;
+    }
+  }
+
+  setIntegratedSearchSetting(value) {
+    try {
+      localStorage.setItem('factcheck_integrated_search_enabled', JSON.stringify(Boolean(value)));
+      this.integratedSearchEnabled = Boolean(value);
+      console.log('Integrated search setting updated:', this.integratedSearchEnabled);
+    } catch (error) {
+      console.error('Failed to save integrated search setting:', error);
     }
   }
 
@@ -8066,6 +8340,9 @@ ${factCheckSection}
       console.log('Google Search API setting updated:', value);
       // USE_REAL_API 플래그도 동기화
       this.USE_REAL_API = value;
+      if (!value && this.getIntegratedSearchSetting()) {
+        this.setIntegratedSearchSetting(false);
+      }
     } catch (error) {
       console.error('Failed to save Google Search setting:', error);
     }
@@ -9130,9 +9407,19 @@ ${factCheckSection}
       this.abortControllers.delete(blockId);
     }
     
-    this.updateNewsStatus(blockId, 'error', null, null, error);
+    // 에러 발생 시에도 기존 분석 결과는 유지 (result를 null로 넘기지 않음)
+    let block;
+    if (blockId === 'current') {
+      block = this.currentNews;
+    } else {
+      block = this.newsBlocks.get(blockId);
+    }
     
-    // currentNews가 실패한 경우 상태도 error로 변경
+    // block이 존재하고 기존 result가 있으면 유지, 없으면 null 전달
+    const preservedResult = block?.result || null;
+    this.updateNewsStatus(blockId, 'error', preservedResult, null, error);
+    
+    // currentNews가 실패한 경우 상태도 error로 변경 (결과는 유지)
     if (this.currentNews) {
       const normalizeUrl = (urlString) => {
         try {
@@ -10004,9 +10291,9 @@ AnalysisPanel.prototype.findSimilarArticles = async function(blockId, skipLock =
   this.showSearchLoading(blockId, 'similar');
   
   try {
-    // 검색 쿼리 생성: AI 생성 검색어 > 키워드 > 요약 > 제목 순서로 우선
-    let rawQuery = block.result.검색어 || block.result.키워드 || block.result.요약 || block.title;
-    const searchQuery = this.refineSearchQuery(rawQuery);
+    const querySet = this.buildVerificationQuerySet(block);
+    const rawQuery = querySet.rawNews || block.title;
+    const searchQuery = querySet.news || this.refineSearchQuery(block.title || '');
     const cacheKey = `similar_${searchQuery}`;
 
     // 영구 캐시 확인 (API 절약)
@@ -10023,11 +10310,12 @@ AnalysisPanel.prototype.findSimilarArticles = async function(blockId, skipLock =
       return;
     }
 
-    console.log('[findSimilarArticles] 원본 쿼리:', rawQuery);
+    console.log('[findSimilarArticles] 원본 뉴스 검색어:', rawQuery);
     console.log('[findSimilarArticles] 정제된 쿼리:', searchQuery);
     console.log('[findSimilarArticles] USE_REAL_API:', this.USE_REAL_API);
 
     let results;
+    let integratedFallbackUsed = false;
     if (this.USE_REAL_API) {
       // 실제 Google Search API 호출 (최대 10개 요청)
       results = await this.callGoogleSearchAPI(searchQuery, 'news', 10);
@@ -10163,15 +10451,19 @@ AnalysisPanel.prototype.searchFactCheck = async function(blockId) {
   this.updateFactCheckStatus(blockId, '🔍 검색 중...');
   
   try {
-    // 검색 쿼리 생성
-    let rawQuery = block.result.검색어 || block.result.키워드 || block.result.근거 || block.result.요약 || block.title;
-    const searchQuery = this.refineSearchQuery(rawQuery);
+    const querySet = this.buildVerificationQuerySet(block);
+    const newsRawQuery = querySet.rawNews || block.title;
+    const integratedRawQuery = querySet.rawAll || newsRawQuery;
+    const newsSearchQuery = querySet.news || this.refineSearchQuery(block.title || '');
+    const integratedSearchQuery = querySet.all || newsSearchQuery;
     
-    console.log('[searchFactCheck] 검색어:', searchQuery);
-    this.updateFactCheckStatus(blockId, `🔎 "${searchQuery.substring(0, 30)}..." 검색 중`);
+    console.log('[searchFactCheck] 뉴스 검색어:', newsSearchQuery);
+    console.log('[searchFactCheck] 통합 검색어:', integratedSearchQuery);
+    this.updateFactCheckStatus(blockId, `🔎 "${newsSearchQuery.substring(0, 30)}..." 검색 중`);
 
     let results;
-    const similarCacheKey = `similar_${searchQuery}`;
+    let integratedFallbackUsed = false;
+    const similarCacheKey = `similar_${newsSearchQuery}`;
     const cachedSimilarResults = this.getFromSearchCache(similarCacheKey);
 
     if (cachedSimilarResults && cachedSimilarResults.length > 0) {
@@ -10194,9 +10486,10 @@ AnalysisPanel.prototype.searchFactCheck = async function(blockId) {
           results = newCachedResults;
         } else if (this.USE_REAL_API) {
           // 유사 기사 검색 실패 시 keyword 검색으로 폴백
-          console.warn('[searchFactCheck] 유사 기사 검색 실패, keyword 검색으로 폴백');
-          this.updateFactCheckStatus(blockId, '🔎 키워드 검색으로 전환 중...');
-          results = await this.callGoogleSearchAPI(searchQuery, 'keyword', 10);
+          console.warn('[searchFactCheck] 유사 기사 검색 실패, 통합 검색으로 폴백');
+          this.updateFactCheckStatus(blockId, '🌐 통합 검색어로 전환 중...');
+          results = await this.callGoogleSearchAPI(integratedSearchQuery, 'integrated', 10);
+          integratedFallbackUsed = true;
           
           if (results.length < 2) {
             console.error('[searchFactCheck] 충분한 검색 결과 없음:', results.length, '개');
@@ -10213,9 +10506,10 @@ AnalysisPanel.prototype.searchFactCheck = async function(blockId) {
         
         // 오류 발생 시 keyword 검색으로 폴백
         if (this.USE_REAL_API) {
-          console.warn('[searchFactCheck] 오류 발생, keyword 검색으로 폴백');
-          this.updateFactCheckStatus(blockId, '🔎 키워드 검색으로 전환 중...');
-          results = await this.callGoogleSearchAPI(searchQuery, 'keyword', 10);
+          console.warn('[searchFactCheck] 오류 발생, 통합 검색으로 폴백');
+          this.updateFactCheckStatus(blockId, '🌐 통합 검색어로 전환 중...');
+          results = await this.callGoogleSearchAPI(integratedSearchQuery, 'integrated', 10);
+          integratedFallbackUsed = true;
           
           if (results.length < 2) {
             console.error('[searchFactCheck] 충분한 검색 결과 없음:', results.length, '개');
@@ -10231,6 +10525,23 @@ AnalysisPanel.prototype.searchFactCheck = async function(blockId) {
     }
 
     console.log('[searchFactCheck] 검증된 뉴스 기사:', results.length, '개');
+    const shouldRunIntegratedSearch = this.getIntegratedSearchSetting() && this.getGoogleSearchEnabled() && this.USE_REAL_API;
+    if (shouldRunIntegratedSearch && !integratedFallbackUsed) {
+      this.updateFactCheckStatus(blockId, '🌐 통합 검색 병행 중...');
+      try {
+        const integratedResults = await this.callGoogleSearchAPI(integratedSearchQuery, 'integrated', 8);
+        if (integratedResults.length > 0) {
+          console.log('[searchFactCheck] 🌐 통합 검색 결과 추가:', integratedResults.length, '개');
+          results = this.mergeSearchResults(results, integratedResults);
+          this.updateFactCheckStatus(blockId, `🌐 통합 검색 포함 총 ${results.length}개 확보`);
+        } else {
+          console.log('[searchFactCheck] 🌐 통합 검색 결과 없음');
+        }
+      } catch (error) {
+        console.error('[searchFactCheck] 통합 검색 실패:', error);
+        this.updateFactCheckStatus(blockId, '⚠️ 통합 검색 실패, 뉴스 결과만 사용');
+      }
+    }
     
     // AI 필터링 적용 (설정이 켜져 있을 때만)
     const articleFilterEnabled = this.getArticleFilterSetting();
@@ -10297,10 +10608,21 @@ AnalysisPanel.prototype.searchFactCheck = async function(blockId) {
       
       console.log('[searchFactCheck] ⚡ 속도 모드: 재분석 생략, 기존 분석 결과 유지');
       
+      // 최종 통합 분석 수행 (속도 모드에서도 실행)
+      this.updateFactCheckStatus(blockId, '🎯 최종 통합 분석 중...');
+      let finalAnalysis = null;
+      try {
+        finalAnalysis = await this.performFinalIntegratedAnalysis(block, comparisonArticles, verification);
+        console.log('[searchFactCheck] ⚡ 속도 모드: 최종 통합 분석 완료:', finalAnalysis);
+      } catch (error) {
+        console.error('[searchFactCheck] 최종 통합 분석 실패:', error);
+      }
+      
       const factCheckResult = {
         articles: comparisonArticles,
         verification: verification,
         reanalyzed: null, // 속도 모드에서는 재분석 없음
+        finalAnalysis: finalAnalysis, // 최종 통합 분석 결과 추가
         timestamp: Date.now()
       };
       
@@ -10452,6 +10774,18 @@ AnalysisPanel.prototype.searchFactCheck = async function(blockId) {
     // Gemini로 전체 재분석 (기존 분석 + 본문 + 사실 검증 결과)
     const reanalyzedResult = await this.reanalyzeWithFactCheck(block, crawledArticles, verificationResult);
     
+    this.updateFactCheckStatus(blockId, '🎯 최종 통합 분석 중...');
+    
+    // 최종 통합 분석 수행 (BACKUP service_worker 방식)
+    let finalAnalysis = null;
+    try {
+      finalAnalysis = await this.performFinalIntegratedAnalysis(block, crawledArticles, verificationResult);
+      console.log('[searchFactCheck] ✅ 최종 통합 분석 완료:', finalAnalysis);
+    } catch (error) {
+      console.error('[searchFactCheck] 최종 통합 분석 실패:', error);
+      // 실패해도 계속 진행 (선택적 기능)
+    }
+    
     this.updateFactCheckStatus(blockId, '🎉 검증 완료!');
     
     // 결과를 블록에 저장
@@ -10459,6 +10793,7 @@ AnalysisPanel.prototype.searchFactCheck = async function(blockId) {
       articles: crawledArticles,
       verification: verificationResult,
       reanalyzed: reanalyzedResult,
+      finalAnalysis: finalAnalysis, // 최종 통합 분석 결과 추가
       timestamp: Date.now()
     };
     
@@ -10540,8 +10875,16 @@ AnalysisPanel.prototype.callGoogleSearchAPI = async function(query, type, limit)
   
   // CSE ID 고정값 사용
   const CSE_ID_NEWS = "70364eb765310426e";      // 뉴스 전용 검색 엔진
-  const CSE_ID_KEYWORD = "241358ac91fe04cd8";   // 전체 웹 검색
-  const cseId = type === 'news' ? CSE_ID_NEWS : CSE_ID_KEYWORD;
+  const CSE_ID_KEYWORD = "241358ac91fe04cd8";   // 기존 키워드 검색
+  const CSE_ID_INTEGRATED = "b26295ab5634547cd"; // 통합 검색 전용 CSE
+  let cseId;
+  if (type === 'news') {
+    cseId = CSE_ID_NEWS;
+  } else if (type === 'integrated') {
+    cseId = CSE_ID_INTEGRATED;
+  } else {
+    cseId = CSE_ID_KEYWORD;
+  }
   
   // API 키 확인
   const apiKey = await this.getGoogleApiKey();
@@ -10614,7 +10957,7 @@ AnalysisPanel.prototype.callGoogleSearchAPI = async function(query, type, limit)
     
     let orderedItems = filteredItems;
 
-    if (type === 'keyword') {
+    if (type === 'keyword' || type === 'integrated') {
       orderedItems = await this.prioritizeFactCheckResults(filteredItems);
     }
 
@@ -11238,6 +11581,73 @@ AnalysisPanel.prototype.refineSearchQuery = function(rawQuery) {
   return refined;
 };
 
+AnalysisPanel.prototype.normalizeVerificationQueries = function(rawQueries) {
+  if (!rawQueries || typeof rawQueries !== 'object') {
+    return null;
+  }
+
+  const sanitized = {};
+
+  if (typeof rawQueries.news === 'string') {
+    const trimmed = rawQueries.news.trim();
+    if (trimmed) {
+      sanitized.news = trimmed;
+    }
+  }
+
+  if (typeof rawQueries.all === 'string') {
+    const trimmed = rawQueries.all.trim();
+    if (trimmed) {
+      sanitized.all = trimmed;
+    }
+  }
+
+  return Object.keys(sanitized).length ? sanitized : null;
+};
+
+AnalysisPanel.prototype.buildVerificationQuerySet = function(block) {
+  const result = block?.result || {};
+  const normalized = this.normalizeVerificationQueries(result.verification_queries);
+
+  const fallbackNews = result.검색어 || result.키워드 || result.요약 || block?.title || '';
+  const fallbackAll = result.키워드 || result.근거 || result.요약 || block?.title || fallbackNews;
+
+  const rawNews = normalized?.news || fallbackNews;
+  const rawAll = normalized?.all || fallbackAll;
+
+  const newsQuery = this.refineSearchQuery(rawNews);
+  const allQueryCandidate = this.refineSearchQuery(rawAll);
+
+  return {
+    rawNews,
+    rawAll,
+    news: newsQuery || this.refineSearchQuery(fallbackNews) || this.refineSearchQuery(block?.title || ''),
+    all: allQueryCandidate || newsQuery || this.refineSearchQuery(block?.title || ''),
+    hasCustomNews: Boolean(normalized?.news),
+    hasCustomAll: Boolean(normalized?.all)
+  };
+};
+
+AnalysisPanel.prototype.mergeSearchResults = function(primary = [], secondary = []) {
+  const merged = [];
+  const seen = new Set();
+
+  const pushUnique = (item) => {
+    if (!item) return;
+    const keySource = item.link || item.displayLink || JSON.stringify(item);
+    if (!keySource) return;
+    const normalizedKey = keySource.toLowerCase();
+    if (seen.has(normalizedKey)) return;
+    seen.add(normalizedKey);
+    merged.push(item);
+  };
+
+  primary.forEach(pushUnique);
+  secondary.forEach(pushUnique);
+
+  return merged;
+};
+
 // 검색 로딩 인디케이터 표시 (패널 내부 처리만 사용, 전역 오버레이 제거)
 AnalysisPanel.prototype.showSearchLoading = function() {
   // no-op: block 자체에 표시되는 로딩만 유지
@@ -11544,13 +11954,6 @@ ${articlesList}
     console.log('[filterArticlesWithAI] 📤 프롬프트 길이:', prompt.length, '자');
     console.log('[filterArticlesWithAI] 🚀 Gemini API 호출 중...');
     
-    // 할당량 체크
-    if (this.isQuotaExhausted()) {
-      console.warn('[filterArticlesWithAI] API 호출 차단: 할당량 소진');
-      this.showQuotaExhaustedError(null);
-      return articles; // 필터링 없이 원본 반환
-    }
-    
     // Gemini API 호출
     const response = await chrome.runtime.sendMessage({
       action: 'analyzeNewsWithGemini',
@@ -11561,28 +11964,14 @@ ${articlesList}
     
     console.log('[filterArticlesWithAI] 📥 Gemini 응답 받음:', response);
     
-    // 할당량 정보 로깅 및 저장
-    if (response.quota) {
-      console.log('[filterArticlesWithAI] 📊 API 할당량 정보:');
-      console.log('  남은 요청:', response.quota.remaining || 'N/A');
-      console.log('  전체 한도:', response.quota.limit || 'N/A');
-      console.log('  리셋 시간:', response.quota.reset || 'N/A');
-      
-      // 할당량 정보 저장
-      this.saveQuotaInfo(response.quota);
-      
-      // UI 업데이트
-      this.updateQuotaDisplay();
-    }
-    
     if (!response || !response.success) {
       const errorMsg = response?.error || 'Unknown error';
       console.error('[filterArticlesWithAI] ❌ API 호출 실패:', errorMsg);
       
       // 429 에러 (할당량 초과) 체크
       if (typeof errorMsg === 'string' && errorMsg.includes('429')) {
-        console.warn('[filterArticlesWithAI] ⚠️ Gemini API 일일 할당량 초과 (200회/일)');
-        console.warn('[filterArticlesWithAI] 💡 설정에서 "유사 기사 AI 필터링"을 끄는 것을 권장합니다.');
+        console.warn('[filterArticlesWithAI] ⚠️ Gemini API 일일 할당량 초과');
+        this.showQuotaErrorToast(null);
       }
       
       return articles;
@@ -11592,16 +11981,28 @@ ${articlesList}
     
     // JSON 파싱
     let filterResult;
+    const rawResult = response.result ?? response;
     try {
-      // JSON 추출 (마크다운 코드 블록 제거)
-      let jsonText = response.result;
-      if (jsonText.includes('```json')) {
-        jsonText = jsonText.split('```json')[1].split('```')[0].trim();
-      } else if (jsonText.includes('```')) {
-        jsonText = jsonText.split('```')[1].split('```')[0].trim();
+      if (rawResult && typeof rawResult === 'object') {
+        const candidate = Array.isArray(rawResult)
+          ? rawResult.find(item => item && typeof item === 'object')
+          : rawResult;
+        if (candidate?.output && typeof candidate.output === 'object') {
+          filterResult = candidate.output;
+        } else {
+          filterResult = candidate;
+        }
+      } else {
+        let jsonText = typeof rawResult === 'string' ? rawResult : JSON.stringify(rawResult ?? {});
+        jsonText = jsonText.trim();
+        if (jsonText.includes('```json')) {
+          jsonText = jsonText.split('```json')[1].split('```')[0].trim();
+        } else if (jsonText.includes('```')) {
+          jsonText = jsonText.split('```')[1].split('```')[0].trim();
+        }
+        
+        filterResult = JSON.parse(jsonText);
       }
-      
-      filterResult = JSON.parse(jsonText);
     } catch (error) {
       console.error('[filterArticlesWithAI] JSON 파싱 실패:', error);
       return articles;
@@ -11642,88 +12043,42 @@ ${articlesList}
   }
 };
 
-// API 할당량 정보 업데이트
-AnalysisPanel.prototype.updateQuotaDisplay = function() {
-  const remainingEl = document.getElementById('quota-remaining');
-  const limitEl = document.getElementById('quota-limit');
-  
-  if (!remainingEl || !limitEl) return;
-  
-  // localStorage에서 마지막 할당량 정보 읽기
-  const quotaInfo = this.getQuotaInfo();
-  
-  if (quotaInfo && quotaInfo.remaining !== null) {
-    remainingEl.textContent = quotaInfo.remaining;
-    limitEl.textContent = quotaInfo.limit || '200';
-    
-    // 할당량에 따라 색상 변경
-    const quotaDisplay = document.getElementById('quota-display');
-    if (quotaDisplay) {
-      const remaining = parseInt(quotaInfo.remaining);
-      const limit = parseInt(quotaInfo.limit || '200');
-      const percentage = (remaining / limit) * 100;
-      
-      let color = '#10B981'; // 초록 (충분)
-      if (percentage < 10) {
-        color = '#EF4444'; // 빨강 (부족)
-      } else if (percentage < 30) {
-        color = '#F59E0B'; // 노랑 (주의)
-      }
-      
-      const svg = quotaDisplay.querySelector('svg');
-      if (svg) {
-        svg.setAttribute('stroke', color);
-      }
-      
-      const span = quotaDisplay.querySelector('span');
-      if (span) {
-        span.style.color = color;
-      }
-    }
-  }
-};
 
-// 할당량 소진 에러 표시 (토스트 알림)
-AnalysisPanel.prototype.showQuotaExhaustedError = function(blockId) {
-  console.warn('[Quota] API 호출 차단됨 - 할당량 소진');
-  
-  // 기존 토스트 제거
+// 할당량 부족 토스트 표시
+AnalysisPanel.prototype.showQuotaErrorToast = function(blockId) {
+  console.warn('[Quota] API 호출 실패 - 할당량 소진');
+
   const existingToast = document.getElementById('quota-toast-notification');
-  if (existingToast) {
-    existingToast.remove();
-  }
-  
-  // 토스트 알림 생성
+  if (existingToast) existingToast.remove();
+
   const toast = document.createElement('div');
   toast.id = 'quota-toast-notification';
   toast.style.cssText = `
     position: fixed;
     top: 20px;
     right: 20px;
-    background: linear-gradient(135deg, #FFA500 0%, #FF6B00 100%);
+    background: linear-gradient(135deg, #EF4444 0%, #F97316 100%);
     color: white;
     padding: 16px 20px;
     border-radius: 12px;
-    box-shadow: 0 8px 24px rgba(255, 107, 0, 0.3);
+    box-shadow: 0 12px 30px rgba(239, 68, 68, 0.35);
     z-index: 999999;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans KR', sans-serif;
     font-size: 14px;
-    font-weight: 500;
+    font-weight: 600;
     display: flex;
     align-items: center;
     gap: 12px;
     animation: slideInRight 0.3s ease-out, fadeOut 0.3s ease-in 2.7s;
-    pointer-events: auto;
   `;
-  
+
   toast.innerHTML = `
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
       <path d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
     </svg>
-    <span>⚠️ API 할당량이 소진되었습니다. 24시간 후 재시도하세요.</span>
+    <span>할당량을 전부 사용했습니다.</span>
   `;
-  
-  // 애니메이션 추가
+
   const style = document.createElement('style');
   style.textContent = `
     @keyframes slideInRight {
@@ -11746,119 +12101,16 @@ AnalysisPanel.prototype.showQuotaExhaustedError = function(blockId) {
     }
   `;
   document.head.appendChild(style);
-  
   document.body.appendChild(toast);
-  
-  // 3초 후 제거
+
   setTimeout(() => {
     toast.remove();
     style.remove();
   }, 3000);
-  
-  // blockId가 있으면 해당 블록의 상태를 에러로 업데이트
+
   if (blockId && blockId !== 'current') {
-    this.updateNewsStatus(blockId, 'error', null, '⚠️ API 할당량 소진');
+    this.updateNewsStatus(blockId, 'error', null, '할당량을 전부 사용했습니다.');
   }
-};
-
-// 할당량 정보 저장
-AnalysisPanel.prototype.saveQuotaInfo = function(quota) {
-  if (!quota) return;
-  
-  const quotaInfo = {
-    remaining: quota.remaining || '0',
-    limit: quota.limit || '200',
-    reset: quota.reset,
-    timestamp: Date.now()
-  };
-  
-  this.persistQuotaInfoLocally(quotaInfo);
-  
-  if (chrome?.storage?.local) {
-    chrome.storage.local.set({ gemini_quota_info: quotaInfo }, () => {
-      if (chrome.runtime.lastError) {
-        console.warn('할당량 chrome.storage 저장 실패:', chrome.runtime.lastError.message);
-      }
-    });
-  }
-};
-
-// 할당량 소진 저장 (429 에러 발생 시)
-AnalysisPanel.prototype.saveQuotaExhausted = function() {
-  const quotaInfo = {
-    remaining: '0',
-    limit: '200',
-    reset: null,
-    timestamp: Date.now(),
-    exhausted: true
-  };
-  
-  this.persistQuotaInfoLocally(quotaInfo);
-  if (chrome?.storage?.local) {
-    chrome.storage.local.set({ gemini_quota_info: quotaInfo }, () => {
-      if (chrome.runtime.lastError) {
-        console.warn('할당량 소진 chrome.storage 저장 실패:', chrome.runtime.lastError.message);
-      }
-    });
-  }
-  console.warn('[saveQuotaExhausted] API 할당량 소진 저장: 0 / 200');
-  
-  // UI 즉시 업데이트 (여러 방법 시도)
-  setTimeout(() => {
-    this.updateQuotaDisplay();
-    
-    // 직접 DOM 업데이트 (fallback)
-    const remainingEl = document.getElementById('quota-remaining');
-    const limitEl = document.getElementById('quota-limit');
-    const quotaDisplay = document.getElementById('quota-display');
-    
-    if (remainingEl && limitEl) {
-      remainingEl.textContent = '0';
-      limitEl.textContent = '200';
-      console.log('[saveQuotaExhausted] UI 직접 업데이트: 0 / 200');
-    }
-    
-    // 색상 빨강으로 변경
-    if (quotaDisplay) {
-      const svg = quotaDisplay.querySelector('svg');
-      const span = quotaDisplay.querySelector('span');
-      if (svg) svg.setAttribute('stroke', '#EF4444');
-      if (span) span.style.color = '#EF4444';
-    }
-    
-    // 패널 전체 리렌더링 트리거
-    this.render();
-  }, 100);
-};
-
-// 할당량 정보 읽기
-AnalysisPanel.prototype.getQuotaInfo = function() {
-  try {
-    const stored = localStorage.getItem('gemini_quota_info');
-    if (!stored) return null;
-    
-    const quotaInfo = JSON.parse(stored);
-    
-    // 24시간 이상 지난 정보는 무효화 (할당량 리셋)
-    if (Date.now() - quotaInfo.timestamp > 86400000) {
-      localStorage.removeItem('gemini_quota_info');
-      return null;
-    }
-    
-    return quotaInfo;
-  } catch (error) {
-    console.error('Failed to read quota info:', error);
-    return null;
-  }
-};
-
-// 할당량 소진 여부 확인
-AnalysisPanel.prototype.isQuotaExhausted = function() {
-  const quotaInfo = this.getQuotaInfo();
-  if (!quotaInfo) return false;
-  
-  // remaining이 0이거나 exhausted 플래그가 true면 소진됨
-  return quotaInfo.exhausted === true || parseInt(quotaInfo.remaining || '0') === 0;
 };
 
 // 뉴스 기사 크롤링 함수
@@ -12026,12 +12278,6 @@ ${truncatedHtml}
 \`\`\``;
 
     console.log('[parseHtmlWithAI] 📤 Gemini에 전달할 prompt 길이:', prompt.length, '자');
-
-    // 할당량 체크
-    if (this.isQuotaExhausted()) {
-      console.warn('[parseHtmlWithAI] API 호출 차단: 할당량 소진');
-      return null; // 파싱 실패로 처리
-    }
 
     const response = await new Promise((resolve, reject) => {
       chrome.runtime.sendMessage({
@@ -12270,17 +12516,6 @@ JSON 형식으로 응답:
 `;
 
   try {
-    // 할당량 체크
-    if (this.isQuotaExhausted()) {
-      console.warn('[verifyFactsWithAI] API 호출 차단: 할당량 소진');
-      return {
-        일치하는_사실: [],
-        불일치하는_사실: [],
-        검증_불가: [],
-        종합_평가: 'API 할당량이 소진되어 검증할 수 없습니다.'
-      };
-    }
-    
     // service_worker를 통해 비스트리밍 모드로 호출
     return new Promise((resolve, reject) => {
       chrome.runtime.sendMessage({
@@ -12317,6 +12552,147 @@ JSON 형식으로 응답:
       검증_불가: [],
       종합_평가: 'AI 검증 중 오류가 발생했습니다.'
     };
+  }
+};
+
+// 최종 통합 분석 수행 (BACKUP service_worker 스타일)
+AnalysisPanel.prototype.performFinalIntegratedAnalysis = async function(originalBlock, comparisonArticles, verificationResult) {
+  console.log('[performFinalIntegratedAnalysis] 최종 통합 분석 시작');
+  
+  // 빈 데이터 검증
+  if (!originalBlock || !originalBlock.result) {
+    console.error('[performFinalIntegratedAnalysis] 원본 기사 데이터 부족');
+    return null;
+  }
+  
+  // 1차 분석 결과 포맷팅
+  const originalArticleAnalysis = JSON.stringify(originalBlock.result, null, 2);
+  const originalArticleContent = (originalBlock.content || '').substring(0, 1800) || '본문이 제공되지 않았습니다.';
+  const safeVerification = verificationResult || {};
+  const queryGuide = typeof this.buildVerificationQuerySet === 'function'
+    ? this.buildVerificationQuerySet(originalBlock)
+    : null;
+  const newsQueryLabel = queryGuide?.rawNews || queryGuide?.news || originalBlock.result?.검색어 || originalBlock.result?.키워드 || originalBlock.title || '제공되지 않음';
+  const integratedQueryLabel = queryGuide?.rawAll || queryGuide?.all || newsQueryLabel;
+  const keywordCandidates = [
+    originalBlock.result?.키워드,
+    originalBlock.result?.핵심요약,
+    originalBlock.result?.주장
+  ].filter(Boolean);
+  const keywordGuideLabel = keywordCandidates.length ? keywordCandidates.join(' / ') : '별도 키워드 없음';
+  const searchKeywordGuideSection = `
+#### 검색어 및 키워드 가이드
+- 뉴스 검색어: ${newsQueryLabel}
+- 통합 검색어: ${integratedQueryLabel}
+- 추가 키워드/핵심어: ${keywordGuideLabel}
+
+**가이드:** 각 비교 기사에는 실제 HTML을 파싱한 '크롤링 HTML 발췌'가 포함되어 있습니다. 위 검색어(정확 일치, 동의어, 파생형)와 키워드가 언급된 문장을 먼저 찾고, 해당 문장·수치·인용을 그대로 근거로 활용하세요. 검색어가 전혀 등장하지 않으면 '키워드 미일치'라고 명시하고 다른 증거를 제시하세요.
+`;
+  
+  // 관련 기사 포맷팅
+  const relatedArticlesSummary = comparisonArticles.length > 0
+    ? comparisonArticles.map((article, index) => {
+        const htmlExcerpt = article.crawledContent ? article.crawledContent.substring(0, 800) : null;
+        const snippetExcerpt = article.snippet || '요약 정보가 제공되지 않았습니다.';
+        return `
+      [사실 검증 참고 기사 ${index + 1}]
+      - 제목: ${article.title}
+      - 언론사: ${article.displayLink}
+      - 링크: ${article.link}
+      - 크롤링 HTML 발췌: ${htmlExcerpt || '크롤링 실패 또는 미지원'}
+      - Google 검색 요약: ${snippetExcerpt}
+      `;
+            }).join('\n')
+    : '제공된 사실 검증 참고 기사가 없습니다.';
+  // 사실 확인 포맷팅 (검증 결과)
+  const factCheckSummary = `
+### 사실 검증 요약 데이터
+- 일치하는 사실: ${safeVerification.일치하는_사실?.join(', ') || '없음'}
+- 불일치하는 사실: ${safeVerification.불일치하는_사실?.join(', ') || '없음'}
+- 검증 불가: ${safeVerification.검증_불가?.join(', ') || '없음'}
+- 종합 평가: ${safeVerification.종합_평가 || '평가 데이터 없음'}
+`;
+
+  const finalPrompt = `
+당신은 뉴스 진위를 판단하는 전문가입니다. 아래 제공된 데이터(초기 분석, 원문, 사실 검증 자료)를 종합해 최종 판단을 작성하세요.
+
+## 핵심 원칙
+- **제공된 데이터만 사용**: 사전 지식 활용 금지
+- **자료 간 맥락 비교**: 초기 분석과 원문, 사실 검증 자료 사이의 일관성을 확인
+- **크롤링 HTML 근거 활용**: '크롤링 HTML 발췌'에서 검색어·키워드가 포함된 문장을 직접 찾아 인용하고, 일치 여부를 분명히 하세요.
+
+## 입력 데이터
+1. **초기 분석 데이터**: 뉴스 분석하기 기능이 생성한 첫 분석 결과 (JSON)
+2. **원본 기사 본문 발췌**: 실제 기사 텍스트의 앞부분
+3. **사실 검증 참고 기사**: 크롤링된 비교 기사 및 요약 정보
+4. **사실 검증 요약 데이터**: 일치/불일치/검증 불가 항목과 종합 평가
+
+## 분석 절차
+1. 초기 분석 데이터와 원본 기사 본문을 살펴 핵심 주장과 맥락을 정리하세요.
+2. 검색어 및 키워드 가이드를 따라 각 비교 기사(특히 크롤링 HTML 발췌)에서 일치하거나 의미상 동일한 문장·수치·기관명을 찾아 기록하세요.
+3. 사실 검증 참고 기사와 사실 검증 요약 데이터를 대조하여 확인된 사실, 모순, 미확인 주장을 구분하세요.
+4. 외부 증거를 근거로 초기 분석을 보완하거나 수정하고 최종 판단을 명확한 근거와 함께 작성하세요.
+
+## 출력 형식 (JSON만 출력)
+\`\`\`json
+{
+  "final_verdict": "진짜 뉴스|가짜일 가능성이 있는 뉴스|가짜일 가능성이 높은 뉴스",
+  "summary": "최종 결론 (2~3문장)",
+  "reasoning": {
+    "reassessment_of_initial_analysis": "초기 분석 데이터 재검토 내용",
+    "confirmations_from_external_data": "뒷받침하는 외부 증거들",
+    "discrepancies_or_contradictions": "반박/상충 증거들 (없으면 빈 문자열)",
+    "unverified_claims": "검증 불가능한 주장들 (없으면 빈 문자열)"
+  }
+}
+\`\`\`
+
+---
+
+### 입력 데이터
+
+#### 초기 분석 데이터
+${originalArticleAnalysis}
+
+#### 원본 기사 본문 발췌
+${originalArticleContent}
+
+${searchKeywordGuideSection}
+
+#### 사실 검증 참고 기사
+${relatedArticlesSummary}
+
+#### 사실 검증 요약 데이터
+${factCheckSummary}
+`;
+
+  try {
+    // service_worker를 통해 비스트리밍 모드로 호출
+    return new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage({
+        action: 'analyzeNewsWithGemini',
+        newsContent: finalPrompt,
+        blockId: 'final_analysis_' + Date.now(),
+        isStreaming: false
+      }, (response) => {
+        if (chrome.runtime.lastError) {
+          console.error('[performFinalIntegratedAnalysis] 메시지 전송 오류:', chrome.runtime.lastError);
+          reject(chrome.runtime.lastError);
+          return;
+        }
+        
+        if (response.status === '분석 완료 및 결과 전송 성공' && response.result) {
+          resolve(response.result);
+        } else {
+          console.warn('[performFinalIntegratedAnalysis] 응답 파싱 실패:', response);
+          resolve(null);
+        }
+      });
+    });
+    
+  } catch (error) {
+    console.error('[performFinalIntegratedAnalysis] 최종 통합 분석 오류:', error);
+    return null;
   }
 };
 
@@ -12400,16 +12776,6 @@ JSON 형식으로 응답:
 `;
 
   try {
-    // 할당량 체크
-    if (this.isQuotaExhausted()) {
-      console.warn('[reanalyzeWithFactCheck] API 호출 차단: 할당량 소진');
-      return {
-        ...originalBlock?.result,
-        사실검증완료: false,
-        분석: 'API 할당량이 소진되어 재분석할 수 없습니다.'
-      };
-    }
-    
     // service_worker를 통해 비스트리밍 모드로 호출
     return new Promise((resolve, reject) => {
       chrome.runtime.sendMessage({
