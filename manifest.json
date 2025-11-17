@@ -35,6 +35,7 @@
       "js": [
         "parsers/naver-parser.js",
         "parsers/daum-parser.js",
+        "components/SelfFeedbackModule.js",
         "components/AnalysisPanel.js",
         "components/AnalysisBlock.js", 
         "components/VerdictBlock.js",
