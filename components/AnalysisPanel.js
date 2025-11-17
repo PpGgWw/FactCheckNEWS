@@ -657,11 +657,31 @@ class AnalysisPanel {
         return { normalizedResult, verdict: null, suspicious: null };
       }
 
-      const verdict =
+      let verdict =
         normalizedResult.진위 ||
         normalizedResult.verdict ||
         normalizedResult.result?.진위 ||
         normalizedResult.result?.verdict;
+
+      // 진위 값 정규화: "진짜 뉴스" → "사실", "가짜 뉴스" → "거짓"
+      if (verdict) {
+        const verdictMap = {
+          '진짜 뉴스': '사실',
+          '진짜뉴스': '사실',
+          '가짜 뉴스': '거짓',
+          '가짜뉴스': '거짓',
+          '사실입니다': '사실',
+          '거짓입니다': '거짓',
+          '사실임': '사실',
+          '거짓임': '거짓',
+          // 비교분석에서 나올 수 있는 표현들
+          '일치하는 진짜 뉴스': '사실',
+          '일부 차이가 있지만 신뢰할 수 있는 뉴스': '대체로 사실',
+          '상당한 차이가 있어 주의가 필요한 뉴스': '일부 사실',
+          '상충되는 내용으로 추가 검증 필요': '대체로 거짓'
+        };
+        verdict = verdictMap[verdict] || verdict;
+      }
 
       const suspicious =
         normalizedResult.수상한문장 ||
@@ -1144,6 +1164,9 @@ class AnalysisPanel {
     if (this.isHistoryCollapsed) {
       this.togglePanelCollapse(true);
     }
+
+    // 패널이 다시 렌더링되면 API 사용량 뱃지들도 즉시 갱신
+    this.updateApiQuotaDisplay();
   }
 
   // 헤더 렌더링
@@ -1547,6 +1570,10 @@ class AnalysisPanel {
     const isAnalyzing = status === 'analyzing';
     const isCompleted = status === 'completed';
     const progress = currentNews.progress || '분석 중...';
+    const analysisMode = block.factCheckMode || block.factCheckResult?.mode || 'standard';
+    const modeMeta = this.getAnalysisModeMeta(analysisMode);
+    const analyzedTimestamp = block.factCheckResult?.timestamp || block.timestamp;
+    const analyzedAgo = analyzedTimestamp ? this.formatRelativeTime(analyzedTimestamp) : '';
     
     // 상세 패널과 동일한 색상 및 네온 효과 적용
     const verdictColors = result && result.진위 ? this.getVerdictColors(result.진위) : null;
@@ -1575,23 +1602,58 @@ class AnalysisPanel {
     // 상세 패널과 동일한 스타일 배지
     const statusBadge = this.getDetailedStatusBadge(currentNews);
     
+    const modeIcon = `
+      <div style="
+        width: 24px;
+        height: 24px;
+        border-radius: 999px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 14px;
+        background: ${modeMeta.background};
+        border: 1px solid ${modeMeta.border};
+        color: ${modeMeta.color};
+        font-weight: 700;
+      " title="${modeMeta.label}">${modeMeta.icon}</div>
+    `;
+
     return `
       <div id="collapsed-current-clickable" style="
         display: flex;
         flex-direction: column;
-        gap: 10px;
+        gap: 8px;
         padding: 16px;
-        border-radius: 12px;
+        border-radius: 14px;
         border: 1px solid ${borderColor};
         background: ${blockBackground};
         box-shadow: ${boxShadow};
         transition: all 0.3s ease;
+        position: relative;
         ${cursorStyle}
       " ${isCompleted ? 'data-clickable="true"' : ''}>
         <div style="display: flex; flex-direction: column; gap: 6px;">
-          <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
-            <span style="font-size: 14px; font-weight: 600; color: ${text};">현재 페이지</span>
-            ${statusBadge}
+          <div style="display: flex; flex-direction: column; gap: 6px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;">
+              <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap;">
+                <span style="font-size: 14px; font-weight: 600; color: ${text};">현재 페이지</span>
+                ${statusBadge}
+              </div>
+              <div style="display: flex; align-items: center; gap: 8px;">
+                ${modeIcon}
+                ${analyzedAgo ? `
+                  <div style="
+                    background: rgba(13, 13, 13, 0.35);
+                    border: 1px solid ${this.hexToRgba(borderColor, 0.5)};
+                    color: ${this.hexToRgba(text, 0.9)};
+                    padding: 2px 8px;
+                    border-radius: 999px;
+                    font-size: 11px;
+                    font-weight: 600;
+                  ">${analyzedAgo} 분석</div>
+                ` : ''}
+              </div>
+            </div>
           </div>
           <span style="
             font-size: 13px;
@@ -1648,8 +1710,8 @@ class AnalysisPanel {
     const { surface, base, text, textMuted, border, accent } = this.palette;
     const gradientStart = this.hexToRgba(surface, 0.95);
     const gradientEnd = this.hexToRgba(accent || border || '#BF9780', 0.2);
-    const itemBackground = `linear-gradient(135deg, ${gradientStart}, ${gradientEnd})`;
-    const shimmerBorder = this.hexToRgba(accent || border || '#BF9780', 0.55);
+    const baseItemBackground = `linear-gradient(135deg, ${gradientStart}, ${gradientEnd})`;
+    const baseBorder = this.hexToRgba(accent || border || '#BF9780', 0.55);
     const itemShadow = `0 10px 25px ${this.hexToRgba('#000000', 0.35)}`;
 
     if (this.newsBlocks.size === 0) {
@@ -1658,7 +1720,7 @@ class AnalysisPanel {
           padding: 16px;
           border-radius: 10px;
           border: 1px solid ${border};
-          background: ${itemBackground};
+          background: ${baseItemBackground};
           color: ${textMuted};
           font-size: 13px;
           text-align: center;
@@ -1668,14 +1730,14 @@ class AnalysisPanel {
 
     return Array.from(this.newsBlocks.values())
       .sort((a, b) => b.timestamp - a.timestamp)
-      .slice(0, 3)
       .map(block => {
         const title = block.title || '제목 없음';
         const subtitle = this.formatRelativeTime(block.timestamp);
         const encodedUrl = block.url ? encodeURIComponent(block.url) : '';
         const showAnalyze = block.status === 'pending' || block.status === 'error';
         const statusBadge = this.getCollapsedStatusBadge(block);
-        const analyzeButton = showAnalyze ? `
+        const modeMeta = this.getAnalysisModeMeta(block.factCheckMode || block.factCheckResult?.mode || 'standard');
+          const analyzeButton = showAnalyze ? `
               <div style="flex: 1 1 110px; display: flex; flex-direction: column; gap: 4px;">
                 <button class="mini-action-btn mini-analyze-btn" data-block-id="${block.id}" style="
                   padding: 6px 10px;
@@ -1700,15 +1762,22 @@ class AnalysisPanel {
                 cursor: pointer;
                 transition: all 0.2s ease;
               " onmouseover="this.style.background='rgba(26, 26, 26, 0.65)';" onmouseout="this.style.background='rgba(26, 26, 26, 0.5)';">원문 열기</button>` : '';
+        const verdictColors = block.result?.진위 ? this.getVerdictColors(block.result.진위) : null;
+        const cardBackground = verdictColors ? this.hexToRgba(verdictColors.base, 0.2) : baseItemBackground;
+        const cardBorder = verdictColors ? this.hexToRgba(verdictColors.border, 0.9) : baseBorder;
+
         return `
           <div class="collapsed-summary-item" data-block-id="${block.id}" data-url="${encodedUrl}" data-status="${block.status}" style="
             padding: 14px 16px;
             border-radius: 14px;
-            border: 1px solid ${shimmerBorder};
-            background: ${itemBackground};
+            border: 1px solid ${cardBorder};
+            background: ${cardBackground};
             display: flex;
             flex-direction: column;
             gap: 10px;
+            min-height: 130px;
+            max-height: 130px;
+            justify-content: space-between;
             cursor: pointer;
             box-shadow: ${itemShadow};
             position: relative;
@@ -1725,15 +1794,33 @@ class AnalysisPanel {
                 -webkit-box-orient: vertical;
                 overflow: hidden;
               ">${title}</span>
-              <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
-                <span style="font-size: 12px; color: ${textMuted};">${subtitle}</span>
-                ${statusBadge}
+              <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap;">
+                <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+                  <span style="font-size: 12px; color: ${textMuted};">${subtitle}</span>
+                  ${statusBadge}
+                </div>
+                <div style="
+                  background: ${modeMeta.background};
+                  border: 1px solid ${modeMeta.border};
+                  color: ${modeMeta.color};
+                  padding: 3px 8px;
+                  border-radius: 999px;
+                  font-size: 11px;
+                  font-weight: 600;
+                  display: inline-flex;
+                  align-items: center;
+                  gap: 4px;
+                  white-space: nowrap;
+                " title="${modeMeta.label}">
+                  <span>${modeMeta.icon}</span>
+                  <span>${modeMeta.label}</span>
+                </div>
               </div>
             </div>
             <div class="collapsed-summary-actions" style="
               display: flex;
               gap: 6px;
-              flex-wrap: wrap;
+              flex-wrap: nowrap;
             ">
               ${analyzeButton}
               ${openButton}
@@ -1807,6 +1894,7 @@ class AnalysisPanel {
     block.progress = null;
     block.error = null;
     block.timestamp = Date.now();
+    block.factCheckMode = 'standard';
     this.saveNewsBlocks();
     return true;
   }
@@ -1828,6 +1916,40 @@ class AnalysisPanel {
     if (months < 12) return `${months}개월 전`;
     const years = Math.floor(days / 365);
     return `${years}년 전`;
+  }
+
+  getAnalysisModeMeta(mode = 'standard') {
+    const { text, textMuted } = this.palette;
+    const modes = {
+      speed: {
+        label: '속도 우선',
+        icon: '⚡',
+        background: 'rgba(245, 158, 11, 0.18)',
+        border: 'rgba(245, 158, 11, 0.5)',
+        color: '#FBBF24'
+      },
+      accuracy: {
+        label: '정확도 우선',
+        icon: '🎯',
+        background: 'rgba(59, 130, 246, 0.18)',
+        border: 'rgba(59, 130, 246, 0.5)',
+        color: '#60A5FA'
+      },
+      standard: {
+        label: '일반 분석',
+        icon: '🧠',
+        background: 'rgba(16, 185, 129, 0.18)',
+        border: 'rgba(16, 185, 129, 0.4)',
+        color: text
+      }
+    };
+    return modes[mode] || modes.standard || {
+      label: '일반 분석',
+      icon: '🧠',
+      background: 'rgba(16, 185, 129, 0.18)',
+      border: 'rgba(16, 185, 129, 0.4)',
+      color: textMuted
+    };
   }
 
   // 뉴스 블록들 렌더링
@@ -1854,6 +1976,10 @@ class AnalysisPanel {
     const verdictColors = result && result.진위 ? this.getVerdictColors(result.진위) : null;
     const hasGlow = isCompleted && verdictColors;
     const glowColor = hasGlow ? verdictColors.base : null;
+    const analysisMode = block.factCheckMode || (block.factCheckResult?.mode) || 'standard';
+    const modeMeta = this.getAnalysisModeMeta(analysisMode);
+    const analyzedTimestamp = block.factCheckResult?.timestamp || block.timestamp;
+    const analyzedAgo = analyzedTimestamp ? this.formatRelativeTime(analyzedTimestamp) : '';
 
     let blockBackground = this.blendColors(surface, base, isCurrent ? 0.28 : 0.22);
     let borderColor = 'rgba(140, 110, 84, 0.55)';
@@ -2283,19 +2409,57 @@ class AnalysisPanel {
           transition: all 0.6s cubic-bezier(0.4, 0, 0.2, 1);
           ${cursorStyle}
         ">
-          ${block.isComparison ? `
           <div style="
-            background: ${primaryButtonHover};
-            color: ${text};
-            padding: 4px 8px;
-            border-radius: 6px;
-            font-size: 11px;
-            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
             margin-bottom: 8px;
-            display: inline-block;
-            border: 1px solid ${primaryButtonBorder};
-          ">비교분석</div>
-          ` : ''}
+            flex-wrap: wrap;
+          ">
+            <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+              ${block.isComparison ? `
+              <div style="
+                background: ${primaryButtonHover};
+                color: ${text};
+                padding: 4px 8px;
+                border-radius: 6px;
+                font-size: 11px;
+                font-weight: 600;
+                display: inline-flex;
+                border: 1px solid ${primaryButtonBorder};
+              ">비교분석</div>
+              ` : ''}
+              ${analyzedAgo ? `
+              <div style="
+                background: rgba(15, 23, 42, 0.45);
+                color: ${this.hexToRgba(text, 0.85)};
+                padding: 4px 10px;
+                border-radius: 999px;
+                font-size: 11px;
+                font-weight: 600;
+                border: 1px solid ${this.hexToRgba(border, 0.6)};
+              ">${analyzedAgo} 분석</div>
+              ` : ''}
+            </div>
+            <div style="
+              margin-left: auto;
+              background: ${modeMeta.background};
+              border: 1px solid ${modeMeta.border};
+              color: ${modeMeta.color};
+              padding: 4px 10px;
+              border-radius: 12px;
+              font-size: 11px;
+              font-weight: 700;
+              display: inline-flex;
+              align-items: center;
+              gap: 4px;
+              white-space: nowrap;
+            " title="${modeMeta.label}">
+              <span>${modeMeta.icon}</span>
+              <span>${modeMeta.label}</span>
+            </div>
+          </div>
           <h3 style="
             color: ${text};
             font-weight: 600;
@@ -2443,7 +2607,6 @@ class AnalysisPanel {
 
   buildAnalysisDetailSections(block) {
     const result = block.result || {};
-    const analysisProcess = result.분석진행 || '';
     const initialVerdict = result.진위 || '분석 결과 없음';
     const summary = result.요약 || 'N/A';
     const normalizedVerificationQueries = this.normalizeVerificationQueries(result.verification_queries);
@@ -2476,7 +2639,6 @@ class AnalysisPanel {
     const verdictBorder = this.hexToRgba(verdictColors.base, 0.45);
     const summaryBackground = `linear-gradient(135deg, ${this.hexToRgba(accent, 0.18)} 0%, ${this.hexToRgba(surfaceAlt, 0.15)} 100%)`;
     const safeTitle = this.escapeHtml(block.title || '제목 없음');
-    const showProcessButton = Boolean(analysisProcess && analysisProcess !== 'N/A');
 
     const finalAnalysisSection = (block.factCheckResult && block.factCheckResult.finalAnalysis) ? `
           <section>
@@ -3003,7 +3165,7 @@ class AnalysisPanel {
 
           ${previousResultSection}
 
-          ${showProcessButton || (block.factCheckResult && block.factCheckResult.articles) ? `
+          ${(block.factCheckResult && block.factCheckResult.articles) ? `
           <div style="
             text-align: center; 
             margin-top: 8px;
@@ -3012,24 +3174,6 @@ class AnalysisPanel {
             justify-content: center;
             flex-wrap: wrap;
           ">
-            ${showProcessButton ? `
-            <button type="button" class="detail-analysis-process" style="
-              display: inline-flex;
-              align-items: center;
-              justify-content: center;
-              gap: 6px;
-              padding: 12px 22px;
-              border-radius: 10px;
-              border: none;
-              background: linear-gradient(135deg, ${this.hexToRgba(accent, 0.9)} 0%, ${this.hexToRgba(surfaceAlt, 0.9)} 100%);
-              color: ${text};
-              font-weight: 600;
-              cursor: pointer;
-              transition: transform 0.2s ease, box-shadow 0.2s ease;
-              box-shadow: 0 10px 24px rgba(0, 0, 0, 0.35);
-            ">추론과정 확인</button>
-            ` : ''}
-            ${block.factCheckResult && block.factCheckResult.articles ? `
             <button type="button" class="view-compared-articles" data-block-id="${block.id}" style="
               display: inline-flex;
               align-items: center;
@@ -3045,36 +3189,17 @@ class AnalysisPanel {
               transition: transform 0.2s ease, box-shadow 0.2s ease;
               box-shadow: 0 10px 24px rgba(0, 0, 0, 0.25);
             ">📰 비교 검증된 링크 보기 (${block.factCheckResult.articles.length})</button>
-            ` : ''}
           </div>
           ` : ''}
     `;
 
     return {
       sectionsHtml,
-      safeTitle,
-      analysisProcess
+      safeTitle
     };
   }
 
-  attachAnalysisDetailContentEvents(container, block, analysisProcess) {
-    const processButton = container.querySelector('.detail-analysis-process');
-    if (processButton && analysisProcess && analysisProcess !== 'N/A') {
-      processButton.addEventListener('click', (event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        this.showAnalysisProcessModal(analysisProcess);
-      });
-      processButton.addEventListener('mouseenter', () => {
-        processButton.style.transform = 'translateY(-2px)';
-        processButton.style.boxShadow = '0 14px 28px rgba(0, 0, 0, 0.4)';
-      });
-      processButton.addEventListener('mouseleave', () => {
-        processButton.style.transform = 'translateY(0)';
-        processButton.style.boxShadow = '0 10px 24px rgba(0, 0, 0, 0.35)';
-      });
-    }
-
+  attachAnalysisDetailContentEvents(container, block) {
     const comparisonButton = container.querySelector('.view-compared-articles');
     if (comparisonButton && block.factCheckResult) {
       comparisonButton.addEventListener('click', (event) => {
@@ -5017,8 +5142,7 @@ JSON 외의 문장, 주석, 코드 블록(\\\`\\\`\\\`json\\\`\\\`\\\`)은 절�
     "instruction": "해당 기사는 진위 여부 판단을 목적으로 수집되었습니다. 조건에 따라 종합적으로 검토 후 판단 결과를 진위, 근거, 분석 항목으로 나누어 출력하세요.",
     "input": "주어진 텍스트 전체",
     "output": {
-      "분석진행": "기사 구조 파악 → 근거 확인 → 논리 구조 분석 → 표현 분석 → 오탐 체크리스트 확인 → 종합 판단 순으로 단계별 추론 과정을 작성",
-      "진위": "판단 결과('거짓' / '대체로 거짓' / '일부 사실' / '대체로 사실' / '사실')",
+      "진위": "판단 결과('거짓' / '대체로 거짓' / '일부 사실' / '대체로 사실' / '사실'만 사용. '진짜 뉴스', '가짜 뉴스' 등 다른 표현 절대 금지)",
       "근거": "탐지된 중요도 조건을 <br> 태그로 반드시 구분하여 나열. 예: 1-1. 기사 내 명백한 내용상 모순<br>3-2. 감정적 표현 사용<br>4-1. 제목과 내용의 불일치",
       "분석": "다음 구조로 가독성 높게 작성하세요:<br><br>**✨ 기사 개요**<br>기사가 다루는 핵심 내용을 1-2문장으로 간단히 정리<br><br>**📊 주요 분석 결과**<br>위 근거에서 발견된 핵심 문제점 또는 신뢰할 수 있는 요소를 항목별로 명확히 설명<br><br>**⚠️ 검증 한계**<br>(있다면) 현재 검증으로는 확인 불가능한 정보나 추가 확인이 필요한 부분을 간단히 언급<br><br>**⚖️ 종합 판단**<br>위 내용을 바탕으로 최종 신뢰도 평가와 그 이유를 2-3문장으로 명확히 정리<br><br>※ 각 섹션은 <br><br>로 구분하고, 섹션 제목은 이모지+굵은 글씨(**텍스트**)로 표시하세요",
       "요약": "기사의 핵심 내용을 간결하고 정확하게 요약 (50-100자 이내, HTML 태그 사용 금지). 한 문장으로 핵심만 간결하게 작성",
@@ -5076,8 +5200,7 @@ ${dateTimeContext}
     "instruction": "해당 기사들은 비교분석을 목적으로 수집되었습니다. 두 기사의 내용 일치성, 관점 차이, 신뢰도를 종합적으로 검토 후 판단 결과를 출력하세요.",
     "input": "주어진 두 뉴스 텍스트 전체",
     "output": {
-      "분석진행": "비교분석을 위한 단계별 추론 과정을 작성",
-      "진위": "두 뉴스의 비교분석 결과 ('일치하는 진짜 뉴스' / '일부 차이가 있지만 신뢰할 수 있는 뉴스' / '상당한 차이가 있어 주의가 필요한 뉴스' / '상충되는 내용으로 추가 검증 필요')",
+      "진위": "두 뉴스의 비교분석 결과 ('거짓' / '대체로 거짓' / '일부 사실' / '대체로 사실' / '사실'만 사용. 비교 결과에 따라 5단계 중 하나로 판단하며, '진짜 뉴스', '가짜 뉴스' 등 다른 표현 절대 금지)",
       "근거": "두 뉴스 간의 일치점과 차이점을 나열",
       "분석": "다음 구조로 가독성 높게 작성하세요:<br><br>**✨ 두 기사 개요**<br>각 기사가 다루는 핵심 내용을 1-2문장씩 간단히 정리<br><br>**📊 비교 분석 결과**<br>- 일치하는 부분: 공통적으로 확인되는 사실이나 관점 나열<br>- 차이나는 부분: 서로 다른 정보나 해석의 차이 명확히 설명<br><br>**⚖️ 신뢰도 평가**<br>두 기사를 종합했을 때의 전체적인 신뢰도와 주의사항을 2-3문장으로 정리<br><br>※ 각 섹션은 <br><br>로 구분하고, 섹션 제목은 이모지+굵은 글씨(**텍스트**)로 표시하세요",
       "요약": "두 뉴스의 핵심 내용과 주요 차이점을 간결하게 요약"
@@ -5165,8 +5288,7 @@ ${dateTimeContext}
     "instruction": "아래는 동일한 기사에 대한 1차 AI 분석 결과입니다. 이를 참고하되, 원문을 독립적으로 재평가하여 최종 판단을 내리세요.",
     "input": "원문 기사 + 1차 분석 결과",
     "output": {
-      "분석진행": "1차 분석 검토 → 원문 재평가 → 오류/과도한 판단 확인 → 최종 판단 도출 과정을 단계별로 작성",
-      "진위": "교차 검증 후 최종 판단 ('거짓' / '대체로 거짓' / '일부 사실' / '대체로 사실' / '사실')",
+      "진위": "교차 검증 후 최종 판단 ('거짓' / '대체로 거짓' / '일부 사실' / '대체로 사실' / '사실'만 사용. '진짜 뉴스', '가짜 뉴스' 등 다른 표현 절대 금지)",
       "근거": "최종 판단의 근거를 나열",
       "분석": "다음 구조로 가독성 높게 작성하세요:<br><br>**✨ 기사 개요**<br>기사가 다루는 핵심 내용을 1-2문장으로 간단히 정리<br><br>**📊 주요 분석 결과**<br>위 근거에서 발견된 핵심 문제점 또는 신뢰할 수 있는 요소를 항목별로 명확히 설명<br><br>**⚠️ 검증 한계**<br>(있다면) 현재 검증으로는 확인 불가능한 정보나 추가 확인이 필요한 부분을 간단히 언급<br><br>**⚖️ 종합 판단**<br>위 내용을 바탕으로 최종 신뢰도 평가와 그 이유를 2-3문장으로 명확히 정리<br><br>※ 각 섹션은 <br><br>로 구분하고, 섹션 제목은 이모지+굵은 글씨(**텍스트**)로 표시하세요",
       "요약": "교차 검증을 거친 최종 결론을 간결하게 요약",
@@ -5233,8 +5355,7 @@ ${factCheckSection}
     "instruction": "아래는 동일한 기사에 대한 1차 분석 및 ${currentStep - 1}차 검증 결과입니다. 원문을 기준점으로 이들을 재검토하여 더 정확한 판단을 내리세요.",
     "input": "원문 기사 + 1차 분석 결과 + ${currentStep - 1}차 검증 결과",
     "output": {
-      "분석진행": "원문 재확인 → 1차 분석 검토 → ${currentStep - 1}차 검증 검토 → 놓친 맥락 확인 → 최종 정밀화된 판단 도출 과정을 단계별로 작성",
-      "진위": "${currentStep}차 재귀적 검증 후 최종 판단 ('거짓' / '대체로 거짓' / '일부 사실' / '대체로 사실' / '사실')",
+      "진위": "${currentStep}차 재귀적 검증 후 최종 판단 ('거짓' / '대체로 거짓' / '일부 사실' / '대체로 사실' / '사실'만 사용. '진짜 뉴스', '가짜 뉴스' 등 다른 표현 절대 금지)",
       "근거": "최종 판단의 근거를 나열",
       "분석": "다음 구조로 가독성 높게 작성하세요:<br><br>**✨ 기사 개요**<br>기사가 다루는 핵심 내용을 1-2문장으로 간단히 정리<br><br>**📊 주요 분석 결과**<br>위 근거에서 발견된 핵심 문제점 또는 신뢰할 수 있는 요소를 항목별로 명확히 설명<br><br>**⚠️ 검증 한계**<br>(있다면) 현재 검증으로는 확인 불가능한 정보나 추가 확인이 필요한 부분을 간단히 언급<br><br>**⚖️ 종합 판단**<br>위 내용을 바탕으로 최종 신뢰도 평가와 그 이유를 2-3문장으로 명확히 정리<br><br>※ 각 섹션은 <br><br>로 구분하고, 섹션 제목은 이모지+굵은 글씨(**텍스트**)로 표시하세요",
       "요약": "${currentStep}차 재귀적 검증을 거친 최종 결론을 간결하게 요약",
@@ -5474,7 +5595,7 @@ ${factCheckSection}
       }, { passive: false });
     }
 
-    this.attachAnalysisDetailContentEvents(overlay, block, detailContent.analysisProcess);
+    this.attachAnalysisDetailContentEvents(overlay, block);
 
     this.detailEscapeHandler = (event) => {
       if (event.key === 'Escape') {
@@ -6216,7 +6337,7 @@ ${factCheckSection}
     });
 
     // 내용 인터랙션 연결
-    this.attachAnalysisDetailContentEvents(modal, block, detailContent.analysisProcess);
+    this.attachAnalysisDetailContentEvents(modal, block);
 
     // 호버 효과
     closeBtn.addEventListener('mouseenter', () => {
@@ -6229,7 +6350,6 @@ ${factCheckSection}
     return modal;
   }
 
-  // 분석진행 모달 표시
   // 비교 뉴스 패널 표시
   showComparisonNewsPanel(blockId) {
     // blockId 타입 변환 (문자열 → 숫자)
@@ -6500,144 +6620,6 @@ ${factCheckSection}
       }
     };
     document.addEventListener('keydown', escHandler);
-  }
-
-  showAnalysisProcessModal(analysisProcess) {
-    // 마크다운 렌더링 (검은색 텍스트 강제)
-    const renderProcessText = (text) => {
-      if (!text) return '추론과정이 없습니다.';
-      
-      // <br> 태그 보호
-      let html = text.replace(/<br\s*\/?>/gi, '|||BR_TAG|||');
-      
-      // HTML 이스케이프
-      html = this.escapeHtml(html);
-      
-      // 마크다운 변환 (검은색 강제)
-      html = html
-        // 제목 (## 제목)
-        .replace(/^## (.+)$/gm, '<h2 style="color: #0D0D0D; font-weight: 600; font-size: 16px; margin: 12px 0 6px 0; border-bottom: 1px solid #BF9780; padding-bottom: 4px;">$1</h2>')
-        // 강조 (**텍스트**)
-        .replace(/\*\*(.+?)\*\*/g, '<strong style="color: #0D0D0D; font-weight: 600;">$1</strong>')
-        // 숫자 리스트
-        .replace(/^(\d+)\.\s*(.+)$/gm, '<li style="margin: 6px 0; padding-left: 8px; list-style: decimal; color: #0D0D0D;">$2</li>')
-        // 일반 리스트
-        .replace(/^-\s*(.+)$/gm, '<li style="margin: 4px 0; padding-left: 8px; list-style: disc; color: #0D0D0D;">$1</li>')
-        // 보호했던 <br> 태그 복원
-        .replace(/\|\|\|BR_TAG\|\|\|/g, '<br>')
-        // 줄바꿈 처리
-        .replace(/\n/g, '|||NEWLINE|||');
-      
-      // 리스트 감싸기
-      html = html.replace(/(<li[^>]*list-style: decimal;[^>]*>.*?<\/li>(?:\s*\|\|\|NEWLINE\|\|\|\s*<li[^>]*list-style: decimal;[^>]*>.*?<\/li>)*)/gs, 
-        '<ol style="margin: 8px 0; padding-left: 20px; color: #0D0D0D;">$1</ol>');
-      html = html.replace(/(<li[^>]*list-style: disc;[^>]*>.*?<\/li>(?:\s*\|\|\|NEWLINE\|\|\|\s*<li[^>]*list-style: disc;[^>]*>.*?<\/li>)*)/gs, 
-        '<ul style="margin: 8px 0; padding-left: 20px; color: #0D0D0D;">$1</ul>');
-      
-      // NEWLINE 제거 및 변환
-      html = html.replace(/(<[ou]l[^>]*>.*?)\|\|\|NEWLINE\|\|\|(?=\s*<li)/gs, '$1');
-      html = html.replace(/(<\/li>)\s*\|\|\|NEWLINE\|\|\|/g, '$1');
-      html = html.replace(/\|\|\|NEWLINE\|\|\|/g, '<br>');
-      
-      return html;
-    };
-    
-    const modal = document.createElement('div');
-    modal.className = 'analysis-process-modal';
-    modal.style.cssText = `
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
-      background: rgba(13,13,13,0.6);
-      z-index: 2147483649;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      opacity: 0;
-      transition: opacity 0.3s ease;
-    `;
-
-    modal.innerHTML = `
-      <div class="modal-content" style="
-        background: #E8E8E8;
-        border-radius: 12px;
-        padding: 32px;
-        width: 90%;
-        max-width: 700px;
-        max-height: 85vh;
-        overflow-y: auto;
-        position: relative;
-        transform: scale(0.8);
-        transition: transform 0.3s ease;
-        border: 1px solid #BF9780;
-        box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
-      ">
-        <button class="close-modal" style="
-          position: absolute;
-          top: 16px;
-          right: 16px;
-          background: none;
-          border: none;
-          font-size: 24px;
-          color: #737373;
-          cursor: pointer;
-          width: 32px;
-          height: 32px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          border-radius: 50%;
-          transition: background-color 0.2s;
-        ">&times;</button>
-        
-        <h2 style="color: #0D0D0D; font-size: 20px; font-weight: bold; margin-bottom: 20px; padding-right: 40px;">
-          🧠 AI 추론과정
-        </h2>
-        
-        <div style="
-          background: #F2F2F2;
-          border: 1px solid #BF9780;
-          border-radius: 8px;
-          padding: 20px;
-          line-height: 1.6;
-          color: #0D0D0D;
-          font-size: 14px;
-        ">${renderProcessText(analysisProcess)}</div>
-      </div>
-    `;
-
-    document.body.appendChild(modal);
-
-    // 애니메이션
-    setTimeout(() => {
-      modal.style.opacity = '1';
-      const modalContent = modal.querySelector('.modal-content');
-      if (modalContent) {
-        modalContent.style.transform = 'scale(1)';
-      }
-    }, 10);
-
-    // 이벤트 리스너
-    const closeBtn = modal.querySelector('.close-modal');
-    const closeModal = () => {
-      modal.style.opacity = '0';
-      setTimeout(() => modal.remove(), 300);
-    };
-
-    closeBtn.addEventListener('click', closeModal);
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) closeModal();
-    });
-
-    // 호버 효과
-    closeBtn.addEventListener('mouseenter', () => {
-      closeBtn.style.backgroundColor = '#BF9780';
-    });
-    closeBtn.addEventListener('mouseleave', () => {
-      closeBtn.style.backgroundColor = 'transparent';
-    });
   }
 
   // 닫기 이벤트
@@ -10636,6 +10618,11 @@ ${factCheckSection}
       this.removeNewsBlock(oldestId);
     }
 
+    // 기본 분석 모드 지정 (사실 검증 실행 전에는 일반 분석)
+    if (!newsData.factCheckMode) {
+      newsData.factCheckMode = 'standard';
+    }
+
     // 기존 로직...
     this.newsBlocks.set(newsData.id, newsData);
     console.log('[addNewsBlock] 블록 추가 완료, 총 블록 수:', this.newsBlocks.size);
@@ -11233,10 +11220,12 @@ AnalysisPanel.prototype.searchFactCheck = async function(blockId) {
         verification: verification,
         reanalyzed: null, // 속도 모드에서는 재분석 없음
         finalAnalysis: finalAnalysis, // 최종 통합 분석 결과 추가
-        timestamp: Date.now()
+        timestamp: Date.now(),
+        mode: 'speed'
       };
       
       block.factCheckResult = factCheckResult;
+      block.factCheckMode = 'speed';
       
       // 기존 분석 결과에 사실검증 필드 추가 (패널 표시용)
       if (!block.result.사실검증) {
@@ -11432,11 +11421,13 @@ AnalysisPanel.prototype.searchFactCheck = async function(blockId) {
       reanalyzed: reanalyzedResult,
       finalAnalysis: finalAnalysis, // 최종 통합 분석 결과 추가
       previousResult: previousResultSnapshot,
-      timestamp: Date.now()
+      timestamp: Date.now(),
+      mode: 'accuracy'
     };
     if (previousResultSnapshot) {
       block.firstAnalysis = previousResultSnapshot;
     }
+    block.factCheckMode = 'accuracy';
     
     console.log('[searchFactCheck] factCheckResult 저장 완료:', block.factCheckResult);
     
@@ -12507,47 +12498,202 @@ AnalysisPanel.prototype.showDebugModal = function(blockId) {
 
   const result = block.result;
   
-  // JSON을 HTML로 포맷팅
-  const formatValue = (value) => {
+  // 값 포맷팅
+  const formatValue = (value, key = '', depth = 0) => {
     if (value === null || value === undefined) {
-      return '<span style="color: #9CA3AF;">null</span>';
+      return '<span style="color: #9CA3AF; font-style: italic;">null</span>';
     }
     if (typeof value === 'boolean') {
-      return `<span style="color: #10B981;">${value}</span>`;
+      return `<span style="color: #10B981; font-weight: 600;">${value}</span>`;
     }
     if (typeof value === 'number') {
-      return `<span style="color: #3B82F6;">${value}</span>`;
+      return `<span style="color: #3B82F6; font-weight: 600;">${value}</span>`;
     }
     if (typeof value === 'string') {
-      // HTML 태그를 실제로 렌더링하지 않고 보여주기 위해 이스케이프
       const escaped = this.escapeHtml(value);
-      return `<span style="color: #0D0D0D;">${escaped}</span>`;
+      // 줄바꿈 유지
+      const withBreaks = escaped.replace(/\n/g, '<br>');
+      return `<span style="color: #0D0D0D; line-height: 1.6;">${withBreaks}</span>`;
+    }
+    if (Array.isArray(value)) {
+      const uniqueId = `array-${key}-${depth}-${Math.random().toString(36).substr(2, 9)}`;
+      const items = value.map((item, index) => `
+        <div style="padding: 8px 12px; border-bottom: 1px solid rgba(191, 151, 128, 0.15);">
+          <span style="color: #8B5A3C; font-weight: 600; margin-right: 8px;">[${index}]</span>
+          ${formatValue(item, `${key}-${index}`, depth + 1)}
+        </div>
+      `).join('');
+      
+      return `
+        <div style="display: inline-block; width: 100%;">
+          <button onclick="
+            const content = document.getElementById('${uniqueId}');
+            const icon = this.querySelector('.toggle-icon');
+            if (content.style.display === 'none') {
+              content.style.display = 'block';
+              icon.textContent = '▼';
+            } else {
+              content.style.display = 'none';
+              icon.textContent = '▶';
+            }
+          " style="
+            background: rgba(139, 92, 241, 0.12);
+            border: 1px solid rgba(139, 92, 241, 0.35);
+            color: #8B5CF6;
+            padding: 4px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            transition: all 0.2s;
+          " onmouseover="this.style.background='rgba(139, 92, 241, 0.2)'" onmouseout="this.style.background='rgba(139, 92, 241, 0.12)'">
+            <span class="toggle-icon">▶</span> Array (${value.length}개 항목)
+          </button>
+          <div id="${uniqueId}" style="
+            display: none;
+            margin-top: 8px;
+            border: 1px solid rgba(139, 92, 241, 0.25);
+            border-radius: 8px;
+            background: rgba(139, 92, 241, 0.05);
+            overflow: hidden;
+          ">
+            ${items}
+          </div>
+        </div>
+      `;
     }
     if (typeof value === 'object') {
-      return '<span style="color: #F59E0B;">object</span>';
+      const uniqueId = `obj-${key}-${depth}-${Math.random().toString(36).substr(2, 9)}`;
+      const entries = Object.entries(value).map(([k, v]) => `
+        <div style="padding: 8px 12px; border-bottom: 1px solid rgba(191, 151, 128, 0.15); display: grid; grid-template-columns: 140px 1fr; gap: 12px; align-items: start;">
+          <span style="color: #8B5A3C; font-weight: 600;">${this.escapeHtml(k)}</span>
+          <div>${formatValue(v, `${key}-${k}`, depth + 1)}</div>
+        </div>
+      `).join('');
+      
+      return `
+        <div style="display: inline-block; width: 100%;">
+          <button onclick="
+            const content = document.getElementById('${uniqueId}');
+            const icon = this.querySelector('.toggle-icon');
+            if (content.style.display === 'none') {
+              content.style.display = 'block';
+              icon.textContent = '▼';
+            } else {
+              content.style.display = 'none';
+              icon.textContent = '▶';
+            }
+          " style="
+            background: rgba(245, 158, 11, 0.12);
+            border: 1px solid rgba(245, 158, 11, 0.35);
+            color: #F59E0B;
+            padding: 4px 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 600;
+            transition: all 0.2s;
+          " onmouseover="this.style.background='rgba(245, 158, 11, 0.2)'" onmouseout="this.style.background='rgba(245, 158, 11, 0.12)'">
+            <span class="toggle-icon">▶</span> Object (${Object.keys(value).length}개 속성)
+          </button>
+          <div id="${uniqueId}" style="
+            display: none;
+            margin-top: 8px;
+            border: 1px solid rgba(245, 158, 11, 0.25);
+            border-radius: 8px;
+            background: rgba(245, 158, 11, 0.05);
+            overflow: hidden;
+          ">
+            ${entries}
+          </div>
+        </div>
+      `;
     }
     return String(value);
   };
 
-  const renderResultRows = () => {
-    return Object.entries(result).map(([key, value]) => `
-      <tr style="border-bottom: 1px solid #D4D4D4;">
-        <td style="
-          padding: 12px 16px;
-          font-weight: 600;
-          color: #BF9780;
-          white-space: nowrap;
-          vertical-align: top;
-          width: 120px;
-        ">${this.escapeHtml(key)}</td>
-        <td style="
-          padding: 12px 16px;
-          color: #0D0D0D;
-          word-break: break-word;
-          line-height: 1.6;
-        ">${formatValue(value)}</td>
-      </tr>
-    `).join('');
+  // 섹션별 그룹화
+  const sections = {
+    '기본 정보': ['진위', '요약', '키워드', '검색어'],
+    '상세 분석': ['분석', '근거', '사실검증완료'],
+    '기타': []
+  };
+
+  // 각 키를 적절한 섹션에 배치
+  const sortedKeys = Object.keys(result);
+  sortedKeys.forEach(key => {
+    let placed = false;
+    for (const [section, keys] of Object.entries(sections)) {
+      if (keys.includes(key)) {
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) {
+      sections['기타'].push(key);
+    }
+  });
+
+  // 섹션별 렌더링
+  const renderSections = () => {
+    return Object.entries(sections)
+      .filter(([_, keys]) => keys.length > 0 && keys.some(k => result[k] !== undefined))
+      .map(([sectionName, keys]) => {
+        const rows = keys
+          .filter(key => result[key] !== undefined)
+          .map(key => `
+            <div style="
+              padding: 14px 18px;
+              border-bottom: 1px solid rgba(191, 151, 128, 0.2);
+              display: grid;
+              grid-template-columns: 140px 1fr;
+              gap: 16px;
+              align-items: start;
+            ">
+              <div style="
+                font-weight: 700;
+                color: #8B5A3C;
+                font-size: 13px;
+                padding-top: 2px;
+              ">${this.escapeHtml(key)}</div>
+              <div style="
+                color: #0D0D0D;
+                font-size: 13px;
+                word-break: break-word;
+                line-height: 1.65;
+              ">${formatValue(result[key])}</div>
+            </div>
+          `).join('');
+
+        return `
+          <div style="margin-bottom: 20px;">
+            <div style="
+              background: linear-gradient(135deg, #BF9780 0%, #A67F66 100%);
+              padding: 10px 18px;
+              border-radius: 8px 8px 0 0;
+              display: flex;
+              align-items: center;
+              gap: 8px;
+            ">
+              <span style="font-size: 16px;">${this.getSectionIcon(sectionName)}</span>
+              <h3 style="
+                color: #FFFFFF;
+                font-size: 15px;
+                font-weight: 700;
+                margin: 0;
+              ">${sectionName}</h3>
+            </div>
+            <div style="
+              background: #FFFFFF;
+              border: 1px solid rgba(191, 151, 128, 0.3);
+              border-top: none;
+              border-radius: 0 0 8px 8px;
+            ">
+              ${rows}
+            </div>
+          </div>
+        `;
+      }).join('');
   };
 
   const modal = document.createElement('div');
@@ -12558,7 +12704,8 @@ AnalysisPanel.prototype.showDebugModal = function(blockId) {
     left: 0;
     width: 100vw;
     height: 100vh;
-    background: rgba(13,13,13,0.6);
+    background: rgba(13,13,13,0.65);
+    backdrop-filter: blur(4px);
     z-index: 2147483649;
     display: flex;
     align-items: center;
@@ -12569,93 +12716,90 @@ AnalysisPanel.prototype.showDebugModal = function(blockId) {
 
   modal.innerHTML = `
     <div class="modal-content" style="
-      background: #E8E8E8;
-      border-radius: 12px;
-      padding: 32px;
-      width: 90%;
-      max-width: 800px;
-      max-height: 85vh;
-      overflow-y: auto;
+      background: #FAFAFA;
+      border-radius: 16px;
+      padding: 0;
+      width: 92%;
+      max-width: 900px;
+      max-height: 88vh;
+      overflow: hidden;
       position: relative;
-      transform: scale(0.8);
+      transform: scale(0.85);
       transition: transform 0.3s ease;
-      border: 1px solid #BF9780;
-      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+      border: 2px solid #BF9780;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.35);
+      display: flex;
+      flex-direction: column;
     ">
-      <button class="close-modal" style="
-        position: absolute;
-        top: 16px;
-        right: 16px;
-        background: none;
-        border: none;
-        font-size: 24px;
-        color: #737373;
-        cursor: pointer;
-        width: 32px;
-        height: 32px;
+      <div style="
+        background: linear-gradient(135deg, #8B5A3C 0%, #6B4423 100%);
+        padding: 24px 32px;
         display: flex;
         align-items: center;
-        justify-content: center;
-        border-radius: 50%;
-        transition: background-color 0.2s;
-      ">&times;</button>
-      
-      <h2 style="color: #0D0D0D; font-size: 20px; font-weight: bold; margin-bottom: 8px; padding-right: 40px;">
-        🐛 디버그 정보
-      </h2>
-      
-      <p style="color: #737373; font-size: 13px; margin-bottom: 20px;">
-        Block ID: ${blockId} | 분석 결과 원본 데이터
-      </p>
-      
-      <div style="
-        background: #F2F2F2;
-        border: 1px solid #BF9780;
-        border-radius: 8px;
-        overflow: hidden;
+        justify-content: space-between;
+        border-bottom: 2px solid #BF9780;
+        flex-shrink: 0;
       ">
-        <table style="
-          width: 100%;
-          border-collapse: collapse;
-        ">
-          <thead>
-            <tr style="background: #BF9780;">
-              <th style="
-                padding: 12px 16px;
-                text-align: left;
-                color: #F2F2F2;
-                font-weight: 600;
-                font-size: 14px;
-              ">필드</th>
-              <th style="
-                padding: 12px 16px;
-                text-align: left;
-                color: #F2F2F2;
-                font-weight: 600;
-                font-size: 14px;
-              ">값</th>
-            </tr>
-          </thead>
-          <tbody>
-            ${renderResultRows()}
-          </tbody>
-        </table>
+        <div>
+          <h2 style="
+            color: #FFFFFF;
+            font-size: 22px;
+            font-weight: 800;
+            margin: 0 0 6px 0;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+          ">
+            <span>🐛</span>
+            <span>디버그 정보</span>
+          </h2>
+          <p style="
+            color: rgba(255, 255, 255, 0.85);
+            font-size: 13px;
+            margin: 0;
+            font-weight: 500;
+          ">Block ID: ${blockId} | 분석 결과 원본 데이터</p>
+        </div>
+        <button class="close-modal" style="
+          background: rgba(255, 255, 255, 0.15);
+          border: 1px solid rgba(255, 255, 255, 0.25);
+          font-size: 24px;
+          color: #FFFFFF;
+          cursor: pointer;
+          width: 40px;
+          height: 40px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border-radius: 10px;
+          transition: all 0.2s;
+          font-weight: 300;
+        ">&times;</button>
       </div>
       
       <div style="
-        margin-top: 20px;
-        padding: 16px;
-        background: #FEF3C7;
-        border: 1px solid #F59E0B;
-        border-radius: 8px;
+        padding: 28px 32px;
+        overflow-y: auto;
+        flex: 1;
       ">
-        <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
-          <span style="font-size: 16px;">💡</span>
-          <strong style="color: #92400E; font-size: 14px;">개발자 팁</strong>
+        ${renderSections()}
+        
+        <div style="
+          margin-top: 8px;
+          padding: 18px 20px;
+          background: linear-gradient(135deg, #FEF3C7 0%, #FDE68A 100%);
+          border: 2px solid #F59E0B;
+          border-radius: 10px;
+          box-shadow: 0 4px 6px rgba(245, 158, 11, 0.15);
+        ">
+          <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 10px;">
+            <span style="font-size: 20px;">💡</span>
+            <strong style="color: #92400E; font-size: 15px; font-weight: 700;">개발자 팁</strong>
+          </div>
+          <p style="color: #78350F; font-size: 13px; line-height: 1.6; margin: 0;">
+            이 정보는 AI가 반환한 원본 결과입니다. 브라우저 콘솔에서도 확인할 수 있습니다.
+          </p>
         </div>
-        <p style="color: #78350F; font-size: 13px; line-height: 1.5; margin: 0;">
-          이 정보는 AI가 반환한 원본 결과입니다. 콘솔에서도 확인할 수 있습니다.
-        </p>
       </div>
     </div>
   `;
@@ -12675,6 +12819,10 @@ AnalysisPanel.prototype.showDebugModal = function(blockId) {
   const closeBtn = modal.querySelector('.close-modal');
   const closeModal = () => {
     modal.style.opacity = '0';
+    const modalContent = modal.querySelector('.modal-content');
+    if (modalContent) {
+      modalContent.style.transform = 'scale(0.85)';
+    }
     setTimeout(() => modal.remove(), 300);
   };
 
@@ -12685,15 +12833,27 @@ AnalysisPanel.prototype.showDebugModal = function(blockId) {
 
   // 호버 효과
   closeBtn.addEventListener('mouseenter', () => {
-    closeBtn.style.backgroundColor = '#BF9780';
+    closeBtn.style.background = 'rgba(255, 255, 255, 0.25)';
+    closeBtn.style.transform = 'scale(1.08)';
   });
   closeBtn.addEventListener('mouseleave', () => {
-    closeBtn.style.backgroundColor = 'transparent';
+    closeBtn.style.background = 'rgba(255, 255, 255, 0.15)';
+    closeBtn.style.transform = 'scale(1)';
   });
 
   // 콘솔에도 출력
   console.log('[Debug Modal] Block ID:', blockId);
   console.log('[Debug Modal] Result:', result);
+};
+
+// 섹션별 아이콘 반환
+AnalysisPanel.prototype.getSectionIcon = function(sectionName) {
+  const icons = {
+    '기본 정보': '📋',
+    '상세 분석': '🔍',
+    '기타': '📦'
+  };
+  return icons[sectionName] || '📄';
 };
 
 // 실시간 사실 검증 상황 표시 함수들
@@ -13139,6 +13299,12 @@ ${truncatedHtml}
       });
     });
     
+    // API 사용 횟수 증가 (HTML 파싱도 Gemini API 사용)
+    if (response.incrementApiUsage) {
+      this.incrementApiUsage(response.incrementApiUsage.type, response.incrementApiUsage.count);
+      console.log(`[API Count] HTML 파싱 - ${response.incrementApiUsage.type} API 호출 +${response.incrementApiUsage.count}`);
+    }
+    
     // 비스트리밍 모드는 '분석 완료 및 결과 전송 성공' 반환
     if (!response.result) {
       console.error('[parseHtmlWithAI] AI 파싱 실패 - result 없음:', response);
@@ -13394,6 +13560,11 @@ JSON 형식으로 응답:
         }
         
         if (response.status === '분석 완료 및 결과 전송 성공' && response.result) {
+          // API 사용 횟수 증가 (사실 검증도 Gemini API 사용)
+          if (response.incrementApiUsage) {
+            this.incrementApiUsage(response.incrementApiUsage.type, response.incrementApiUsage.count);
+            console.log(`[API Count] 사실 검증 - ${response.incrementApiUsage.type} API 호출 +${response.incrementApiUsage.count}`);
+          }
           resolve(response.result);
         } else {
           console.warn('[verifyFactsWithAI] 응답 파싱 실패:', response);
@@ -13790,6 +13961,11 @@ JSON 형식으로 응답:
         }
         
         if (response.status === '분석 완료 및 결과 전송 성공' && response.result) {
+          // API 사용 횟수 증가 (재분석도 Gemini API 사용)
+          if (response.incrementApiUsage) {
+            this.incrementApiUsage(response.incrementApiUsage.type, response.incrementApiUsage.count);
+            console.log(`[API Count] 재분석 - ${response.incrementApiUsage.type} API 호출 +${response.incrementApiUsage.count}`);
+          }
           resolve(response.result);
         } else {
           console.warn('[reanalyzeWithFactCheck] 응답 파싱 실패:', response);

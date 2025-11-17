@@ -1119,7 +1119,6 @@ function extractNewsContent(data) {
     if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].output) {
       const output = parsed[0].output;
       return {
-        분석진행: output.분석진행 || '',
         진위: output.진위 || '',
         근거: output.근거 || '',
         분석: output.분석 || '',
@@ -1133,7 +1132,6 @@ function extractNewsContent(data) {
     // 객체에 진위/근거/분석 있으면 사용 (기존 형식)
     if (parsed && parsed.진위) {
       return {
-        분석진행: parsed.분석진행 || '',
         진위: parsed.진위,
         근거: parsed.근거 || '',
         분석: parsed.분석 || '',
@@ -1144,7 +1142,6 @@ function extractNewsContent(data) {
     return resultText;
   } catch (error) {
     return {
-      분석진행: '',
       진위: '분석 오류',
       근거: '',
       분석: 'JSON 파싱 오류: ' + error.message,

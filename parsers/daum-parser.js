@@ -38,8 +38,8 @@ class DaumNewsParser {
     if (titleElement) {
       // 하이라이트 적용
       this._applyHighlight(titleElement, colorScheme, {
-        padding: '5px',
-        borderRadius: '5px'
+        enhancedTitle: true,
+        padding: '20px 28px 20px 58px'
       });
 
       // 데이터 수집
@@ -214,8 +214,8 @@ class DaumNewsParser {
     
     if (titleElement) {
       this._applyHighlight(titleElement, colorScheme, {
-        padding: '5px',
-        borderRadius: '5px'
+        enhancedTitle: true,
+        padding: '20px 28px 20px 58px'
       });
       elementsUpdated++;
     }
@@ -323,11 +323,137 @@ class DaumNewsParser {
    * @private
    */
   _applyHighlight(element, colorScheme, styles = {}) {
+    if (!element) return;
+
+    const { enhancedTitle, padding, borderRadius } = styles;
+
+    if (enhancedTitle) {
+      this._ensureEnhancedHighlightStyles();
+      element.classList.add('factcheck-title-highlight');
+      element.style.backgroundColor = '';
+      element.style.border = '';
+      element.style.borderRadius = '';
+      element.style.padding = '';
+      element.style.setProperty('--factcheck-title-bg', `linear-gradient(135deg, ${this._withAlpha(colorScheme.background, 0.95)} 0%, ${this._withAlpha(colorScheme.background, 0.72)} 100%)`);
+      element.style.setProperty('--factcheck-title-border', this._withAlpha(colorScheme.border, 0.95));
+      element.style.setProperty('--factcheck-title-accent', this._withAlpha(colorScheme.border, 0.9));
+      element.style.setProperty('--factcheck-title-shadow', this._withAlpha(colorScheme.border, 0.32));
+      if (padding) {
+        element.style.setProperty('--factcheck-title-padding', padding);
+      } else {
+        element.style.removeProperty('--factcheck-title-padding');
+      }
+      return;
+    }
+
+    element.classList.remove('factcheck-title-highlight');
+    element.style.removeProperty('--factcheck-title-bg');
+    element.style.removeProperty('--factcheck-title-border');
+    element.style.removeProperty('--factcheck-title-accent');
+    element.style.removeProperty('--factcheck-title-shadow');
+    element.style.removeProperty('--factcheck-title-padding');
+
     element.style.backgroundColor = colorScheme.background;
     element.style.border = `2px solid ${colorScheme.border}`;
     
-    if (styles.padding) element.style.padding = styles.padding;
-    if (styles.borderRadius) element.style.borderRadius = styles.borderRadius;
+    if (padding) {
+      element.style.padding = padding;
+    } else {
+      element.style.removeProperty('padding');
+    }
+
+    if (borderRadius) {
+      element.style.borderRadius = borderRadius;
+    } else {
+      element.style.removeProperty('border-radius');
+    }
+  }
+
+  _ensureEnhancedHighlightStyles() {
+    if (document.getElementById('factcheck-title-highlight-style')) {
+      return;
+    }
+
+    const style = document.createElement('style');
+    style.id = 'factcheck-title-highlight-style';
+    style.textContent = `
+      .factcheck-title-highlight {
+        position: relative;
+        display: inline-block;
+        width: 100%;
+        padding: var(--factcheck-title-padding, 18px 24px 18px 52px);
+        margin: 6px 0 12px;
+        border-radius: 20px;
+        background: var(--factcheck-title-bg, rgba(18, 18, 18, 0.08));
+        border: 1.5px solid var(--factcheck-title-border, rgba(18, 18, 18, 0.35));
+        box-shadow: 0 20px 46px var(--factcheck-title-shadow, rgba(8, 8, 8, 0.32));
+        box-sizing: border-box;
+        line-height: 1.45;
+        overflow: hidden;
+        box-decoration-break: clone;
+        -webkit-box-decoration-break: clone;
+        backdrop-filter: blur(2px);
+      }
+
+      .factcheck-title-highlight::before {
+        content: '';
+        position: absolute;
+        inset: 0;
+        border-radius: inherit;
+        background: radial-gradient(circle at top left, rgba(255, 255, 255, 0.28), transparent 55%);
+        pointer-events: none;
+        opacity: 0.8;
+      }
+
+      .factcheck-title-highlight::after {
+        content: '';
+        position: absolute;
+        top: 14px;
+        bottom: 14px;
+        left: 18px;
+        width: 5px;
+        border-radius: 999px;
+        background: var(--factcheck-title-accent, rgba(255, 255, 255, 0.5));
+        box-shadow: 0 0 22px var(--factcheck-title-accent, rgba(255, 255, 255, 0.35));
+        pointer-events: none;
+      }
+
+      @media (max-width: 768px) {
+        .factcheck-title-highlight {
+          padding: var(--factcheck-title-padding, 16px 20px 16px 46px);
+        }
+      }
+    `;
+
+    document.head.appendChild(style);
+  }
+
+  _withAlpha(color, alpha = 1) {
+    if (!color) {
+      return `rgba(0, 0, 0, ${alpha})`;
+    }
+
+    const rgbaMatch = color.match(/rgba?\(([^)]+)\)/i);
+    if (rgbaMatch) {
+      const parts = rgbaMatch[1].split(',').map(part => parseFloat(part.trim()));
+      if (parts.length >= 3) {
+        const [r, g, b] = parts;
+        return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+      }
+    }
+
+    if (color.startsWith('#')) {
+      let hex = color.replace('#', '');
+      if (hex.length === 3) {
+        hex = hex.split('').map(char => char + char).join('');
+      }
+      const r = parseInt(hex.slice(0, 2), 16);
+      const g = parseInt(hex.slice(2, 4), 16);
+      const b = parseInt(hex.slice(4, 6), 16);
+      return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+    }
+
+    return color;
   }
 }
 
