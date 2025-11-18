@@ -27,6 +27,7 @@ class AnalysisPanel {
     this.autoFactCheckQueue = new Set();
     this.persistentSearchCache = new Map();
     this.persistentCrawlCache = new Map();
+    this.quotaExhausted = false; // API 할당량 소진 플래그
     
     // API_KEY_PLACEHOLDER 상수 정의
     this.API_KEY_PLACEHOLDER = 'NONE';
@@ -2684,7 +2685,7 @@ class AnalysisPanel {
                 line-height: 1.7;
                 font-size: 14px;
                 color: ${text};
-              ">${block.factCheckResult.finalAnalysis.summary}</div>
+              ">${block.factCheckResult.finalAnalysis.summary || '최종 분석 요약을 생성하는 중입니다.'}</div>
             </div>
             ${block.factCheckResult.finalAnalysis.reasoning.reassessment_of_initial_analysis ? `
             <div style="
@@ -4533,7 +4534,14 @@ class AnalysisPanel {
     const abortController = new AbortController();
     this.abortControllers.set(id, abortController);
     
-    this.updateNewsStatus(id, 'analyzing', null, '🔍 API 연결 및 인증 확인 중...');
+    // API 할당량 소진 체크
+    if (this.quotaExhausted) {
+      console.warn('[startAnalysis] API 할당량 소진, 분석 중단:', id);
+      this.updateNewsStatus(id, 'error', null, null, 'API 할당량이 소진되어 분석할 수 없습니다.');
+      return;
+    }
+    
+    this.updateNewsStatus(id, 'analyzing', null, '🔍 API 연결 및 인증 확인 중...');;
     this.updateProgressTextInDOM(id, '🔍 API 연결 및 인증 확인 중...');
     
     // API 키 확인
@@ -5101,7 +5109,7 @@ JSON 외의 문장, 주석, 코드 블록(\\\`\\\`\\\`json\\\`\\\`\\\`)은 절�
     "instruction": "해당 기사는 진위 여부 판단을 목적으로 수집되었습니다. 조건에 따라 종합적으로 검토 후 판단 결과를 진위, 근거, 분석 항목으로 나누어 출력하세요.",
     "input": "주어진 텍스트 전체",
     "output": {
-      "진위": "**[5단계 진위 체계 - 정확히 하나만 선택]** '거짓' / '대체로 거짓' / '일부 사실' / '대체로 사실' / '사실' - 이 5가지 표현 외에는 절대 사용 금지. '진짜 뉴스', '가짜 뉴스', '사실입니다', '거짓입니다', '신뢰할 수 있음', '의심스러움', '가능성' 등의 표현 사용 시 분석 실패로 간주됨",
+      "진위": "**[5단계 진위 체계 - 정확히 하나만 선택]**\\n\\n'거짓' / '대체로 거짓' / '일부 사실' / '대체로 사실' / '사실'\\n\\n**[절대 금지 표현]** 이 5가지 표현 외에는 **어떠한 형태로도 사용 금지**:\\n- 금지: '진짜 뉴스', '가짜 뉴스', '진짜', '가짜'\\n- 금지: '사실입니다', '거짓입니다', '~임', '~임니다'\\n- 금지: '신뢰할 수 있음', '신뢰할 수 없음', '믿을 수 있음'\\n- 금지: '의심스러움', '의심됨', '확실함', '불확실함'\\n- 금지: '가능성', '~일 가능성', '~할 것으로 보임'\\n- 금지: '검증 불가', '판단 불가', '확인 불가'\\n- 금지: '부분적으로 사실', '사실로 보임', '사실로 추정'\\n- 금지: 위 5단계 이외의 모든 판단 표현\\n\\n**중요**: 위 금지 표현 사용 시 분석 실패로 간주되며, 반드시 5단계 중 정확히 하나만 선택하여 그대로 출력하세요",
       "근거": "탐지된 중요도 조건을 <br> 태그로 반드시 구분하여 나열. 예: 1-1. 기사 내 명백한 내용상 모순<br>3-2. 감정적 표현 사용<br>4-1. 제목과 내용의 불일치",
       "분석": "다음 구조로 가독성 높게 작성하세요:<br><br>**✨ 기사 개요**<br>기사가 다루는 핵심 내용을 1-2문장으로 간단히 정리<br><br>**📊 주요 분석 결과**<br>위 근거에서 발견된 핵심 문제점 또는 신뢰할 수 있는 요소를 항목별로 명확히 설명<br><br>**⚠️ 검증 한계**<br>(있다면) 현재 검증으로는 확인 불가능한 정보나 추가 확인이 필요한 부분을 간단히 언급<br><br>**⚖️ 종합 판단**<br>위 내용을 바탕으로 최종 신뢰도 평가와 그 이유를 2-3문장으로 명확히 정리<br><br>※ 각 섹션은 <br><br>로 구분하고, 섹션 제목은 이모지+굵은 글씨(**텍스트**)로 표시하세요",
       "요약": "기사의 핵심 내용을 간결하고 정확하게 요약 (50-100자 이내, HTML 태그 사용 금지). 한 문장으로 핵심만 간결하게 작성",
@@ -5159,7 +5167,7 @@ ${dateTimeContext}
     "instruction": "해당 기사들은 비교분석을 목적으로 수집되었습니다. 두 기사의 내용 일치성, 관점 차이, 신뢰도를 종합적으로 검토 후 판단 결과를 출력하세요.",
     "input": "주어진 두 뉴스 텍스트 전체",
     "output": {
-      "진위": "두 뉴스의 비교분석 결과 ('거짓' / '대체로 거짓' / '일부 사실' / '대체로 사실' / '사실'만 사용. 비교 결과에 따라 5단계 중 하나로 판단하며, '진짜 뉴스', '가짜 뉴스' 등 다른 표현 절대 금지)",
+      "진위": "**[5단계 진위 체계만 사용]**\\n\\n'거짓' / '대체로 거짓' / '일부 사실' / '대체로 사실' / '사실'\\n\\n이 5단계 중 정확히 하나만 선택. 비교 결과에 따라 판단하며, '진짜 뉴스', '가짜 뉴스', '신뢰할 수 있음', '검증 불가', '의심스러움' 등 5단계 이외의 모든 표현 **절대 금지**",
       "근거": "두 뉴스 간의 일치점과 차이점을 나열",
       "분석": "다음 구조로 가독성 높게 작성하세요:<br><br>**✨ 두 기사 개요**<br>각 기사가 다루는 핵심 내용을 1-2문장씩 간단히 정리<br><br>**📊 비교 분석 결과**<br>- 일치하는 부분: 공통적으로 확인되는 사실이나 관점 나열<br>- 차이나는 부분: 서로 다른 정보나 해석의 차이 명확히 설명<br><br>**⚖️ 신뢰도 평가**<br>두 기사를 종합했을 때의 전체적인 신뢰도와 주의사항을 2-3문장으로 정리<br><br>※ 각 섹션은 <br><br>로 구분하고, 섹션 제목은 이모지+굵은 글씨(**텍스트**)로 표시하세요",
       "요약": "두 뉴스의 핵심 내용과 주요 차이점을 간결하게 요약"
@@ -5666,6 +5674,10 @@ ${comparisonContent}
         console.log('[handleApiError] Gemini API 할당량 초과 - 카운트 초기화');
         this.resetApiUsageCount('gemini');
         this.updateApiQuotaDisplay();
+        
+        // 할당량 소진 플래그 설정 및 모든 작업 중단
+        this.quotaExhausted = true;
+        this.cancelAllPendingOperations();
       }
       
       this.showErrorModal(
@@ -5699,6 +5711,64 @@ ${comparisonContent}
     } catch (error) {
       console.error('[resetApiUsageCount] 초기화 실패:', error);
     }
+  }
+
+  // 모든 진행 중인 작업 취소 및 롤백
+  cancelAllPendingOperations() {
+    console.warn('[cancelAllPendingOperations] API 할당량 소진, 모든 작업 취소 중...');
+    
+    // AbortController로 진행 중인 요청 취소
+    this.abortControllers.forEach((controller, id) => {
+      console.log('[cancelAllPendingOperations] 요청 취소:', id);
+      controller.abort();
+    });
+    this.abortControllers.clear();
+    
+    // 분석 중인 블록 롤백
+    this.newsBlocks.forEach((block, id) => {
+      if (block.status === 'analyzing' || block.status === 'pending') {
+        console.log('[cancelAllPendingOperations] 블록 롤백:', id);
+        
+        // 이전 결과가 있으면 복원
+        if (block.firstAnalysis || block.previousResult) {
+          block.result = block.firstAnalysis || block.previousResult;
+          block.status = 'completed';
+          console.log('[cancelAllPendingOperations] 이전 결과로 복원:', id);
+        } else {
+          block.status = 'error';
+          block.error = 'API 할당량 소진으로 작업이 취소되었습니다.';
+          console.log('[cancelAllPendingOperations] 이전 결과 없음, 에러 처리:', id);
+        }
+        
+        this.newsBlocks.set(id, block);
+      }
+    });
+    
+    // currentNews도 동일하게 처리
+    if (this.currentNews && (this.currentNews.status === 'analyzing' || this.currentNews.status === 'pending')) {
+      if (this.currentNews.firstAnalysis || this.currentNews.previousResult) {
+        this.currentNews.result = this.currentNews.firstAnalysis || this.currentNews.previousResult;
+        this.currentNews.status = 'completed';
+      } else {
+        this.currentNews.status = 'error';
+        this.currentNews.error = 'API 할당량 소진으로 작업이 취소되었습니다.';
+      }
+    }
+    
+    // 분석 타임아웃 정리
+    this.analysisTimeouts.forEach((timeout) => clearTimeout(timeout));
+    this.analysisTimeouts.clear();
+    
+    // 진행 중 플래그 초기화
+    this.searchInProgress.clear();
+    this.crossVerificationInProgress.clear();
+    this.autoFactCheckQueue.clear();
+    
+    // UI 업데이트
+    this.updatePanel();
+    this.saveNewsBlocks();
+    
+    console.log('[cancelAllPendingOperations] 작업 취소 및 롤백 완료');
   }
 
   // 실시간 스트리밍 결과 보기 모달
@@ -10789,6 +10859,13 @@ AnalysisPanel.prototype.findSimilarArticles = async function(blockId, skipLock =
 AnalysisPanel.prototype.searchFactCheck = async function(blockId) {
   console.log('[searchFactCheck] 시작, blockId:', blockId);
   
+  // API 할당량 소진 체크
+  if (this.quotaExhausted) {
+    console.warn('[searchFactCheck] API 할당량 소진, 사실 검증 중단:', blockId);
+    alert('API 할당량이 소진되어 사실 검증을 진행할 수 없습니다.');
+    return false;
+  }
+  
   const block = this.newsBlocks.get(blockId);
   if (!block) {
     console.error('블록을 찾을 수 없음:', blockId);
@@ -11132,28 +11209,91 @@ AnalysisPanel.prototype.searchFactCheck = async function(blockId) {
     console.log('[searchFactCheck] 출처별 - 뉴스:', newsCount, '개, 통합:', integratedCount, '개');
     console.log('[searchFactCheck] 📰 크롤링 우선 사용: snippet은 fallback으로만 사용됨');
 
-    this.updateFactCheckStatus(blockId, '🤖 AI 비교 검증 중...');
-    
-    // AI 분석 요청 (원본 뉴스와 크롤링된 기사들 비교)
-    const verificationResult = await this.verifyFactsWithAI(block, crawledArticles);
-    
-    this.updateFactCheckStatus(blockId, '✨ 전체 재분석 중...');
-    
-    // Gemini로 전체 재분석 (기존 분석 + 본문 + 사실 검증 결과)
     const previousResultSnapshot = block.result ? JSON.parse(JSON.stringify(block.result)) : null;
-    const reanalyzedResult = await this.reanalyzeWithFactCheck(block, crawledArticles, verificationResult);
-    
-    this.updateFactCheckStatus(blockId, '🎯 최종 통합 분석 중...');
-    
-    // 최종 통합 분석 수행 (BACKUP service_worker 방식)
+    let verificationResult = null;
+    let reanalyzedResult = null;
     let finalAnalysis = null;
+
+    this.updateFactCheckStatus(blockId, '🧠 AI 통합 분석 준비 중...');
+
+    let combinedResult = null;
     try {
-      finalAnalysis = await this.performFinalIntegratedAnalysis(block, crawledArticles, verificationResult);
-      console.log('[searchFactCheck] ✅ 최종 통합 분석 완료:', finalAnalysis);
+      this.updateFactCheckStatus(blockId, '🧠 AI 통합 분석 중...');
+      combinedResult = await this.performCombinedFactCheckAnalysis(block, crawledArticles);
     } catch (error) {
-      console.error('[searchFactCheck] 최종 통합 분석 실패:', error);
-      this.handleApiError(error, '최종 통합 분석');
-      // 실패해도 계속 진행 (선택적 기능)
+      console.error('[searchFactCheck] 통합 분석 호출 실패:', error);
+    }
+
+    if (combinedResult) {
+      verificationResult = combinedResult.verification || null;
+      reanalyzedResult = combinedResult.reanalyzed || null;
+      finalAnalysis = combinedResult.finalAnalysis || null;
+      if (!finalAnalysis && combinedResult.finalAnalysisHtml) {
+        finalAnalysis = this.parseHtmlFinalAnalysis(combinedResult.finalAnalysisHtml);
+      }
+
+      const hasSummary = Boolean(finalAnalysis && typeof finalAnalysis.summary === 'string' && finalAnalysis.summary.trim().length > 0 && finalAnalysis.summary !== '최종 분석 요약을 생성하는 중입니다.' && !/분석 결과 없음/i.test(finalAnalysis.summary));
+      const hasReasoning = Boolean(finalAnalysis && finalAnalysis.reasoning && Object.values(finalAnalysis.reasoning).some(section => (section || '').trim().length > 0));
+      const verdictLooksEmpty = !finalAnalysis || !finalAnalysis.final_verdict || finalAnalysis.final_verdict === '분석 결과 없음';
+      if (finalAnalysis && verdictLooksEmpty && !hasSummary && !hasReasoning) {
+        console.warn('[searchFactCheck] 통합 분석 응답이 비어 있음, fallback 수행');
+        finalAnalysis = null;
+      }
+
+      this.updateFactCheckStatus(blockId, '🧠 통합 결과 정리 중...');
+      console.log('[searchFactCheck] ✅ 통합 fact-check 결과 수신');
+      console.log('[searchFactCheck] finalAnalysis 객체:', finalAnalysis, 'HTML 길이:', combinedResult.finalAnalysisHtml ? combinedResult.finalAnalysisHtml.length : 0);
+    }
+
+    if (!verificationResult) {
+      this.updateFactCheckStatus(blockId, '🤖 AI 비교 검증 중...');
+      verificationResult = await this.verifyFactsWithAI(block, crawledArticles);
+    }
+
+    if (!reanalyzedResult) {
+      this.updateFactCheckStatus(blockId, '✨ 전체 재분석 중...');
+      reanalyzedResult = await this.reanalyzeWithFactCheck(block, crawledArticles, verificationResult);
+    }
+
+    if (!finalAnalysis) {
+      this.updateFactCheckStatus(blockId, '🎯 최종 통합 분석 중...');
+      try {
+        finalAnalysis = await this.performFinalIntegratedAnalysis(block, crawledArticles, verificationResult);
+        console.log('[searchFactCheck] ✅ 최종 통합 분석 완료 (fallback):', finalAnalysis);
+      } catch (error) {
+        console.error('[searchFactCheck] 최종 통합 분석 실패:', error);
+        this.handleApiError(error, '최종 통합 분석');
+      }
+    }
+
+    if (!verificationResult) {
+      verificationResult = {
+        일치하는_사실: [],
+        불일치하는_사실: [],
+        검증_불가: [],
+        종합_평가: '검증 결과를 생성할 수 없습니다.'
+      };
+    }
+
+    if (reanalyzedResult && verificationResult) {
+      reanalyzedResult.사실검증 = verificationResult;
+      reanalyzedResult.사실검증완료 = true;
+    }
+
+    if (!reanalyzedResult && previousResultSnapshot) {
+      reanalyzedResult = {
+        ...previousResultSnapshot,
+        사실검증: verificationResult,
+        사실검증완료: true
+      };
+    }
+
+    if (!reanalyzedResult) {
+      reanalyzedResult = {
+        ...(block.result || {}),
+        사실검증: verificationResult,
+        사실검증완료: true
+      };
     }
     
     this.updateFactCheckStatus(blockId, '🎉 검증 완료!');
@@ -11163,7 +11303,7 @@ AnalysisPanel.prototype.searchFactCheck = async function(blockId) {
       articles: crawledArticles,
       verification: verificationResult,
       reanalyzed: reanalyzedResult,
-      finalAnalysis: finalAnalysis, // 최종 통합 분석 결과 추가
+      finalAnalysis: finalAnalysis,
       previousResult: previousResultSnapshot,
       timestamp: Date.now(),
       mode: 'accuracy'
@@ -11362,16 +11502,25 @@ AnalysisPanel.prototype.callGoogleSearchAPI = async function(query, type, limit)
       'hypebeast.kr', 'hypebeast.com'
     ];
     
+    // 다운로드 파일 확장자 필터링
+    const excludedExtensions = ['.pdf', '.hwp', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx', '.zip', '.rar', '.7z'];
+    
     const filteredItems = data.items.filter(item => {
       const link = (item.link || '').toLowerCase();
       const displayLink = (item.displayLink || '').toLowerCase();
       
-      // 제외 도메인 체크
+      // 1. 제외 도메인 체크
       const isExcluded = excludedDomains.some(domain => 
         link.includes(domain) || displayLink.includes(domain)
       );
       
-      return !isExcluded;
+      // 2. 다운로드 URL 패턴 체크 (download.do, download.php 등)
+      const isDownloadLink = link.includes('/download.') || link.includes('download?') || link.includes('file_download');
+      
+      // 3. 파일 확장자 체크
+      const hasExcludedExtension = excludedExtensions.some(ext => link.endsWith(ext));
+      
+      return !isExcluded && !isDownloadLink && !hasExcludedExtension;
     });
     
     let orderedItems = filteredItems;
@@ -13189,7 +13338,17 @@ AnalysisPanel.prototype.extractJsonFromAiResponse = function(resultText) {
     return null;
   }
 
-  return this.safeParseJsonString(rawCandidate);
+  let parsed = this.safeParseJsonString(rawCandidate);
+  
+  // [{instruction, input, output}] 형식 unwrap
+  if (Array.isArray(parsed) && parsed.length > 0) {
+    const first = parsed[0];
+    if (first && typeof first === 'object' && 'output' in first) {
+      parsed = first.output;
+    }
+  }
+  
+  return parsed;
 };
 
 AnalysisPanel.prototype.safeParseJsonString = function(jsonString) {
@@ -13594,6 +13753,50 @@ AnalysisPanel.prototype.parseHtmlFinalAnalysis = function(htmlString) {
   }
 };
 
+// 통합 fact-check 응답을 표준 구조로 변환
+AnalysisPanel.prototype.parseCombinedFactCheckResponse = function(rawResult) {
+  if (!rawResult) {
+    return null;
+  }
+
+  let parsed = rawResult;
+  if (typeof parsed === 'string') {
+    parsed = this.extractJsonFromAiResponse(parsed) || this.safeParseJsonString(parsed) || parsed.trim();
+  }
+
+  if (Array.isArray(parsed) && parsed.length > 0) {
+    parsed = parsed[0]?.output || parsed[0];
+  }
+
+  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+    const verification = parsed.verification || parsed.fact_check || parsed.factCheck || null;
+    const reanalyzed = parsed.reanalyzed || parsed.analysis || parsed.updatedAnalysis || null;
+    const finalAnalysis = parsed.finalAnalysis || parsed.final_analysis || null;
+    const finalAnalysisHtml = parsed.finalAnalysisHtml || parsed.final_analysis_html || parsed.finalHtml || null;
+
+    return {
+      verification: verification || null,
+      reanalyzed: reanalyzed || null,
+      finalAnalysis: finalAnalysis || null,
+      finalAnalysisHtml: typeof finalAnalysisHtml === 'string' ? finalAnalysisHtml : null
+    };
+  }
+
+  if (typeof parsed === 'string') {
+    const looksLikeHtml = /<[^>]+>/i.test(parsed);
+    if (looksLikeHtml) {
+      return {
+        verification: null,
+        reanalyzed: null,
+        finalAnalysis: null,
+        finalAnalysisHtml: parsed
+      };
+    }
+  }
+
+  return null;
+};
+
 // 사실 검증 후 Gemini로 전체 재분석
 AnalysisPanel.prototype.reanalyzeWithFactCheck = async function(originalBlock, comparisonArticles, verificationResult) {
   console.log('[reanalyzeWithFactCheck] 재분석 시작');
@@ -13740,6 +13943,136 @@ JSON 형식으로 응답:
       사실검증완료: false,
       분석: '재분석 중 오류가 발생했습니다.'
     };
+  }
+};
+
+// 사실 검증 + 재분석 + 최종 HTML 리포트를 단일 호출로 처리
+AnalysisPanel.prototype.performCombinedFactCheckAnalysis = async function(originalBlock, comparisonArticles) {
+  console.log('[performCombinedFactCheckAnalysis] 통합 분석 시작');
+
+  if (!originalBlock || !originalBlock.title || !originalBlock.content || !originalBlock.result) {
+    console.error('[performCombinedFactCheckAnalysis] 원본 기사 데이터 부족');
+    return null;
+  }
+
+  if (!Array.isArray(comparisonArticles) || comparisonArticles.length === 0) {
+    console.error('[performCombinedFactCheckAnalysis] 비교 기사 데이터 부족');
+    return null;
+  }
+
+  const dateTimeContext = this.getDateTimeContext();
+  const originalArticleAnalysis = JSON.stringify(originalBlock.result, null, 2);
+  const originalArticleContent = (originalBlock.content || '').substring(0, 1800) || '본문이 제공되지 않았습니다.';
+  const comparisonSection = comparisonArticles.map((article, index) => {
+    const safeTitle = article.title || '제목 정보 없음';
+    const safeLink = article.link || '링크 정보 없음';
+    const safeSource = article.displayLink || safeLink;
+    const sourceLabel = article.searchSource === 'integrated' ? '통합 웹 참고 자료' : '사실 검증 참고 기사';
+    const crawlLabel = article.crawledContent ? '크롤링 본문' : 'Google 검색 요약';
+    const snippet = (article.crawledContent || article.snippet || '내용 정보 없음').replace(/\s+/g, ' ').trim().substring(0, 900);
+    return `### ${sourceLabel} ${index + 1}\n제목: ${safeTitle}\n출처: ${safeSource}\n링크: ${safeLink}\n유형: ${crawlLabel}\n내용: ${snippet}\n`;
+  }).join('\n');
+
+  const prompt = `${dateTimeContext}
+
+당신은 뉴스 진위 판별 전문가입니다. 아래 데이터를 사용해 사실 검증, 재분석, 최종 HTML 리포트를 **한 번에** 작성하세요.
+
+## 입력 데이터
+1. 원본 기사 제목: ${originalBlock.title}
+2. 원본 기사 본문 발췌: ${originalArticleContent}
+3. 기존 1차 AI 분석 결과(JSON):
+${originalArticleAnalysis}
+4. 사실 검증용 비교 기사:
+${comparisonSection}
+
+## 작업 단계
+1. 비교 기사들을 활용해 원본 기사의 주장에 대해 사실 검증을 수행하고, 일치/불일치/검증불가 사례와 종합 평가(5단계)를 작성하세요. 각 항목에는 근거 기사 번호를 [1][2] 형식으로 표기하세요.
+2. 사실 검증 결과를 반영하여 기존 분석 JSON을 재작성하세요. 진위는 반드시 '거짓/대체로 거짓/일부 사실/대체로 사실/사실' 중 하나만 사용하고, "사실검증완료" 값을 true로 설정하세요.
+3. 최종 통합 리포트는 class="final-analysis-result" 구조의 HTML로 작성하세요. 이전 템플릿(최종 판단, 요약, 상세 분석 4개 섹션)을 그대로 따르고, 인용에는 <blockquote> 태그를 사용하세요.
+
+## ⚠️ 중요: 응답 형식 (반드시 준수)
+아래 JSON 구조로만 응답하세요. 마크다운이나 설명 텍스트를 추가하지 마세요.
+
+\`\`\`json
+{
+  "verification": {
+    "일치하는_사실": ["항목 [1][2]", "항목 [2][3]"],
+    "불일치하는_사실": ["항목 [3]"],
+    "검증_불가": ["항목"],
+    "종합_평가": "5단계 진위(거짓/대체로 거짓/일부 사실/대체로 사실/사실) 중 하나를 포함한 설명"
+  },
+  "reanalyzed": {
+    "진위": "거짓 또는 대체로 거짓 또는 일부 사실 또는 대체로 사실 또는 사실",
+    "요약": "사실 검증을 반영한 2-3문장 요약",
+    "근거": "기존 근거 + 사실 검증 결과를 자연스럽게 결합한 텍스트",
+    "분석": "검증 기사 개수를 명시하며 일치/불일치/검증불가 사례를 포함한 상세 분석 텍스트",
+    "키워드": "기존 키워드 유지",
+    "검색어": "기존 검색어 유지",
+    "사실검증완료": true
+  },
+  "finalAnalysisHtml": "<div class=\"final-analysis-result\"><div class=\"verdict-section\"><div class=\"verdict-header\"><h3>최종 판단</h3><span class=\"verdict-badge level-X\">진위 판단</span></div><p class=\"verdict-summary\">요약 내용</p></div><div class=\"analysis-section\"><h3>상세 분석</h3><div class=\"subsection\"><h4>초기 분석 재검토</h4><p>내용...</p></div><div class=\"subsection\"><h4>외부 자료 확인</h4><ul><li>내용 [1][2]</li></ul></div><div class=\"subsection\"><h4>불일치 사항</h4><p>내용...</p></div><div class=\"subsection\"><h4>검증 불가</h4><p>내용...</p></div></div></div>"
+}
+\`\`\`
+
+**필수 규칙**
+1. JSON 외 텍스트나 마크다운(\`\`\`json 제외) 절대 금지
+2. finalAnalysisHtml은 반드시 문자열로, 위 HTML 구조를 정확히 따르세요
+3. finalAnalysisHtml에는 <blockquote> 태그를 사용해 인용문 표시
+4. 각 사실 항목에는 근거 기사 번호를 [1][2] 형식으로 표기
+5. 진위는 5단계 표현(거짓/대체로 거짓/일부 사실/대체로 사실/사실)만 사용
+`;
+
+  if (!this.isChromeApiAvailable()) {
+    console.warn('[performCombinedFactCheckAnalysis] Chrome API unavailable');
+    return null;
+  }
+
+  try {
+    const response = await new Promise((resolve, reject) => {
+      chrome.runtime.sendMessage({
+        action: 'analyzeNewsWithGemini',
+        newsContent: prompt,
+        blockId: 'combined_factcheck_' + Date.now(),
+        isStreaming: false
+      }, (result) => {
+        if (chrome.runtime.lastError) {
+          reject(chrome.runtime.lastError);
+          return;
+        }
+        resolve(result);
+      });
+    });
+
+    if (!response || response.success === false || !response.result) {
+      console.warn('[performCombinedFactCheckAnalysis] 응답 실패:', response?.error || response?.status || 'unknown error');
+      console.warn('[performCombinedFactCheckAnalysis] 전체 응답:', JSON.stringify(response, null, 2));
+      return null;
+    }
+
+    if (response.incrementApiUsage) {
+      this.incrementApiUsage(response.incrementApiUsage.type, response.incrementApiUsage.count);
+    }
+
+    console.log('[performCombinedFactCheckAnalysis] 원본 응답 타입:', typeof response.result);
+    console.log('[performCombinedFactCheckAnalysis] 원본 응답 미리보기:', JSON.stringify(response.result).substring(0, 500));
+
+    const parsedResult = this.parseCombinedFactCheckResponse(response.result);
+    if (parsedResult) {
+      console.log('[performCombinedFactCheckAnalysis] 파싱 성공:', {
+        hasVerification: !!parsedResult.verification,
+        hasReanalyzed: !!parsedResult.reanalyzed,
+        hasFinalAnalysis: !!parsedResult.finalAnalysis,
+        htmlLength: parsedResult.finalAnalysisHtml?.length || 0
+      });
+      return parsedResult;
+    }
+
+    console.warn('[performCombinedFactCheckAnalysis] 통합 결과 파싱 실패');
+    console.warn('[performCombinedFactCheckAnalysis] parsedResult:', parsedResult);
+    return null;
+  } catch (error) {
+    console.error('[performCombinedFactCheckAnalysis] 호출 오류:', error);
+    return null;
   }
 };
 

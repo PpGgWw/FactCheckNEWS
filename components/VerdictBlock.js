@@ -10,10 +10,59 @@ class VerdictBlock {
   }
 
   getVerdictConfig() {
-    // 더 정교한 키워드 분석
+    // 더 정교한 키워드 분석 (우선순위: 구체적 → 일반적)
     const contentLower = this.content.toLowerCase();
     
-    if (contentLower.includes('진짜') || contentLower.includes('사실') || contentLower.includes('정확')) {
+    // 1순위: 정확한 5단계 판단 매칭
+    if (contentLower.includes('거짓') && !contentLower.includes('대체로')) {
+      return {
+        type: 'false',
+        label: '거짓',
+        bgColor: 'bg-status-error-light',
+        borderColor: 'border-status-error',
+        titleColor: 'text-status-error-dark',
+        iconBg: 'bg-status-error',
+        icon: '✗',
+        emoji: '❌',
+        gradient: 'from-status-error-light to-red-50'
+      };
+    } else if (contentLower.includes('대체로 거짓')) {
+      return {
+        type: 'mostly-false',
+        label: '대체로 거짓',
+        bgColor: 'bg-status-error-light',
+        borderColor: 'border-status-error',
+        titleColor: 'text-status-error-dark',
+        iconBg: 'bg-status-error',
+        icon: '✗',
+        emoji: '⚠️',
+        gradient: 'from-orange-100 to-red-50'
+      };
+    } else if (contentLower.includes('일부 사실')) {
+      return {
+        type: 'partial',
+        label: '일부 사실',
+        bgColor: 'bg-status-warning-light',
+        borderColor: 'border-status-warning',
+        titleColor: 'text-status-warning-dark',
+        iconBg: 'bg-status-warning',
+        icon: '◐',
+        emoji: '⚠️',
+        gradient: 'from-status-warning-light to-yellow-50'
+      };
+    } else if (contentLower.includes('대체로 사실')) {
+      return {
+        type: 'mostly-true',
+        label: '대체로 사실',
+        bgColor: 'bg-status-success-light',
+        borderColor: 'border-status-success',
+        titleColor: 'text-status-success-dark',
+        iconBg: 'bg-status-success',
+        icon: '✓',
+        emoji: '✅',
+        gradient: 'from-green-100 to-green-50'
+      };
+    } else if (contentLower === '사실' || (contentLower.includes('사실') && !contentLower.includes('일부') && !contentLower.includes('대체로') && !contentLower.includes('부분'))) {
       return {
         type: 'true',
         label: '사실',
@@ -25,7 +74,22 @@ class VerdictBlock {
         emoji: '✅',
         gradient: 'from-status-success-light to-green-50'
       };
-    } else if (contentLower.includes('가짜') || contentLower.includes('거짓') || contentLower.includes('허위')) {
+    }
+    
+    // 2순위: 구형 키워드 호환성 (진짜/가짜)
+    if (contentLower.includes('진짜') || contentLower.includes('정확')) {
+      return {
+        type: 'true',
+        label: '사실',
+        bgColor: 'bg-status-success-light',
+        borderColor: 'border-status-success',
+        titleColor: 'text-status-success-dark',
+        iconBg: 'bg-status-success',
+        icon: '✓',
+        emoji: '✅',
+        gradient: 'from-status-success-light to-green-50'
+      };
+    } else if (contentLower.includes('가짜') || contentLower.includes('허위')) {
       return {
         type: 'false',
         label: '허위',
@@ -37,7 +101,7 @@ class VerdictBlock {
         emoji: '❌',
         gradient: 'from-status-error-light to-red-50'
       };
-    } else if (contentLower.includes('부분') || contentLower.includes('일부')) {
+    } else if (contentLower.includes('부분')) {
       return {
         type: 'partial',
         label: '부분적 사실',
