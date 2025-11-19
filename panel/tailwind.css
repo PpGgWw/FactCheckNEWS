@@ -769,14 +769,6 @@ button {
   box-shadow: var(--tw-ring-offset-shadow, 0 0 #0000), var(--tw-ring-shadow, 0 0 #0000), var(--tw-shadow);
 }
 
-/* 뉴스 블록 배경색 부드러운 전환 */
-
-.news-block-container {
-  transition: background-color 0.8s cubic-bezier(0.4, 0, 0.2, 1),
-                border-color 0.8s cubic-bezier(0.4, 0, 0.2, 1),
-                box-shadow 1.2s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
 /* Enhanced Input Styles */
 
 /* Loading States */

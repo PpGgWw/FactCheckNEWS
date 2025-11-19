@@ -13,11 +13,20 @@ class DaumNewsParser {
 
   /**
    * 현재 URL이 다음 뉴스 페이지인지 확인
+   * 메인 페이지(news.daum.net)는 제외하고 실제 기사 페이지만 대상으로 함
    */
   canParse(url) {
+    // 메인 페이지 제외 (정확히 news.daum.net/ 또는 news.daum.net으로 끝나는 경우)
+    const isMainPage = /^https?:\/\/news\.daum\.net\/?(\?.*)?$/.test(url);
+    if (isMainPage) {
+      return false;
+    }
+    
+    // 실제 뉴스 기사 URL 패턴 확인
     return url.includes('v.daum.net/v/') || 
            url.includes('news.v.daum.net/') || 
-           url.includes('news.daum.net/');
+           url.includes('news.daum.net/breakingnews/') ||
+           url.includes('news.daum.net/cluster/');
   }
 
   /**
