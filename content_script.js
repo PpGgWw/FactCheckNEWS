@@ -128,34 +128,34 @@ async function getSavedVerdict() {
 function getColorScheme(verdict) {
   const colors = {
     '사실': {
-      background: 'rgba(16, 185, 129, 0.12)',
-      border: '#6EE7B7',
-      accent: '#A7F3D0'
+      background: 'rgba(85, 107, 47, 0.12)',
+      border: '#556B2F',
+      accent: '#8FBC8F'
     },
     '대체로 사실': {
-      background: 'rgba(45, 212, 191, 0.12)',
-      border: '#5EEAD4',
+      background: 'rgba(102, 139, 139, 0.12)',
+      border: '#668B8B',
       accent: '#99F6E4'
     },
     '일부 사실': {
-      background: 'rgba(251, 191, 36, 0.12)',
-      border: '#FCD34D',
+      background: 'rgba(218, 165, 32, 0.12)',
+      border: '#DAA520',
       accent: '#FDE68A'
     },
     '대체로 거짓': {
-      background: 'rgba(251, 146, 60, 0.14)',
-      border: '#FDBA74',
+      background: 'rgba(205, 133, 63, 0.14)',
+      border: '#CD853F',
       accent: '#FED7AA'
     },
     '거짓': {
-      background: 'rgba(248, 113, 113, 0.16)',
-      border: '#FCA5A5',
+      background: 'rgba(178, 34, 34, 0.16)',
+      border: '#B22222',
       accent: '#FECACA'
     },
     default: {
-      background: 'rgba(187, 197, 233, 0.12)',
-      border: '#CBD3F1',
-      accent: '#E5E9FB'
+      background: 'rgba(201, 181, 156, 0.12)',
+      border: '#D9CFC7',
+      accent: '#EFE9E3'
     }
   };
 
@@ -425,18 +425,19 @@ function highlightSuspiciousSentences(suspiciousSentences) {
         bottom: 125%;
         left: 50%;
         transform: translateX(-50%);
-        background-color: #2C3E50;
-        color: white;
+        background-color: #4A4036;
+        color: #F9F8F6;
         padding: 8px 12px;
         border-radius: 6px;
         font-size: 13px;
         white-space: normal;
         max-width: 300px;
         z-index: 10000;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        box-shadow: 0 4px 6px rgba(0,0,0,0.15);
         line-height: 1.4;
         opacity: 0;
         transition: opacity 0.3s, visibility 0.3s;
+        border: 1px solid #C9B59C;
       }
       
       .suspicious-tooltip::after {
@@ -447,7 +448,7 @@ function highlightSuspiciousSentences(suspiciousSentences) {
         transform: translateX(-50%);
         border-width: 6px;
         border-style: solid;
-        border-color: #2C3E50 transparent transparent transparent;
+        border-color: #4A4036 transparent transparent transparent;
       }
       
       .suspicious-sentence-highlight:hover .suspicious-tooltip {
@@ -630,7 +631,7 @@ function showErrorModal(errorMessage, errorTitle = 'API 호출 실패') {
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.6);
+    background: rgba(60, 50, 40, 0.4);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -641,13 +642,14 @@ function showErrorModal(errorMessage, errorTitle = 'API 호출 실패') {
   
   const modalContent = document.createElement('div');
   modalContent.style.cssText = `
-    background: white;
+    background: #F9F8F6;
     border-radius: 16px;
     padding: 32px;
     max-width: 500px;
     width: 90%;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
     animation: slideUp 0.3s ease;
+    border: 1px solid #EFE9E3;
   `;
   
   // 아이콘 추가
@@ -656,13 +658,13 @@ function showErrorModal(errorMessage, errorTitle = 'API 호출 실패') {
     width: 64px;
     height: 64px;
     margin: 0 auto 20px;
-    background: ${is429Error ? 'linear-gradient(135deg, #FFA726 0%, #FB8C00 100%)' : 'linear-gradient(135deg, #EF5350 0%, #D32F2F 100%)'};
+    background: ${is429Error ? 'linear-gradient(135deg, #C9B59C 0%, #D9CFC7 100%)' : 'linear-gradient(135deg, #EF5350 0%, #D32F2F 100%)'};
     border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 32px;
-    color: white;
+    color: ${is429Error ? '#000000' : 'white'};
   `;
   icon.textContent = is429Error ? '⚠️' : '❌';
   
@@ -672,7 +674,7 @@ function showErrorModal(errorMessage, errorTitle = 'API 호출 실패') {
     margin: 0 0 16px 0;
     font-size: 22px;
     font-weight: 700;
-    color: ${is429Error ? '#F57C00' : '#D32F2F'};
+    color: ${is429Error ? '#4A4036' : '#D32F2F'};
     text-align: center;
   `;
   
@@ -682,7 +684,7 @@ function showErrorModal(errorMessage, errorTitle = 'API 호출 실패') {
     margin: 0 0 24px 0;
     font-size: 15px;
     line-height: 1.7;
-    color: #424242;
+    color: #000000;
     white-space: pre-wrap;
     text-align: ${is429Error ? 'left' : 'center'};
   `;
@@ -690,8 +692,8 @@ function showErrorModal(errorMessage, errorTitle = 'API 호출 실패') {
   const closeButton = document.createElement('button');
   closeButton.textContent = '확인';
   closeButton.style.cssText = `
-    background: ${is429Error ? 'linear-gradient(135deg, #FFA726 0%, #FB8C00 100%)' : 'linear-gradient(135deg, #EF5350 0%, #D32F2F 100%)'};
-    color: white;
+    background: ${is429Error ? '#C9B59C' : '#EF5350'};
+    color: ${is429Error ? '#000000' : 'white'};
     border: none;
     border-radius: 10px;
     padding: 14px 24px;
@@ -700,17 +702,17 @@ function showErrorModal(errorMessage, errorTitle = 'API 호출 실패') {
     cursor: pointer;
     width: 100%;
     transition: all 0.2s;
-    box-shadow: 0 4px 12px ${is429Error ? 'rgba(255, 167, 38, 0.4)' : 'rgba(211, 47, 47, 0.4)'};
+    box-shadow: 0 4px 12px ${is429Error ? 'rgba(201, 181, 156, 0.4)' : 'rgba(211, 47, 47, 0.4)'};
   `;
   
   closeButton.onmouseover = () => {
     closeButton.style.transform = 'translateY(-2px)';
-    closeButton.style.boxShadow = `0 6px 16px ${is429Error ? 'rgba(255, 167, 38, 0.5)' : 'rgba(211, 47, 47, 0.5)'}`;
+    closeButton.style.boxShadow = `0 6px 16px ${is429Error ? 'rgba(201, 181, 156, 0.5)' : 'rgba(211, 47, 47, 0.5)'}`;
   };
   
   closeButton.onmouseout = () => {
     closeButton.style.transform = 'translateY(0)';
-    closeButton.style.boxShadow = `0 4px 12px ${is429Error ? 'rgba(255, 167, 38, 0.4)' : 'rgba(211, 47, 47, 0.4)'}`;
+    closeButton.style.boxShadow = `0 4px 12px ${is429Error ? 'rgba(201, 181, 156, 0.4)' : 'rgba(211, 47, 47, 0.4)'}`;
   };
   
   closeButton.onclick = () => {

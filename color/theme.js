@@ -1,53 +1,53 @@
 const colors = {
   // Main Palette with Semantic Names
-  'primary': '#F2CEA2',        // 주요 배경/강조색
-  'primary-dark': '#E6B885',   // 주요색 진한 버전
-  'primary-light': '#F8E3C4',  // 주요색 밝은 버전
+  'primary': '#C9B59C',        // Darkest Beige (User provided)
+  'primary-dark': '#A8957D',   // Darkened version
+  'primary-light': '#D9CFC7',  // Medium Beige (User provided)
   
-  'secondary': '#BF9780',      // 보조색/컨테이너
-  'secondary-dark': '#A67F66',  // 보조색 진한 버전
-  'secondary-light': '#D4B29A', // 보조색 밝은 버전
+  'secondary': '#D9CFC7',      // Medium Beige (User provided)
+  'secondary-dark': '#C9B59C', // Darkest Beige (User provided)
+  'secondary-light': '#EFE9E3', // Light Beige (User provided)
   
-  'background': '#FAFAFA',     // 메인 배경색 (더 밝게)
-  'background-dark': '#F2F2F2', // 배경색 어두운 버전
-  'background-panel': '#E8E8E8', // 패널 배경색 (더 어둡게)
-  'background-card': '#FFFFFF', // 카드 배경색
+  'background': '#F9F8F6',     // Lightest Beige (User provided)
+  'background-dark': '#EFE9E3', // Light Beige (User provided)
+  'background-panel': '#F9F8F6', // Lightest Beige
+  'background-card': '#FFFFFF', // White for cards
   
-  'text-primary': '#1A1A1A',   // 주요 텍스트 (더 진하게)
-  'text-secondary': '#6B6B6B', // 보조 텍스트 (약간 밝게)
-  'text-muted': '#9CA3AF',     // 비활성 텍스트
+  'text-primary': '#000000',   // Black (User requested)
+  'text-secondary': '#333333', // Dark Gray
+  'text-muted': '#666666',     // Medium Gray
   
   // Surface Colors
-  'surface': '#FFFFFF',        // 카드/패널 표면
-  'surface-hover': '#F9F9F9',  // 호버 상태
-  'surface-active': '#F0F0F0', // 활성 상태
+  'surface': '#FFFFFF',        // White
+  'surface-hover': '#F9F8F6',  // Lightest Beige
+  'surface-active': '#EFE9E3', // Light Beige
   
   // Border Colors
-  'border': '#E5E5E5',         // 기본 테두리
-  'border-light': '#F0F0F0',   // 밝은 테두리
-  'border-dark': '#D1D1D1',    // 진한 테두리
+  'border': '#D9CFC7',         // Medium Beige
+  'border-light': '#EFE9E3',   // Light Beige
+  'border-dark': '#C9B59C',    // Darkest Beige
 
-  // Semantic/Status Colors (개선된 색상)
-  'status-success': '#10B981',      // 성공 (초록)
-  'status-success-light': '#D1FAE5', // 성공 배경
-  'status-success-dark': '#059669',  // 성공 진한색
+  // Semantic/Status Colors (Standard colors for clarity)
+  'status-success': '#10B981',      // Green
+  'status-success-light': '#D1FAE5', 
+  'status-success-dark': '#059669',  
   
-  'status-error': '#EF4444',        // 오류 (빨강)
-  'status-error-light': '#FEE2E2',  // 오류 배경
-  'status-error-dark': '#DC2626',   // 오류 진한색
+  'status-error': '#EF4444',        // Red
+  'status-error-light': '#FEE2E2',  
+  'status-error-dark': '#DC2626',   
   
-  'status-warning': '#F59E0B',      // 경고 (주황)
-  'status-warning-light': '#FEF3C7', // 경고 배경
-  'status-warning-dark': '#D97706',  // 경고 진한색
+  'status-warning': '#F59E0B',      // Orange
+  'status-warning-light': '#FEF3C7', 
+  'status-warning-dark': '#D97706',  
   
-  'status-info': '#3B82F6',         // 정보 (파랑)
-  'status-info-light': '#DBEAFE',   // 정보 배경
-  'status-info-dark': '#2563EB',    // 정보 진한색
+  'status-info': '#3B82F6',         // Blue
+  'status-info-light': '#DBEAFE',   
+  'status-info-dark': '#2563EB',    
   
   // Interactive Colors
-  'accent': '#8B5CF6',              // 액센트 색상
-  'accent-light': '#EDE9FE',        // 액센트 배경
-  'accent-dark': '#7C3AED',         // 액센트 진한색
+  'accent': '#C9B59C',              // Use Primary as Accent
+  'accent-light': '#EFE9E3',        
+  'accent-dark': '#A8957D',         
 };
 
 module.exports = colors;

@@ -18,7 +18,8 @@ class EvidenceBlock {
         bgColor: 'bg-status-success-light',
         borderColor: 'border-status-success/30',
         headerColor: 'text-status-success-dark',
-        iconBg: 'bg-status-success'
+        iconBg: 'bg-status-success',
+        iconTextClass: 'text-white'
       },
       'contradicting': {
         icon: '❌',
@@ -27,7 +28,8 @@ class EvidenceBlock {
         bgColor: 'bg-status-error-light',
         borderColor: 'border-status-error/30',
         headerColor: 'text-status-error-dark',
-        iconBg: 'bg-status-error'
+        iconBg: 'bg-status-error',
+        iconTextClass: 'text-white'
       },
       'neutral': {
         icon: 'ℹ️',
@@ -36,7 +38,8 @@ class EvidenceBlock {
         bgColor: 'bg-status-info-light',
         borderColor: 'border-status-info/30',
         headerColor: 'text-status-info-dark',
-        iconBg: 'bg-status-info'
+        iconBg: 'bg-status-info',
+        iconTextClass: 'text-white'
       },
       'general': {
         icon: '📄',
@@ -45,7 +48,8 @@ class EvidenceBlock {
         bgColor: 'bg-surface',
         borderColor: 'border-border',
         headerColor: 'text-text-primary',
-        iconBg: 'bg-secondary'
+        iconBg: 'bg-secondary',
+        iconTextClass: 'text-text-primary'
       }
     };
     
@@ -65,7 +69,7 @@ class EvidenceBlock {
           ${this.sources.map((source, index) => `
             <div class="flex items-start space-x-3 p-2 bg-surface-hover rounded-lg">
               <div class="w-6 h-6 bg-primary rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                <span class="text-white text-xs font-bold">${index + 1}</span>
+                <span class="text-text-primary text-xs font-bold">${index + 1}</span>
               </div>
               <div class="flex-1 min-w-0">
                 <a href="${source.url || '#'}" 
@@ -107,7 +111,7 @@ class EvidenceBlock {
         <div class="${config.bgColor} p-4 border-b ${config.borderColor}">
           <div class="flex items-start space-x-3">
             <div class="w-10 h-10 ${config.iconBg} rounded-xl flex items-center justify-center flex-shrink-0 shadow-soft">
-              <span class="text-white text-lg">${config.emoji}</span>
+              <span class="${config.iconTextClass || 'text-white'} text-lg">${config.emoji}</span>
             </div>
             <div class="flex-1 min-w-0">
               <div class="flex items-center space-x-2 mb-1">

@@ -560,10 +560,10 @@ video {
 
 body {
   --tw-bg-opacity: 1;
-  background-color: rgb(250 250 250 / var(--tw-bg-opacity, 1));
+  background-color: rgb(249 248 246 / var(--tw-bg-opacity, 1));
   font-family: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
   --tw-text-opacity: 1;
-  color: rgb(26 26 26 / var(--tw-text-opacity, 1));
+  color: rgb(0 0 0 / var(--tw-text-opacity, 1));
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -643,7 +643,7 @@ button {
   border-radius: 16px;
   border-width: 1px;
   --tw-border-opacity: 1;
-  border-color: rgb(229 229 229 / var(--tw-border-opacity, 1));
+  border-color: rgb(217 207 199 / var(--tw-border-opacity, 1));
   --tw-bg-opacity: 1;
   background-color: rgb(255 255 255 / var(--tw-bg-opacity, 1));
   --tw-shadow: 0 2px 15px -3px rgba(0, 0, 0, 0.07), 0 10px 20px -2px rgba(0, 0, 0, 0.04);
@@ -759,7 +759,7 @@ button {
   border-radius: 20px;
   border-width: 1px;
   --tw-border-opacity: 1;
-  border-color: rgb(229 229 229 / var(--tw-border-opacity, 1));
+  border-color: rgb(217 207 199 / var(--tw-border-opacity, 1));
   --tw-bg-opacity: 1;
   background-color: rgb(255 255 255 / var(--tw-bg-opacity, 1));
   font-size: 1rem;
@@ -784,7 +784,7 @@ button {
   justify-content: center;
   border-radius: 0.5rem;
   --tw-text-opacity: 1;
-  color: rgb(107 107 107 / var(--tw-text-opacity, 1));
+  color: rgb(51 51 51 / var(--tw-text-opacity, 1));
   transition-property: all;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
   transition-duration: 200ms;
@@ -792,9 +792,9 @@ button {
 
 .icon-btn:hover {
   --tw-bg-opacity: 1;
-  background-color: rgb(249 249 249 / var(--tw-bg-opacity, 1));
+  background-color: rgb(249 248 246 / var(--tw-bg-opacity, 1));
   --tw-text-opacity: 1;
-  color: rgb(26 26 26 / var(--tw-text-opacity, 1));
+  color: rgb(0 0 0 / var(--tw-text-opacity, 1));
 }
 
 /* Typography */
@@ -804,7 +804,7 @@ button {
   line-height: 1.5rem;
   line-height: 1.625;
   --tw-text-opacity: 1;
-  color: rgb(26 26 26 / var(--tw-text-opacity, 1));
+  color: rgb(0 0 0 / var(--tw-text-opacity, 1));
 }
 
 /* Badge Components */
@@ -1243,32 +1243,32 @@ button {
 
 .border-accent {
   --tw-border-opacity: 1;
-  border-color: rgb(139 92 246 / var(--tw-border-opacity, 1));
+  border-color: rgb(201 181 156 / var(--tw-border-opacity, 1));
 }
 
 .border-border {
   --tw-border-opacity: 1;
-  border-color: rgb(229 229 229 / var(--tw-border-opacity, 1));
+  border-color: rgb(217 207 199 / var(--tw-border-opacity, 1));
 }
 
 .border-border-dark {
   --tw-border-opacity: 1;
-  border-color: rgb(209 209 209 / var(--tw-border-opacity, 1));
+  border-color: rgb(201 181 156 / var(--tw-border-opacity, 1));
 }
 
 .border-border-light {
   --tw-border-opacity: 1;
-  border-color: rgb(240 240 240 / var(--tw-border-opacity, 1));
+  border-color: rgb(239 233 227 / var(--tw-border-opacity, 1));
 }
 
 .border-primary {
   --tw-border-opacity: 1;
-  border-color: rgb(242 206 162 / var(--tw-border-opacity, 1));
+  border-color: rgb(201 181 156 / var(--tw-border-opacity, 1));
 }
 
 .border-secondary {
   --tw-border-opacity: 1;
-  border-color: rgb(191 151 128 / var(--tw-border-opacity, 1));
+  border-color: rgb(217 207 199 / var(--tw-border-opacity, 1));
 }
 
 .border-status-error {
@@ -1325,22 +1325,22 @@ button {
 
 .bg-accent {
   --tw-bg-opacity: 1;
-  background-color: rgb(139 92 246 / var(--tw-bg-opacity, 1));
+  background-color: rgb(201 181 156 / var(--tw-bg-opacity, 1));
 }
 
 .bg-accent-dark {
   --tw-bg-opacity: 1;
-  background-color: rgb(124 58 237 / var(--tw-bg-opacity, 1));
+  background-color: rgb(168 149 125 / var(--tw-bg-opacity, 1));
 }
 
 .bg-accent-light {
   --tw-bg-opacity: 1;
-  background-color: rgb(237 233 254 / var(--tw-bg-opacity, 1));
+  background-color: rgb(239 233 227 / var(--tw-bg-opacity, 1));
 }
 
 .bg-background {
   --tw-bg-opacity: 1;
-  background-color: rgb(250 250 250 / var(--tw-bg-opacity, 1));
+  background-color: rgb(249 248 246 / var(--tw-bg-opacity, 1));
 }
 
 .bg-background-card {
@@ -1350,42 +1350,42 @@ button {
 
 .bg-background-dark {
   --tw-bg-opacity: 1;
-  background-color: rgb(242 242 242 / var(--tw-bg-opacity, 1));
+  background-color: rgb(239 233 227 / var(--tw-bg-opacity, 1));
 }
 
 .bg-border-light {
   --tw-bg-opacity: 1;
-  background-color: rgb(240 240 240 / var(--tw-bg-opacity, 1));
+  background-color: rgb(239 233 227 / var(--tw-bg-opacity, 1));
 }
 
 .bg-primary {
   --tw-bg-opacity: 1;
-  background-color: rgb(242 206 162 / var(--tw-bg-opacity, 1));
+  background-color: rgb(201 181 156 / var(--tw-bg-opacity, 1));
 }
 
 .bg-primary-dark {
   --tw-bg-opacity: 1;
-  background-color: rgb(230 184 133 / var(--tw-bg-opacity, 1));
+  background-color: rgb(168 149 125 / var(--tw-bg-opacity, 1));
 }
 
 .bg-primary-light {
   --tw-bg-opacity: 1;
-  background-color: rgb(248 227 196 / var(--tw-bg-opacity, 1));
+  background-color: rgb(217 207 199 / var(--tw-bg-opacity, 1));
 }
 
 .bg-secondary {
   --tw-bg-opacity: 1;
-  background-color: rgb(191 151 128 / var(--tw-bg-opacity, 1));
+  background-color: rgb(217 207 199 / var(--tw-bg-opacity, 1));
 }
 
 .bg-secondary-dark {
   --tw-bg-opacity: 1;
-  background-color: rgb(166 127 102 / var(--tw-bg-opacity, 1));
+  background-color: rgb(201 181 156 / var(--tw-bg-opacity, 1));
 }
 
 .bg-secondary-light {
   --tw-bg-opacity: 1;
-  background-color: rgb(212 178 154 / var(--tw-bg-opacity, 1));
+  background-color: rgb(239 233 227 / var(--tw-bg-opacity, 1));
 }
 
 .bg-status-error {
@@ -1455,12 +1455,12 @@ button {
 
 .bg-surface-active {
   --tw-bg-opacity: 1;
-  background-color: rgb(240 240 240 / var(--tw-bg-opacity, 1));
+  background-color: rgb(239 233 227 / var(--tw-bg-opacity, 1));
 }
 
 .bg-surface-hover {
   --tw-bg-opacity: 1;
-  background-color: rgb(249 249 249 / var(--tw-bg-opacity, 1));
+  background-color: rgb(249 248 246 / var(--tw-bg-opacity, 1));
 }
 
 .bg-gradient-to-r {
@@ -1612,17 +1612,17 @@ button {
 
 .text-accent {
   --tw-text-opacity: 1;
-  color: rgb(139 92 246 / var(--tw-text-opacity, 1));
+  color: rgb(201 181 156 / var(--tw-text-opacity, 1));
 }
 
 .text-accent-dark {
   --tw-text-opacity: 1;
-  color: rgb(124 58 237 / var(--tw-text-opacity, 1));
+  color: rgb(168 149 125 / var(--tw-text-opacity, 1));
 }
 
 .text-primary {
   --tw-text-opacity: 1;
-  color: rgb(242 206 162 / var(--tw-text-opacity, 1));
+  color: rgb(201 181 156 / var(--tw-text-opacity, 1));
 }
 
 .text-status-error {
@@ -1667,17 +1667,17 @@ button {
 
 .text-text-muted {
   --tw-text-opacity: 1;
-  color: rgb(156 163 175 / var(--tw-text-opacity, 1));
+  color: rgb(102 102 102 / var(--tw-text-opacity, 1));
 }
 
 .text-text-primary {
   --tw-text-opacity: 1;
-  color: rgb(26 26 26 / var(--tw-text-opacity, 1));
+  color: rgb(0 0 0 / var(--tw-text-opacity, 1));
 }
 
 .text-text-secondary {
   --tw-text-opacity: 1;
-  color: rgb(107 107 107 / var(--tw-text-opacity, 1));
+  color: rgb(51 51 51 / var(--tw-text-opacity, 1));
 }
 
 .text-white {
@@ -1777,32 +1777,32 @@ button {
 
 .hover\:border-primary:hover {
   --tw-border-opacity: 1;
-  border-color: rgb(242 206 162 / var(--tw-border-opacity, 1));
+  border-color: rgb(201 181 156 / var(--tw-border-opacity, 1));
 }
 
 .hover\:bg-primary-light:hover {
   --tw-bg-opacity: 1;
-  background-color: rgb(248 227 196 / var(--tw-bg-opacity, 1));
+  background-color: rgb(217 207 199 / var(--tw-bg-opacity, 1));
 }
 
 .hover\:bg-secondary-light:hover {
   --tw-bg-opacity: 1;
-  background-color: rgb(212 178 154 / var(--tw-bg-opacity, 1));
+  background-color: rgb(239 233 227 / var(--tw-bg-opacity, 1));
 }
 
 .hover\:bg-surface-hover:hover {
   --tw-bg-opacity: 1;
-  background-color: rgb(249 249 249 / var(--tw-bg-opacity, 1));
+  background-color: rgb(249 248 246 / var(--tw-bg-opacity, 1));
 }
 
 .hover\:text-primary-dark:hover {
   --tw-text-opacity: 1;
-  color: rgb(230 184 133 / var(--tw-text-opacity, 1));
+  color: rgb(168 149 125 / var(--tw-text-opacity, 1));
 }
 
 .hover\:text-text-primary:hover {
   --tw-text-opacity: 1;
-  color: rgb(26 26 26 / var(--tw-text-opacity, 1));
+  color: rgb(0 0 0 / var(--tw-text-opacity, 1));
 }
 
 .hover\:shadow-soft:hover {

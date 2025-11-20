@@ -34,36 +34,42 @@ class AnalysisBlock {
                     this.content.includes('가짜') ? 'text-status-error-dark' : 'text-status-warning-dark',
         iconBg: this.content.includes('진짜') ? 'bg-status-success' : 
                this.content.includes('가짜') ? 'bg-status-error' : 'bg-status-warning',
+        iconTextClass: 'text-white',
         priority: 'high'
       },
       'evidence': {
         containerClass: 'card-info',
         headerClass: 'text-status-info-dark',
         iconBg: 'bg-status-info',
+        iconTextClass: 'text-white',
         priority: 'medium'
       },
       'source': {
         containerClass: 'card',
         headerClass: 'text-text-primary',
         iconBg: 'bg-secondary',
+        iconTextClass: 'text-text-primary',
         priority: 'medium'
       },
       'analysis': {
         containerClass: 'card',
         headerClass: 'text-text-primary',
         iconBg: 'bg-primary',
+        iconTextClass: 'text-text-primary',
         priority: 'low'
       },
       'warning': {
         containerClass: 'card-warning',
         headerClass: 'text-status-warning-dark',
         iconBg: 'bg-status-warning',
+        iconTextClass: 'text-white',
         priority: 'high'
       },
       'default': {
         containerClass: 'card',
         headerClass: 'text-text-primary',
         iconBg: 'bg-secondary',
+        iconTextClass: 'text-text-primary',
         priority: 'low'
       }
     };
@@ -83,7 +89,7 @@ class AnalysisBlock {
         <!-- Header -->
         <div class="flex items-start space-x-3 mb-3">
           <div class="w-10 h-10 ${config.iconBg} rounded-xl flex items-center justify-center flex-shrink-0 shadow-soft">
-            <span class="text-white text-lg">${this.icon}</span>
+            <span class="${config.iconTextClass || 'text-white'} text-lg">${this.icon}</span>
           </div>
           <div class="flex-1 min-w-0">
             <h3 class="font-semibold text-lg ${config.headerClass} mb-1 truncate">

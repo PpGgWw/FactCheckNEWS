@@ -9,7 +9,7 @@ class AnalysisDetailBlock {
     if (!this.content) return '';
     
     return `
-      <div class="mb-3 p-3 bg-secondary border border-secondary rounded-lg shadow-sm">
+      <div class="mb-3 p-3 bg-surface border border-border rounded-lg shadow-sm">
         <div class="flex items-center mb-2">
           <span class="text-base mr-2">🔍</span>
           <h3 class="font-semibold text-lg text-text-primary">상세 분석</h3>
