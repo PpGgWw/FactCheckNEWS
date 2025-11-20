@@ -7754,52 +7754,7 @@ ${comparisonContent}
         </div>
       </div>
 
-      <!-- 자동 교차 검증 -->
-      <div style="
-        padding: 16px 0;
-        border-bottom: 1px solid #E5E5E5;
-      ">
-        <div style="
-          display: flex;
-          align-items: flex-start;
-          justify-content: space-between;
-          gap: 12px;
-        ">
-          <div style="flex: 1;">
-            <div style="
-              font-size: 16px;
-              font-weight: 600;
-              color: #0D0D0D;
-              margin-bottom: 4px;
-            ">자동 교차 검증</div>
-            <div style="
-              font-size: 13px;
-              color: #737373;
-              line-height: 1.4;
-            ">분석 결과를 지정된 깊이만큼 반복 검증합니다. 자동 사실 확인이 켜져 있으면 사실 검증 완료 후 순차적으로 실행됩니다.</div>
-            <div style="
-              margin-top: 8px;
-              font-size: 12px;
-              color: #93370D;
-              background: rgba(244, 190, 150, 0.25);
-              padding: 8px 10px;
-              border-radius: 6px;
-            ">⚠️ 각 단계마다 Gemini 호출이 발생하므로 사용 중인 API 쿼터와 비용 정책을 확인하세요.</div>
-          </div>
-          <button class="auto-crossverify-btn" style="
-            background: ${autoCrossVerificationEnabled ? '#10B981' : '#9CA3AF'};
-            color: white;
-            padding: 8px 16px;
-            border-radius: 6px;
-            font-weight: 600;
-            border: none;
-            cursor: pointer;
-            transition: background-color 0.2s;
-            font-size: 14px;
-            min-width: 72px;
-          ">${autoCrossVerificationEnabled ? '켜짐' : '꺼짐'}</button>
-        </div>
-      </div>
+
 
         <!-- 패널 자동 열기 -->
         <div style="
@@ -7865,29 +7820,7 @@ ${comparisonContent}
         " />
       </div>
 
-      <!-- 교차 검증 깊이 설정 -->
-      <div style="padding: 16px; background: rgba(191, 151, 128, 0.08); border-radius: 8px; margin-top: 12px;">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-          <div style="display: flex; align-items: center; gap: 8px;">
-            <span style="font-size: 14px; font-weight: 600; color: #0D0D0D;">교차 검증 깊이</span>
-            <span style="font-size: 12px; color: rgba(13, 13, 13, 0.6);">(재귀적 피드백 루프)</span>
-          </div>
-          <span class="cross-verification-depth-value" style="
-            font-size: 14px;
-            font-weight: 600;
-            color: #0D0D0D;
-            min-width: 48px;
-            text-align: right;
-          ">${this.getCrossVerificationDepthSetting()}회</span>
-        </div>
-        <input type="range" class="cross-verification-depth-slider" min="2" max="4" step="1" value="${this.getCrossVerificationDepthSetting()}" style="
-          width: 100%;
-          accent-color: #BF9780;
-        " />
-        <div style="font-size: 11px; color: rgba(13, 13, 13, 0.5); margin-top: 6px;">
-          매 단계마다 직전 결과를 참고하여 새로운 판단을 내립니다
-        </div>
-      </div>
+
 
       <!-- 전체 뉴스 블록 삭제 -->
       <div style="padding: 16px; background: rgba(239, 68, 68, 0.08); border-radius: 8px; margin-top: 12px; border: 1px solid rgba(239, 68, 68, 0.2);">
@@ -8276,31 +8209,7 @@ ${comparisonContent}
       });
     }
 
-    // 자동 교차 검증 토글 버튼
-    const autoCrossVerifyBtn = modalContent.querySelector('.auto-crossverify-btn');
-    if (autoCrossVerifyBtn) {
-      const updateAutoCrossBtn = () => {
-        const enabled = this.getAutoCrossVerificationSetting();
-        autoCrossVerifyBtn.textContent = enabled ? '켜짐' : '꺼짐';
-        autoCrossVerifyBtn.style.backgroundColor = enabled ? '#10B981' : '#9CA3AF';
-      };
-      updateAutoCrossBtn();
 
-      autoCrossVerifyBtn.addEventListener('click', () => {
-        const newSetting = !this.getAutoCrossVerificationSetting();
-        this.setAutoCrossVerificationSetting(newSetting);
-        updateAutoCrossBtn();
-      });
-
-      autoCrossVerifyBtn.addEventListener('mouseenter', () => {
-        const enabled = this.getAutoCrossVerificationSetting();
-        autoCrossVerifyBtn.style.backgroundColor = enabled ? '#0EA16F' : '#6B7280';
-      });
-      autoCrossVerifyBtn.addEventListener('mouseleave', () => {
-        const enabled = this.getAutoCrossVerificationSetting();
-        autoCrossVerifyBtn.style.backgroundColor = enabled ? '#10B981' : '#9CA3AF';
-      });
-    }
 
     // 패널 자동 열기 토글 버튼
     const autoOpenBtn = modalContent.querySelector('.auto-open-btn');
@@ -8470,9 +8379,7 @@ ${comparisonContent}
       });
     }
 
-    // 교차 검증 깊이 슬라이더 (비활성화 - 고정값 2)
-    const depthSlider = modalContent.querySelector('.cross-verification-depth-slider');
-    const depthValueLabel = modalContent.querySelector('.cross-verification-depth-value');
+
     // 슬라이더는 UI에서 제거되었으므로 이벤트 리스너 불필요
 
     // 전체 뉴스 블록 삭제 버튼
