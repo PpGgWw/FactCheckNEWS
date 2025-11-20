@@ -6545,27 +6545,27 @@ ${comparisonContent}
     `;
     floatingBtn.style.cssText = `
       position: fixed;
-      bottom: 20px;
-      right: 20px;
-      width: 64px;
-      height: 64px;
+      bottom: 24px;
+      right: 24px;
+      width: 60px;
+      height: 60px;
       border-radius: 50%;
-      background: linear-gradient(135deg, #4F46E5 0%, #6366F1 50%, #8B5CF6 100%);
-      color: white;
+      background: linear-gradient(135deg, #C9B59C 0%, #A8957D 100%);
+      color: #FFFFFF;
       border: none;
       cursor: pointer;
       box-shadow: 
-        0 8px 25px rgba(99, 102, 241, 0.5),
-        0 4px 12px rgba(0, 0, 0, 0.2),
-        inset 0 1px 0 rgba(255, 255, 255, 0.25);
+        0 10px 25px rgba(168, 149, 125, 0.4),
+        0 4px 10px rgba(0, 0, 0, 0.1),
+        inset 0 1px 0 rgba(255, 255, 255, 0.3);
       z-index: 999998;
       transform: scale(0);
       transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
       display: flex;
       align-items: center;
       justify-content: center;
-      backdrop-filter: blur(10px);
-      border: 2px solid rgba(255, 255, 255, 0.15);
+      backdrop-filter: blur(4px);
+      border: 1px solid rgba(255, 255, 255, 0.2);
     `;
 
     document.body.appendChild(floatingBtn);
@@ -6576,32 +6576,41 @@ ${comparisonContent}
 
     // 호버 효과
     floatingBtn.addEventListener('mouseenter', () => {
-      floatingBtn.style.transform = 'scale(1.15)';
+      floatingBtn.style.transform = 'scale(1.1) translateY(-2px)';
       floatingBtn.style.boxShadow = `
-        0 12px 35px rgba(99, 102, 241, 0.7),
-        0 8px 20px rgba(0, 0, 0, 0.25),
-        inset 0 1px 0 rgba(255, 255, 255, 0.35)
+        0 15px 30px rgba(168, 149, 125, 0.5),
+        0 8px 15px rgba(0, 0, 0, 0.15),
+        inset 0 1px 0 rgba(255, 255, 255, 0.4)
       `;
-      floatingBtn.style.background = 'linear-gradient(135deg, #6366F1 0%, #8B5CF6 50%, #A78BFA 100%)';
+      floatingBtn.style.background = 'linear-gradient(135deg, #D4C4AE 0%, #B5A38B 100%)';
     });
 
     floatingBtn.addEventListener('mouseleave', () => {
       floatingBtn.style.transform = 'scale(1)';
       floatingBtn.style.boxShadow = `
-        0 8px 25px rgba(99, 102, 241, 0.5),
-        0 4px 12px rgba(0, 0, 0, 0.2),
-        inset 0 1px 0 rgba(255, 255, 255, 0.25)
+        0 10px 25px rgba(168, 149, 125, 0.4),
+        0 4px 10px rgba(0, 0, 0, 0.1),
+        inset 0 1px 0 rgba(255, 255, 255, 0.3)
       `;
-      floatingBtn.style.background = 'linear-gradient(135deg, #4F46E5 0%, #6366F1 50%, #8B5CF6 100%)';
+      floatingBtn.style.background = 'linear-gradient(135deg, #C9B59C 0%, #A8957D 100%)';
     });
 
     // 클릭 효과
     floatingBtn.addEventListener('mousedown', () => {
-      floatingBtn.style.transform = 'scale(1.05)';
+      floatingBtn.style.transform = 'scale(0.95)';
+      floatingBtn.style.boxShadow = `
+        0 4px 12px rgba(168, 149, 125, 0.3),
+        inset 0 2px 4px rgba(0, 0, 0, 0.1)
+      `;
     });
 
     floatingBtn.addEventListener('mouseup', () => {
-      floatingBtn.style.transform = 'scale(1.15)';
+      floatingBtn.style.transform = 'scale(1.1) translateY(-2px)';
+      floatingBtn.style.boxShadow = `
+        0 15px 30px rgba(168, 149, 125, 0.5),
+        0 8px 15px rgba(0, 0, 0, 0.15),
+        inset 0 1px 0 rgba(255, 255, 255, 0.4)
+      `;
     });
 
     // 클릭 시 패널 토글

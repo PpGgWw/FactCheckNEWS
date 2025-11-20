@@ -183,8 +183,8 @@ class DaumNewsParser {
         else if (ptype !== 'button') {
           // 하이라이트 적용
           this._applyHighlight(block, colorScheme, {
-            padding: '10px',
-            borderRadius: '5px'
+            enhancedSection: true,
+            padding: '10px'
           });
 
           const bodyText = block.textContent?.trim();
@@ -272,8 +272,8 @@ class DaumNewsParser {
           }
         } else if (ptype !== 'button') {
           this._applyHighlight(block, colorScheme, {
-            padding: '10px',
-            borderRadius: '5px'
+            enhancedSection: true,
+            padding: '10px'
           });
           elementsUpdated++;
         }
@@ -334,47 +334,64 @@ class DaumNewsParser {
   _applyHighlight(element, colorScheme, styles = {}) {
     if (!element) return;
 
-    const { enhancedTitle, padding, borderRadius } = styles;
+    const { enhancedTitle, enhancedSection, padding, borderRadius } = styles;
+    const baseBackground = colorScheme.background || 'rgba(18, 18, 18, 0.04)';
+    const baseBorder = colorScheme.border || 'rgba(18, 18, 18, 0.22)';
+    const accent = colorScheme.accent || 'rgba(18, 18, 18, 0.18)';
 
-    if (enhancedTitle) {
-      this._ensureEnhancedHighlightStyles();
-      element.classList.add('factcheck-title-highlight');
-      element.style.backgroundColor = '';
-      element.style.border = '';
-      element.style.borderRadius = '';
-      element.style.padding = '';
-      element.style.setProperty('--factcheck-title-bg', `linear-gradient(135deg, ${this._withAlpha(colorScheme.background, 0.95)} 0%, ${this._withAlpha(colorScheme.background, 0.72)} 100%)`);
-      element.style.setProperty('--factcheck-title-border', this._withAlpha(colorScheme.border, 0.95));
-      element.style.setProperty('--factcheck-title-accent', this._withAlpha(colorScheme.border, 0.9));
-      element.style.setProperty('--factcheck-title-shadow', this._withAlpha(colorScheme.border, 0.32));
-      if (padding) {
-        element.style.setProperty('--factcheck-title-padding', padding);
-      } else {
-        element.style.removeProperty('--factcheck-title-padding');
-      }
-      return;
-    }
-
-    element.classList.remove('factcheck-title-highlight');
+    // 초기화
+    element.classList.remove('factcheck-title-highlight', 'factcheck-section-highlight');
     element.style.removeProperty('--factcheck-title-bg');
     element.style.removeProperty('--factcheck-title-border');
     element.style.removeProperty('--factcheck-title-accent');
     element.style.removeProperty('--factcheck-title-shadow');
     element.style.removeProperty('--factcheck-title-padding');
+    element.style.removeProperty('--factcheck-section-bg');
+    element.style.removeProperty('--factcheck-section-border');
+    element.style.removeProperty('--factcheck-section-accent');
+    element.style.removeProperty('--factcheck-section-shadow');
+    element.style.removeProperty('--factcheck-section-padding');
+    element.style.backgroundColor = '';
+    element.style.border = '';
+    element.style.padding = '';
+    element.style.borderRadius = '';
+    element.style.boxShadow = '';
 
-    element.style.backgroundColor = colorScheme.background;
-    element.style.border = `2px solid ${colorScheme.border}`;
+    if (enhancedTitle) {
+      this._ensureEnhancedHighlightStyles();
+      element.classList.add('factcheck-title-highlight');
+      element.style.setProperty('--factcheck-title-bg', `linear-gradient(135deg, ${this._withAlpha(baseBackground, 0.95)} 0%, ${this._withAlpha(baseBackground, 0.72)} 100%)`);
+      element.style.setProperty('--factcheck-title-border', this._withAlpha(baseBorder, 0.95));
+      element.style.setProperty('--factcheck-title-accent', this._withAlpha(accent, 0.9));
+      element.style.setProperty('--factcheck-title-shadow', this._withAlpha(baseBorder, 0.32));
+      if (padding) {
+        element.style.setProperty('--factcheck-title-padding', padding);
+      }
+      return;
+    }
+
+    if (enhancedSection) {
+      this._ensureEnhancedHighlightStyles();
+      element.classList.add('factcheck-section-highlight');
+      element.style.setProperty('--factcheck-section-bg', `linear-gradient(145deg, ${this._withAlpha(baseBackground, 0.5)} 0%, ${this._withAlpha(baseBackground, 0.28)} 100%)`);
+      element.style.setProperty('--factcheck-section-border', this._withAlpha(baseBorder, 0.48));
+      element.style.setProperty('--factcheck-section-accent', this._withAlpha(accent, 0.42));
+      element.style.setProperty('--factcheck-section-shadow', this._withAlpha(baseBorder, 0.15));
+      if (padding) {
+        element.style.setProperty('--factcheck-section-padding', padding);
+      }
+      return;
+    }
+
+    element.style.backgroundColor = baseBackground;
+    element.style.border = `2px solid ${baseBorder}`;
     
     if (padding) {
       element.style.padding = padding;
-    } else {
-      element.style.removeProperty('padding');
     }
 
     if (borderRadius) {
       element.style.borderRadius = borderRadius;
-    } else {
-      element.style.removeProperty('border-radius');
     }
   }
 
@@ -430,6 +447,59 @@ class DaumNewsParser {
       @media (max-width: 768px) {
         .factcheck-title-highlight {
           padding: var(--factcheck-title-padding, 16px 20px 16px 46px);
+        }
+      }
+
+      /* Section Highlight Styles */
+      .factcheck-section-highlight {
+        position: relative;
+        display: block;
+        width: 100%;
+        padding: var(--factcheck-section-padding, 18px 22px 18px 30px);
+        margin: 12px 0;
+        border-radius: 18px;
+        background: var(--factcheck-section-bg, rgba(18, 18, 18, 0.035));
+        border: 1px solid var(--factcheck-section-border, rgba(18, 18, 18, 0.16));
+        box-shadow: 0 12px 24px var(--factcheck-section-shadow, rgba(0, 0, 0, 0.12));
+        box-sizing: border-box;
+        line-height: 1.75;
+        overflow: hidden;
+        box-decoration-break: clone;
+        -webkit-box-decoration-break: clone;
+        backdrop-filter: blur(1px);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+      }
+
+      .factcheck-section-highlight::before {
+        content: '';
+        position: absolute;
+        inset: 10px;
+        border-radius: inherit;
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        pointer-events: none;
+      }
+
+      .factcheck-section-highlight::after {
+        content: '';
+        position: absolute;
+        top: 14px;
+        bottom: 14px;
+        left: 16px;
+        width: 4px;
+        border-radius: 999px;
+        background: var(--factcheck-section-accent, rgba(255, 255, 255, 0.32));
+        box-shadow: 0 0 14px var(--factcheck-section-accent, rgba(255, 255, 255, 0.22));
+        pointer-events: none;
+      }
+
+      .factcheck-section-highlight:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 14px 28px rgba(0, 0, 0, 0.18);
+      }
+
+      @media (max-width: 768px) {
+        .factcheck-section-highlight {
+          padding: var(--factcheck-section-padding, 16px 18px 16px 26px);
         }
       }
     `;
